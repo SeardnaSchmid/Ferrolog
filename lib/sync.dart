@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Client ID of the Ferrolog GitHub App (public, safe to commit). Setup in README.
 const githubClientId = 'Iv23lidZNxih8vRT1Cab';
 
+/// Slug of that app, for the install page `github.com/apps/<slug>/installations/new`.
+const githubAppSlug = 'ferrolog-sync';
+
 /// A pending device-flow login: show [userCode], let the user enter it at [verificationUri].
 typedef DeviceCode = ({String deviceCode, String userCode, String verificationUri, int interval, DateTime expiresAt});
 
@@ -27,17 +30,13 @@ class GitHubSync {
   }
 
   String get repo => _prefs.getString('sync.repo') ?? '';
-  String get branch => _prefs.getString('sync.branch') ?? 'main';
   /// Fixed: the GitHub App's "Single file" permission only grants this one path.
   static const path = 'ferrolog.json';
   String get token => _prefs.getString('sync.token') ?? '';
   bool get loggedIn => token.isNotEmpty;
   bool get configured => RegExp(r'^[\w.-]+/[\w.-]+$').hasMatch(repo) && loggedIn;
 
-  Future<void> configure({required String repo, required String branch}) async {
-    await _prefs.setString('sync.repo', repo.trim());
-    await _prefs.setString('sync.branch', branch.trim().isEmpty ? 'main' : branch.trim());
-  }
+  Future<void> selectRepo(String repo) => _prefs.setString('sync.repo', repo);
 
   Map<String, String> get _headers => {
         'Authorization': 'Bearer $token',
@@ -155,7 +154,7 @@ class GitHubSync {
     final url = Uri.https('api.github.com', '/repos/$repo/contents/$path');
     final headers = _headers;
     // The API needs the current file's sha to overwrite it; 404 means it doesn't exist yet.
-    final current = await _client.get(url.replace(queryParameters: {'ref': branch}), headers: headers);
+    final current = await _client.get(url, headers: headers);
     if (current.statusCode != 200 && current.statusCode != 404) throw _error(current);
     final sha = current.statusCode == 200 ? jsonDecode(current.body)['sha'] : null;
 
@@ -165,7 +164,6 @@ class GitHubSync {
       body: jsonEncode({
         'message': 'Ferrolog sync',
         'content': base64Encode(utf8.encode(json)),
-        'branch': branch,
         'sha': ?sha,
       }),
     );
@@ -174,8 +172,8 @@ class GitHubSync {
 
   static String _error(http.Response r) => switch (r.statusCode) {
         401 => 'Anmeldung abgelaufen, bitte neu anmelden',
-        403 => 'Keine Schreibrechte – App auf dem Repo installiert?',
-        404 => 'Repo oder Branch nicht gefunden – App auf dem Repo installiert?',
+        403 => 'Keine Schreibrechte – hat Ferrolog Zugriff auf das Repo?',
+        404 => 'Repo nicht gefunden – hat Ferrolog Zugriff darauf?',
         _ => 'HTTP ${r.statusCode}',
       };
 

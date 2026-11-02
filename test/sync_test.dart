@@ -19,7 +19,6 @@ void main() {
       expect(req.headers['Authorization'], 'Bearer t0k');
       if (fail) return http.Response('', 401);
       if (req.method == 'GET') {
-        expect(req.url.queryParameters['ref'], 'main');
         return fileSha == null ? http.Response('', 404) : http.Response(jsonEncode({'sha': fileSha}), 200);
       }
       final body = jsonDecode(req.body) as Map<String, dynamic>;
@@ -35,7 +34,7 @@ void main() {
     await sync.push('{"a":1}'); // not configured -> no request
     expect(puts, isEmpty);
 
-    await sync.configure(repo: 'me/data', branch: '');
+    await sync.selectRepo('me/data');
     await sync.push('{"a":1}'); // not logged in -> no request
     expect(puts, isEmpty);
     await (await SharedPreferences.getInstance()).setString('sync.token', 't0k');
