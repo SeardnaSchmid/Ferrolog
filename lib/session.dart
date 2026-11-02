@@ -20,7 +20,7 @@ class _SessionPageState extends State<SessionPage> {
   DateTime? lastSetAt;
   int restTarget = 0;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-    if (lastSetAt != null) setState(() {});
+    setState(() {}); // rest timer and elapsed minutes
   });
 
   @override
@@ -72,84 +72,163 @@ class _SessionPageState extends State<SessionPage> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// Bottom sheet to adjust an exercise's weight in its increment steps.
+  void pickWeight(ExerciseLog log) => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setSheet) {
+            final c = Theme.of(context).colorScheme;
+            Widget step(IconData icon, int dir) => IconButton.filledTonal(
+                  iconSize: 28,
+                  style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
+                  icon: Icon(icon),
+                  onPressed: () {
+                    changeWeight(log, dir);
+                    setSheet(() {});
+                  },
+                );
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(log.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 16),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  step(Icons.remove, -1),
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: kgNum(log.weight)),
+                      TextSpan(
+                        text: ' kg',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: c.onSurfaceVariant),
+                      ),
+                    ]),
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  step(Icons.add, 1),
+                ]),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Fertig')),
+                ),
+              ]),
+            );
+          },
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final c = Theme.of(context).colorScheme;
     final rest = lastSetAt == null ? null : DateTime.now().difference(lastSetAt!).inSeconds;
+    final over = rest != null && rest >= restTarget;
+    final muted = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.workoutName),
+        leadingWidth: 104,
+        leading: TextButton(
+          style: TextButton.styleFrom(foregroundColor: c.error),
+          onPressed: () async {
+            if (!await confirm(context, 'Training verwerfen? Nichts wird gespeichert.')) return;
+            await store.saveActive(null);
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Verwerfen'),
+        ),
+        centerTitle: true,
+        title: Column(children: [
+          Text(s.workoutName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
+          Text('${DateTime.now().difference(s.date).inMinutes} Min.', style: muted.copyWith(fontSize: 11)),
+        ]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: 'Training verwerfen',
-            onPressed: () async {
-              if (!await confirm(context, 'Training verwerfen? Nichts wird gespeichert.')) return;
-              await store.saveActive(null);
-              if (context.mounted) Navigator.pop(context);
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(onPressed: finish, child: const Text('Beenden')),
           ),
-          TextButton(onPressed: finish, child: const Text('Beenden')),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
         children: [
           for (final log in s.exercises)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text(log.name, style: Theme.of(context).textTheme.titleMedium)),
-                        IconButton(icon: const Icon(Icons.remove), onPressed: () => changeWeight(log, -1)),
-                        Text(kg(log.weight), style: Theme.of(context).textTheme.titleMedium),
-                        IconButton(icon: const Icon(Icons.add), onPressed: () => changeWeight(log, 1)),
-                      ],
-                    ),
-                    Text('${log.reps.length}×${log.targetReps}'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final (i, r) in log.reps.indexed)
-                          InkWell(
-                            customBorder: const CircleBorder(),
-                            onTap: () => tapSet(log, i),
-                            child: CircleAvatar(
-                              radius: 26,
-                              backgroundColor: r == null
-                                  ? scheme.surfaceContainerHighest
-                                  : r >= log.targetReps
-                                      ? scheme.primary
-                                      : scheme.tertiary,
-                              foregroundColor: r == null ? scheme.onSurfaceVariant : scheme.onPrimary,
-                              child: Text(r?.toString() ?? '${log.targetReps}',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.outlineVariant.withValues(alpha: .6)))),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(log.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                  Text(
+                    [
+                      '${log.reps.length}×${log.targetReps}',
+                      if (planOf(log) case final p?) 'Pause ${clock(p.restSeconds)}',
+                    ].join(' · '),
+                    style: muted,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      for (final (i, r) in log.reps.indexed) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        Flexible(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 84),
+                            child: SetTile(
+                              reps: r,
+                              target: log.targetReps,
+                              weight: kgNum(log.weight),
+                              onTapReps: () => tapSet(log, i),
+                              onTapWeight: () => pickWeight(log),
                             ),
                           ),
+                        ),
                       ],
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
             ),
         ],
       ),
-      bottomSheet: rest == null
+      bottomNavigationBar: rest == null
           ? null
-          : Material(
-              color: rest >= restTarget ? scheme.primaryContainer : scheme.secondaryContainer,
-              child: SafeArea(
-                child: ListTile(
-                  leading: const Icon(Icons.timer_outlined),
-                  title: Text('Pause ${clock(rest)} / ${clock(restTarget)}'),
-                  subtitle: rest >= restTarget ? const Text('Weiter geht’s!') : null,
-                ),
+          : SafeArea(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                padding: const EdgeInsets.fromLTRB(16, 4, 6, 12),
+                decoration: BoxDecoration(color: c.surfaceContainerHigh, borderRadius: BorderRadius.circular(20)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Row(children: [
+                    Text(clock(rest),
+                        style: const TextStyle(
+                            fontSize: 28, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()])),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('${over ? 'PAUSE VORBEI' : 'PAUSE'} · ${clock(restTarget)}',
+                          style: muted.copyWith(fontWeight: FontWeight.w500, letterSpacing: .5)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Ausblenden',
+                      onPressed: () => setState(() => lastSetAt = null),
+                    ),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: LinearProgressIndicator(
+                      value: restTarget == 0 ? 1 : (rest / restTarget).clamp(0, 1),
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(2),
+                      color: over ? c.tertiary : c.primary,
+                      backgroundColor: c.outlineVariant,
+                    ),
+                  ),
+                ]),
               ),
             ),
     );
