@@ -8,24 +8,30 @@ flutter run          # Handy per USB
 flutter test
 ```
 
-## GitHub-Sync einrichten (einmalig)
+## GitHub-Sync
 
 Die App meldet sich per Device Flow als GitHub App an. Der Token erreicht damit
-nur die Repos, auf denen die App installiert ist.
+nur die Repos, auf denen der Nutzer die App installiert hat.
 
-1. Privates Repo für die Daten anlegen, z. B. `ferrolog-data`, **mit README**
-   (die API braucht einen vorhandenen `main`-Branch).
-2. GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
-   - Name: global eindeutig, z. B. `ferrolog-<dein-name>`; Homepage-URL: beliebig
+### Entwickler: GitHub App registrieren (einmalig für alle Nutzer)
+
+1. GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
+   - Name: global eindeutig, z. B. `Ferrolog Sync`; Homepage-URL: Projekt-Repo
    - **Enable Device Flow** anhaken, Callback-URL leer lassen
    - Webhook: **Active** abhaken
    - Permissions → Repository → **Contents: Read and write**
-   - Installierbar: *Only on this account*
-3. In der App-Einstellung unter *Optional features* **User-to-server token
-   expiration** abschalten (sonst läuft die Anmeldung nach 8 h ab).
-4. **Client ID** kopieren und in `lib/sync.dart` bei `githubClientId` eintragen.
-5. *Install App* → *Only select repositories* → `ferrolog-data`.
-6. In Ferrolog: Wolken-Symbol → *Mit GitHub anmelden* → Code eingeben → Repo wählen.
+   - Installierbar: **Any account**
+2. Unter *Optional features* **User-to-server token expiration** abschalten
+   (sonst läuft die Anmeldung nach 8 h ab).
+3. **Client ID** in `lib/sync.dart` bei `githubClientId` eintragen (öffentlich, darf ins Repo).
+
+### Nutzer: Sync einschalten
+
+1. Privates Repo für die Daten anlegen, z. B. `ferrolog-data`, **mit README**
+   (die API braucht einen vorhandenen `main`-Branch).
+2. Die GitHub App installieren (`github.com/apps/<app-name>`) →
+   *Only select repositories* → `ferrolog-data`.
+3. In Ferrolog: Wolken-Symbol → *Mit GitHub anmelden* → Code eingeben → Repo wählen.
 
 ## Daten für die KI
 
