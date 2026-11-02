@@ -28,15 +28,15 @@ class GitHubSync {
 
   String get repo => _prefs.getString('sync.repo') ?? '';
   String get branch => _prefs.getString('sync.branch') ?? 'main';
-  String get path => _prefs.getString('sync.path') ?? 'ferrolog.json';
+  /// Fixed: the GitHub App's "Single file" permission only grants this one path.
+  static const path = 'ferrolog.json';
   String get token => _prefs.getString('sync.token') ?? '';
   bool get loggedIn => token.isNotEmpty;
   bool get configured => RegExp(r'^[\w.-]+/[\w.-]+$').hasMatch(repo) && loggedIn;
 
-  Future<void> configure({required String repo, required String branch, required String path}) async {
+  Future<void> configure({required String repo, required String branch}) async {
     await _prefs.setString('sync.repo', repo.trim());
     await _prefs.setString('sync.branch', branch.trim().isEmpty ? 'main' : branch.trim());
-    await _prefs.setString('sync.path', path.trim().isEmpty ? 'ferrolog.json' : path.trim());
   }
 
   Map<String, String> get _headers => {

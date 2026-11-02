@@ -18,12 +18,12 @@ nur die Repos, auf denen der Nutzer die App installiert hat.
 1. GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
    - Name: global eindeutig, z. B. `Ferrolog Sync`; Homepage-URL: Projekt-Repo
    - **Enable Device Flow** anhaken, Callback-URL leer lassen
+   - **Expire user authorization tokens** abhaken (sonst läuft die Anmeldung nach 8 h ab)
    - Webhook: **Active** abhaken
-   - Permissions → Repository → **Contents: Read and write**
+   - Permissions → Repository → **Single file: Read and write**, Pfad `ferrolog.json`
+     (Contents bleibt *No access*: die App erreicht nur diese eine Datei)
    - Installierbar: **Any account**
-2. Unter *Optional features* **User-to-server token expiration** abschalten
-   (sonst läuft die Anmeldung nach 8 h ab).
-3. **Client ID** in `lib/sync.dart` bei `githubClientId` eintragen (öffentlich, darf ins Repo).
+2. **Client ID** in `lib/sync.dart` bei `githubClientId` eintragen (öffentlich, darf ins Repo).
 
 ### Nutzer: Sync einschalten
 

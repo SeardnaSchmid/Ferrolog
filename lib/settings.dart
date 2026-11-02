@@ -15,7 +15,6 @@ class SyncSettings extends StatefulWidget {
 class _SyncSettingsState extends State<SyncSettings> {
   late final repo = TextEditingController(text: sync.repo);
   late final branch = TextEditingController(text: sync.branch);
-  late final path = TextEditingController(text: sync.path);
   DeviceCode? pending; // login in progress
   List<String> repos = [];
   bool busy = false;
@@ -29,7 +28,7 @@ class _SyncSettingsState extends State<SyncSettings> {
 
   @override
   void dispose() {
-    for (final c in [repo, branch, path]) {
+    for (final c in [repo, branch]) {
       c.dispose();
     }
     super.dispose();
@@ -67,7 +66,7 @@ class _SyncSettingsState extends State<SyncSettings> {
       });
 
   Future<void> saveAndSync() => run(() async {
-        await sync.configure(repo: repo.text, branch: branch.text, path: path.text);
+        await sync.configure(repo: repo.text, branch: branch.text);
         if (!sync.configured) throw 'Repo auswählen (besitzer/name).';
         await sync.push(store.exportJson());
       });
@@ -131,7 +130,8 @@ class _SyncSettingsState extends State<SyncSettings> {
             const SizedBox(height: 12),
             TextField(controller: branch, decoration: field('Branch')),
             const SizedBox(height: 12),
-            TextField(controller: path, decoration: field('Datei im Repo')),
+            const SizedBox(height: 4),
+            Text('Ferrolog schreibt nur die Datei ${GitHubSync.path} in dieses Repo.', style: text.bodySmall),
             const SizedBox(height: 16),
             FilledButton.icon(
               icon: const Icon(Icons.sync),

@@ -15,7 +15,7 @@ void main() {
     final puts = <Map<String, dynamic>>[];
 
     final client = MockClient((req) async {
-      expect(req.url.path, '/repos/me/data/contents/log/ferrolog.json');
+      expect(req.url.path, '/repos/me/data/contents/ferrolog.json');
       expect(req.headers['Authorization'], 'Bearer t0k');
       if (fail) return http.Response('', 401);
       if (req.method == 'GET') {
@@ -35,7 +35,7 @@ void main() {
     await sync.push('{"a":1}'); // not configured -> no request
     expect(puts, isEmpty);
 
-    await sync.configure(repo: 'me/data', branch: '', path: 'log/ferrolog.json');
+    await sync.configure(repo: 'me/data', branch: '');
     await sync.push('{"a":1}'); // not logged in -> no request
     expect(puts, isEmpty);
     await (await SharedPreferences.getInstance()).setString('sync.token', 't0k');
