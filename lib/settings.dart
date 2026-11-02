@@ -137,6 +137,13 @@ class _SyncSettingsState extends State<SyncSettings> {
               step(2, 'Ferrolog Zugriff geben', '„Only select repositories“ → ferrolog-data wählen',
                   done: false, onTap: () => open('https://github.com/apps/$githubAppSlug/installations/new')),
               const Text('Danach zurück in die App wechseln, Ferrolog findet das Repo dann selbst.'),
+              const SizedBox(height: 8),
+              // GitHub's mobile site answers the install form with a 404; on desktop it works.
+              Text(
+                'Zeigt GitHub beim Installieren eine 404? Dann Schritt 2 am PC öffnen: '
+                'github.com/apps/$githubAppSlug/installations/new',
+                style: text.bodySmall,
+              ),
             ],
             if (repos != null && repos.isNotEmpty) ...[
               const SizedBox(height: 8),
