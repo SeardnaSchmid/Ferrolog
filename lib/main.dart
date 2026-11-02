@@ -2,17 +2,23 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'edit.dart';
 import 'model.dart';
 import 'session.dart';
+import 'settings.dart';
 import 'stats.dart';
+import 'sync.dart';
 
 late final Store store;
+late final GitHubSync sync;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   store = await Store.open();
+  sync = GitHubSync(await SharedPreferences.getInstance());
+  store.onSaved = sync.push;
   runApp(const Ferrolog());
 }
 
@@ -62,6 +68,11 @@ class _HomeState extends State<Home> {
           title: Text(const ['Workouts', 'Verlauf', 'Statistik'][tab]),
           actions: [
             IconButton(icon: const Icon(Icons.ios_share), tooltip: 'Daten exportieren', onPressed: export),
+            IconButton(
+              icon: const Icon(Icons.cloud_sync_outlined),
+              tooltip: 'GitHub-Sync',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncSettings())),
+            ),
           ],
         ),
         body: [const WorkoutList(), const HistoryList(), const StatsPage()][tab],

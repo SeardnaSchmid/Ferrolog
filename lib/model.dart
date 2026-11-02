@@ -171,9 +171,13 @@ class Store extends ChangeNotifier {
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(toJson());
 
+  /// Called with the export JSON after every saved change (used for GitHub sync).
+  void Function(String json)? onSaved;
+
   Future<void> _save() async {
     notifyListeners();
     await _prefs.setString(_key, jsonEncode(toJson()));
+    onSaved?.call(exportJson());
   }
 
   Future<void> saveWorkout(Workout w) {
