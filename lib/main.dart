@@ -22,6 +22,11 @@ Future<void> main() async {
   runApp(const Ferrolog());
 }
 
+const analysisPrompt = 'Hier sind meine Trainingsdaten aus Ferrolog (JSON, Format steht im Feld "format"). '
+    'Analysiere bitte meinen Fortschritt: Welche Übungen laufen gut, wo stagniere ich (Plateaus, '
+    'verpasste Wiederholungen), wie sieht Trainingsfrequenz und Volumen aus? '
+    'Gib mir konkrete Vorschläge für die nächsten Wochen.';
+
 String kg(double w) => '${w == w.roundToDouble() ? w.toStringAsFixed(0) : w.toString()} kg';
 
 class Ferrolog extends StatelessWidget {
@@ -50,13 +55,15 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   int tab = 0;
 
+  /// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
   Future<void> export() async {
-    final file = XFile.fromData(
-      utf8.encode(store.exportJson()),
-      mimeType: 'application/json',
-      name: 'ferrolog.json',
-    );
-    await SharePlus.instance.share(ShareParams(files: [file], fileNameOverrides: ['ferrolog.json']));
+    final name = 'ferrolog-${DateTime.now().toIso8601String().substring(0, 10)}.json';
+    final file = XFile.fromData(utf8.encode(store.exportJson()), mimeType: 'application/json', name: name);
+    await SharePlus.instance.share(ShareParams(
+      files: [file],
+      fileNameOverrides: [name],
+      text: analysisPrompt,
+    ));
   }
 
   @override
@@ -67,7 +74,7 @@ class _HomeState extends State<Home> {
         appBar: AppBar(
           title: Text(const ['Workouts', 'Verlauf', 'Statistik'][tab]),
           actions: [
-            IconButton(icon: const Icon(Icons.ios_share), tooltip: 'Daten exportieren', onPressed: export),
+            IconButton(icon: const Icon(Icons.ios_share), tooltip: 'An KI senden / exportieren', onPressed: export),
             IconButton(
               icon: const Icon(Icons.cloud_sync_outlined),
               tooltip: 'GitHub-Sync',

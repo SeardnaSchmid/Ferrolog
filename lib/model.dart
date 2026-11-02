@@ -165,6 +165,9 @@ class Store extends ChangeNotifier {
         'version': 1,
         'exportedAt': DateTime.now().toIso8601String(),
         'units': 'kg',
+        'format': 'workouts = plans; exercise.weight is the weight for the NEXT session and rises by '
+            '"increment" when all sets hit "reps" (progressive overload). sessions = completed trainings, '
+            'newest first; exercises[].reps holds reps done per set, null = set skipped.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
         'sessions': sessions.map((s) => s.toJson()).toList(),
       };
