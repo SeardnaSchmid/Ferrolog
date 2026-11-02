@@ -49,7 +49,9 @@ class _SyncSettingsState extends State<SyncSettings> {
     if (mounted) setState(() => busy = false);
   }
 
-  Future<void> open(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  /// In-app browser tab on purpose: an installed GitHub app would grab github.com
+  /// links and show a 404 for the app installation pages.
+  Future<void> open(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
 
   Future<void> login() => run(() async {
         final code = await sync.startLogin();
