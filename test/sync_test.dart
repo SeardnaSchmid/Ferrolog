@@ -55,8 +55,10 @@ void main() {
 
   test('device flow login polls until the token arrives', () async {
     SharedPreferences.setMockInitialValues({});
-    final answers = [
+    final answers = <Object>[
       {'error': 'authorization_pending'},
+      http.ClientException('Failed host lookup'), // app in background
+
       {'error': 'slow_down', 'interval': 10},
       {'access_token': 'ghu_x'},
     ];
@@ -64,12 +66,15 @@ void main() {
       expect(req.url.host, 'github.com');
       expect(req.bodyFields['grant_type'], 'urn:ietf:params:oauth:grant-type:device_code');
       expect(req.bodyFields['device_code'], 'dc');
-      return http.Response(jsonEncode(answers.removeAt(0)), 200);
+      final a = answers.removeAt(0);
+      if (a is Exception) throw a;
+      return http.Response(jsonEncode(a), 200);
     });
     final sync = GitHubSync(await SharedPreferences.getInstance(), client);
     final waits = <int>[];
     await sync.finishLogin(
-      (deviceCode: 'dc', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', interval: 5),
+      (deviceCode: 'dc', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', interval: 5,
+          expiresAt: DateTime.now().add(const Duration(minutes: 15))),
       wait: (s) {
         waits.add(s);
         return Duration.zero;
@@ -77,6 +82,6 @@ void main() {
     );
     expect(sync.token, 'ghu_x');
     expect(sync.loggedIn, isTrue);
-    expect(waits, [5, 5, 10]);
+    expect(waits, [5, 5, 5, 10]);
   });
 }

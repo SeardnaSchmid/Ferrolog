@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const githubClientId = 'Iv23lidZNxih8vRT1Cab';
 
 /// A pending device-flow login: show [userCode], let the user enter it at [verificationUri].
-typedef DeviceCode = ({String deviceCode, String userCode, String verificationUri, int interval});
+typedef DeviceCode = ({String deviceCode, String userCode, String verificationUri, int interval, DateTime expiresAt});
 
 /// Pushes the full export JSON to a file in a GitHub repo via the Contents API,
 /// so an AI (or anything else) can read the training data from there.
@@ -63,18 +63,27 @@ class GitHubSync {
       userCode: j['user_code'] as String,
       verificationUri: j['verification_uri'] as String,
       interval: j['interval'] as int,
+      expiresAt: DateTime.now().add(Duration(seconds: j['expires_in'] as int)),
     );
   }
 
   /// Polls until the user confirmed the code in the browser, then stores the token.
+  /// Network errors are retried: Android cuts background apps off the network
+  /// while the user is in the browser entering the code.
   Future<void> finishLogin(DeviceCode code, {Duration Function(int seconds)? wait}) async {
     var interval = code.interval;
     while (true) {
       await Future.delayed((wait ?? (s) => Duration(seconds: s))(interval));
-      final j = await _oauth('oauth/access_token', {
-        'device_code': code.deviceCode,
-        'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
-      });
+      if (DateTime.now().isAfter(code.expiresAt)) throw 'Code abgelaufen, bitte neu anmelden.';
+      final Map<String, dynamic> j;
+      try {
+        j = await _oauth('oauth/access_token', {
+          'device_code': code.deviceCode,
+          'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+        });
+      } on http.ClientException {
+        continue;
+      }
       switch (j['error']) {
         case null:
           await _prefs.setString('sync.token', j['access_token']);
