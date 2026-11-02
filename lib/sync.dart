@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Client ID of the Ferrolog GitHub App (public, safe to commit). Setup in README.
-const githubClientId = '';
+const githubClientId = 'Iv23lidZNxih8vRT1Cab';
 
 /// A pending device-flow login: show [userCode], let the user enter it at [verificationUri].
 typedef DeviceCode = ({String deviceCode, String userCode, String verificationUri, int interval});
