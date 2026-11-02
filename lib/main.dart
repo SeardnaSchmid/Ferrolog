@@ -175,10 +175,12 @@ class WorkoutCard extends StatelessWidget {
                   label: const Text('Starten'),
                   onPressed: workout.exercises.isEmpty
                       ? null
-                      : () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => SessionPage(Session.start(workout))),
-                          ),
+                      : () {
+                          // Persist before opening, so a killed app can resume it.
+                          final session = Session.start(workout);
+                          store.saveActive(session);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session)));
+                        },
                 ),
               ],
             ),

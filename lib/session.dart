@@ -27,7 +27,6 @@ class _SessionPageState extends State<SessionPage> {
   void initState() {
     super.initState();
     ticker; // start
-    store.saveActive(s);
   }
 
   @override
