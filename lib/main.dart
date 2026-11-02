@@ -82,7 +82,8 @@ class _HomeState extends State<Home> {
             ),
           ],
         ),
-        body: [const WorkoutList(), const HistoryList(), const StatsPage()][tab],
+        // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
+        body: [WorkoutList(), HistoryList(), StatsPage()][tab],
         floatingActionButton: tab == 0
             ? FloatingActionButton.extended(
                 icon: const Icon(Icons.add),
