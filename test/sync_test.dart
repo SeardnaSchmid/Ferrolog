@@ -35,7 +35,10 @@ void main() {
     await sync.push('{"a":1}'); // not configured -> no request
     expect(puts, isEmpty);
 
-    await sync.configure(repo: 'me/data', branch: '', path: 'log/ferrolog.json', token: ' t0k ');
+    await sync.configure(repo: 'me/data', branch: '', path: 'log/ferrolog.json');
+    await sync.push('{"a":1}'); // not logged in -> no request
+    expect(puts, isEmpty);
+    await (await SharedPreferences.getInstance()).setString('sync.token', 't0k');
     await sync.push('{"ä":1}');
     expect(stored, '{"ä":1}');
     expect(puts.single.containsKey('sha'), isFalse);
@@ -47,6 +50,33 @@ void main() {
 
     fail = true;
     await sync.push('{}');
-    expect(sync.status.value, contains('Token ungültig'));
+    expect(sync.status.value, contains('neu anmelden'));
+  });
+
+  test('device flow login polls until the token arrives', () async {
+    SharedPreferences.setMockInitialValues({});
+    final answers = [
+      {'error': 'authorization_pending'},
+      {'error': 'slow_down', 'interval': 10},
+      {'access_token': 'ghu_x'},
+    ];
+    final client = MockClient((req) async {
+      expect(req.url.host, 'github.com');
+      expect(req.bodyFields['grant_type'], 'urn:ietf:params:oauth:grant-type:device_code');
+      expect(req.bodyFields['device_code'], 'dc');
+      return http.Response(jsonEncode(answers.removeAt(0)), 200);
+    });
+    final sync = GitHubSync(await SharedPreferences.getInstance(), client);
+    final waits = <int>[];
+    await sync.finishLogin(
+      (deviceCode: 'dc', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', interval: 5),
+      wait: (s) {
+        waits.add(s);
+        return Duration.zero;
+      },
+    );
+    expect(sync.token, 'ghu_x');
+    expect(sync.loggedIn, isTrue);
+    expect(waits, [5, 5, 10]);
   });
 }

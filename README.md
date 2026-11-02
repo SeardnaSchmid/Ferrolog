@@ -8,6 +8,25 @@ flutter run          # Handy per USB
 flutter test
 ```
 
+## GitHub-Sync einrichten (einmalig)
+
+Die App meldet sich per Device Flow als GitHub App an. Der Token erreicht damit
+nur die Repos, auf denen die App installiert ist.
+
+1. Privates Repo für die Daten anlegen, z. B. `ferrolog-data`, **mit README**
+   (die API braucht einen vorhandenen `main`-Branch).
+2. GitHub → Settings → Developer settings → GitHub Apps → **New GitHub App**
+   - Name: global eindeutig, z. B. `ferrolog-<dein-name>`; Homepage-URL: beliebig
+   - **Enable Device Flow** anhaken, Callback-URL leer lassen
+   - Webhook: **Active** abhaken
+   - Permissions → Repository → **Contents: Read and write**
+   - Installierbar: *Only on this account*
+3. In der App-Einstellung unter *Optional features* **User-to-server token
+   expiration** abschalten (sonst läuft die Anmeldung nach 8 h ab).
+4. **Client ID** kopieren und in `lib/sync.dart` bei `githubClientId` eintragen.
+5. *Install App* → *Only select repositories* → `ferrolog-data`.
+6. In Ferrolog: Wolken-Symbol → *Mit GitHub anmelden* → Code eingeben → Repo wählen.
+
 ## Daten für die KI
 
 Die App schreibt nach jedem Training `ferrolog.json` in ein GitHub-Repo
