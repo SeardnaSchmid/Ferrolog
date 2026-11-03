@@ -27,13 +27,6 @@ const programs = [
     Day('A', 'StrongLifts A', [('Kniebeuge', 5, 5), ('Bankdrücken', 5, 5), ('Langhantelrudern', 5, 5)]),
     Day('B', 'StrongLifts B', [('Kniebeuge', 5, 5), ('Schulterdrücken', 5, 5), ('Kreuzheben', 1, 5)]),
   ], note: 'A und B abwechselnd, 3× pro Woche.'),
-  Program('5/3/1', [
-    Day('Kniebeuge', '5/3/1 Kniebeuge', [('Kniebeuge', 3, 5), ('Beinbeuger', 3, 10), ('Ausfallschritte', 3, 10)]),
-    Day('Bankdrücken', '5/3/1 Bankdrücken', [('Bankdrücken', 3, 5), ('Kurzhantelrudern', 3, 10), ('Dips', 3, 10)]),
-    Day('Kreuzheben', '5/3/1 Kreuzheben', [('Kreuzheben', 3, 5), ('Klimmzüge', 3, 8), ('Beinpresse', 3, 10)]),
-    Day('Schulterdrücken', '5/3/1 Schulterdrücken',
-        [('Schulterdrücken', 3, 5), ('Latzug', 3, 10), ('Seitheben', 3, 15)]),
-  ], note: 'Vereinfacht: Hauptübung 3×5 mit Steigerung bei Erfolg, ohne die Wochenwellen (5/3/1+, % vom Trainingsmax).'),
   Program('Push/Pull/Beine', [
     Day('Push', 'Push', [
       ('Bankdrücken', 3, 8),

@@ -135,7 +135,11 @@ class _EditWorkoutState extends State<EditWorkout> {
                     title: Text(e.name),
                     subtitle: Text(e.cardio
                         ? 'Cardio · ${cardioLabel(e.reps, e.km)}'
-                        : '${e.sets}×${e.reps} · ${weightLabel(e.weight)} · +${weightLabel(e.increment)} bei Erfolg'),
+                        : [
+                            setsLabel(e.repsPerSet, e.maxReps),
+                            if (!e.noWeight) weightLabel(e.weight),
+                            if (e.up && !e.noWeight) '+${weightLabel(e.increment)} bei Erfolg',
+                          ].join(' · ')),
                     onTap: () => editExercise(i),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -230,14 +234,15 @@ class ExerciseEditor extends StatefulWidget {
 class _ExerciseEditorState extends State<ExerciseEditor> {
   late final Exercise e = widget.initial ?? Exercise(name: '');
   late final nameField = TextEditingController(text: e.name);
-  late bool perSet = e.setWeights != null;
-  late List<double> ws = List.of(e.weights); // kg, one per set
+  late List<double> ws = List.of(e.noWeight ? List.filled(e.sets, 20.0) : e.weights); // kg, one per set
+  late List<int> rs = List.of(e.repsPerSet); // reps, one per set
+  late bool noWeight = e.noWeight;
+  late int? maxReps = e.maxReps; // rep range top, null = fixed reps
+  late bool byDistance = e.cardio && e.km != null; // cardio goal
   String? filledFrom; // catalogue/used exercise whose defaults were taken
   bool typed = false; // suggestions only once the name was typed, not for an opened exercise
   String? editing; // chip group with its "Eigene" input open: 'pause', 'inc' or 'dec'
   final draft = TextEditingController();
-  late double lastIncrement = e.increment > 0 ? e.increment : 2.5;
-  late double lastDecrement = e.decrement > 0 ? e.decrement : 2.5;
 
   @override
   void dispose() {
@@ -268,24 +273,29 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..reps = x.reps
         ..weight = x.weight
         ..increment = x.increment
+        ..up = x.up
         ..decrement = x.decrement
+        ..down = x.down
         ..failsToDeload = x.failsToDeload
         ..restSeconds = x.restSeconds;
-      perSet = x.setWeights != null;
-      ws = List.of(x.weights);
-      if (e.increment > 0) lastIncrement = e.increment;
+      noWeight = x.noWeight;
+      ws = List.of(noWeight ? List.filled(x.sets, 20.0) : x.weights);
+      rs = List.of(x.repsPerSet);
+      maxReps = x.maxReps;
+      byDistance = x.cardio && x.km != null;
+      e.failRestSeconds = x.failRestSeconds;
       filledFrom = name;
     });
   }
 
-  void setSets(int n) => setState(() {
-        n = n.clamp(1, 10);
-        ws = [for (var i = 0; i < n; i++) i < ws.length ? ws[i] : ws.last];
-        e.sets = n;
-      });
-
   /// Weight steps: 2,5 kg (5 lb), snapped to that grid and never below 0.
   double get step => unit.value == WeightUnit.kg ? 2.5 : 5; // in the shown unit
+
+  /// Distance goal ± 0,5 (km or mi), never below 0,5.
+  double nudgedKm(int dir) {
+    final perUnit = unit.value == WeightUnit.lb ? kmPerMile : 1.0;
+    return max(.5, ((e.km ?? 5) / perUnit * 2).round() / 2 + dir * .5) * perUnit;
+  }
 
   double nudged(double kg, int dir) =>
       toKg((((shown(kg) + dir * step) / step).round() * step).clamp(0, shown(1000)).toDouble());
@@ -296,15 +306,129 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       return e
         ..sets = 1
         ..setWeights = null
+        ..setReps = null
+        ..maxReps = null
+        ..failRestSeconds = null
         ..weight = 0
-        ..increment = 0
-        ..decrement = 0;
+        ..reps = byDistance ? 0 : max(1, e.reps)
+        ..km = byDistance ? e.km ?? 5 : null
+        ..up = false
+        ..down = false;
     }
-    return e
+    e
       ..km = null
-      ..setWeights = perSet ? List.of(ws) : null
-      ..weight = perSet ? ws.reduce(max) : ws.first;
+      ..sets = rs.length
+      ..reps = rs.first
+      ..setReps = rs.toSet().length == 1 ? null : List.of(rs)
+      ..maxReps = maxReps == null ? null : max(maxReps!, rs.reduce(max))
+      ..weight = noWeight ? 0 : ws.reduce(max)
+      ..setWeights = noWeight || ws.toSet().length == 1 ? null : List.of(ws);
+    if (noWeight) {
+      e
+        ..up = false
+        ..down = false;
+    }
+    return e;
   }
+
+  /// Sheet for one set: reps and weight, for this set or all sets; or delete it.
+  Future<void> editSet(int i) async {
+    var r = rs[i], w = ws[i], all = rs.toSet().length == 1 && ws.toSet().length == 1, delete = false;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(builder: (context, setSheet) {
+        final c = Theme.of(context).colorScheme;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Expanded(
+                child: Text(e.name.trim().isEmpty ? 'Satz' : e.name.trim(),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              ),
+              Text('Satz ${i + 1} von ${rs.length}', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+            ]),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: _BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
+                    () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1))),
+              ),
+              if (!noWeight) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
+                      () => setSheet(() => w = nudged(w, 1))),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 16),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, label: Text('Dieser Satz')),
+                ButtonSegment(value: true, label: Text('Alle Sätze')),
+              ],
+              selected: {all},
+              onSelectionChanged: (v) => setSheet(() => all = v.single),
+            ),
+            const SizedBox(height: 20),
+            Row(children: [
+              if (rs.length > 1) ...[
+                IconButton.outlined(
+                  icon: Icon(Icons.delete_outline, color: c.error),
+                  tooltip: 'Satz löschen',
+                  onPressed: () {
+                    delete = true;
+                    Navigator.pop(context, true);
+                  },
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Schließen'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Speichern'),
+                ),
+              ),
+            ]),
+          ]),
+        );
+      }),
+    );
+    if (saved != true) return;
+    setState(() {
+      if (delete) {
+        rs.removeAt(i);
+        ws.removeAt(i);
+      } else if (all) {
+        // Only what was changed goes to all sets, so a pyramid keeps its weights when only reps change.
+        if (r != rs[i]) rs = List.filled(rs.length, r);
+        if (w != ws[i]) ws = List.filled(ws.length, w);
+      } else {
+        rs[i] = r;
+        ws[i] = w;
+      }
+      if (maxReps case final top?) maxReps = max(top, rs.reduce(max)); // the range top stays above every set
+    });
+  }
+
+  /// A new set, copied from the last one.
+  void addSet() => setState(() {
+        if (rs.length >= 12) return;
+        rs.add(rs.last);
+        ws.add(ws.last);
+      });
 
   /// Switches between strength and cardio with sensible starting values.
   void setCardio(bool cardio) => setState(() {
@@ -314,11 +438,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           e
             ..reps = 30 // minutes
             ..km = null;
+          byDistance = false;
         } else {
-          e
-            ..sets = 3
-            ..reps = 8
-            ..increment = lastIncrement;
+          e.up = true;
+          rs = List.filled(3, 8);
           ws = List.filled(3, ws.isEmpty ? 20 : ws.first);
         }
       });
@@ -397,126 +520,79 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           ),
           const SizedBox(height: 18),
           if (e.cardio) ...[
-            Row(children: [
-              Expanded(
-                child: _BigStepper('Dauer (Min)', '${e.reps}', () => setState(() => e.reps = max(1, e.reps - 5)),
-                    () => setState(() => e.reps = min(600, e.reps + 5))),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(children: [
-                  Text('Distanz (optional)',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  // Same height as the duration stepper (56 + 2 + 44), number and unit centered together.
-                  Container(
-                    height: 102,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: c.surfaceContainerHigh, borderRadius: BorderRadius.circular(16)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        IntrinsicWidth(
-                          child: TextFormField(
-                            key: ValueKey('km${e.name}'),
-                            initialValue: switch (e.km) { final km? => distanceNum(km), null => '' },
-                            textAlign: TextAlign.center,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-                            decoration: const InputDecoration.collapsed(hintText: '–'),
-                            onChanged: (v) => setState(() => e.km = parseDistance(v)),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(distanceLabel, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
-                ]),
-              ),
-            ]),
+            // One goal: how long or how far. What was actually done is logged in the training.
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.timer_outlined), label: Text('Dauer')),
+                ButtonSegment(value: true, icon: Icon(Icons.route_outlined), label: Text('Distanz')),
+              ],
+              selected: {byDistance},
+              onSelectionChanged: (v) => setState(() {
+                byDistance = v.single;
+                if (byDistance) e.km ??= 5;
+                if (!byDistance && e.reps <= 0) e.reps = 30;
+              }),
+            ),
+            const SizedBox(height: 18),
+            if (byDistance)
+              _BigStepper('Ziel ($distanceLabel)', distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
+                  () => setState(() => e.km = nudgedKm(1)))
+            else
+              _BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(5, e.reps - 5)),
+                  () => setState(() => e.reps = min(600, e.reps + 5))),
           ] else ...[
           SegmentedButton<bool>(
             showSelectedIcon: false,
             segments: const [
-              ButtonSegment(value: false, label: Text('Gleiches Gewicht')),
-              ButtonSegment(value: true, label: Text('Gewicht pro Satz')),
+              ButtonSegment(value: false, icon: Icon(Icons.fitness_center), label: Text('Mit Gewicht')),
+              ButtonSegment(value: true, icon: Icon(Icons.accessibility_new), label: Text('Ohne Gewicht')),
             ],
-            selected: {perSet},
-            onSelectionChanged: (v) => setState(() {
-              perSet = v.single;
-              if (!perSet) ws = List.filled(ws.length, ws.first);
-            }),
+            selected: {noWeight},
+            onSelectionChanged: (v) => setState(() => noWeight = v.single),
           ),
           const SizedBox(height: 18),
           Row(children: [
-            Expanded(child: _BigStepper('Sätze', '${e.sets}', () => setSets(e.sets - 1), () => setSets(e.sets + 1))),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _BigStepper('Wiederholungen', '${e.reps}', () => setState(() => e.reps = max(1, e.reps - 1)),
-                  () => setState(() => e.reps = min(30, e.reps + 1))),
-            ),
+            const Expanded(child: Text('Sätze', style: TextStyle(fontWeight: FontWeight.w500))),
+            Text(isNew ? 'Satz antippen zum Ändern' : 'Nächstes Training · antippen zum Ändern', style: muted),
           ]),
-          const SizedBox(height: 18),
-          if (!perSet) ...[
-            // In the plan this is what the next training starts with.
-            Center(
-              child: Text(isNew ? 'Startgewicht' : 'Gewicht nächstes Training',
-                  style: muted.copyWith(fontWeight: FontWeight.w500)),
-            ),
-            const SizedBox(height: 6),
-            // Same grid as the sets/reps steppers above: −/+ as wide as their buttons.
-            LayoutBuilder(builder: (context, box) {
-              final button = (box.maxWidth - 16) / 4;
-              return Row(children: [
-                _StepButton(Icons.remove, button, left: true,
-                    () => setState(() => ws = List.filled(ws.length, nudged(ws.first, -1)))),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: _WeightField(
-                    key: ValueKey(ws.first),
-                    kg: ws.first,
-                    onChanged: (kg) => ws = List.filled(ws.length, kg),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                _StepButton(Icons.add, button, left: false,
-                    () => setState(() => ws = List.filled(ws.length, nudged(ws.first, 1)))),
-              ]);
-            }),
-          ] else ...[
-            Text(isNew ? 'Startgewicht pro Satz' : 'Gewicht pro Satz, nächstes Training',
-                style: muted.copyWith(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 6),
-            for (var i = 0; i < ws.length; i++)
-              Container(
-                height: 52,
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
-                decoration: card.copyWith(borderRadius: BorderRadius.circular(14)),
-                child: Row(children: [
-                  Text('Satz ${i + 1}', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                  const Spacer(),
-                  IconButton.filledTonal(
-                    icon: const Icon(Icons.remove, size: 20),
-                    onPressed: () => setState(() => ws[i] = nudged(ws[i], -1)),
-                  ),
-                  SizedBox(
-                    width: 84,
-                    child: Text(weightLabel(ws[i]),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()])),
-                  ),
-                  IconButton.filledTonal(
-                    icon: const Icon(Icons.add, size: 20),
-                    onPressed: () => setState(() => ws[i] = nudged(ws[i], 1)),
-                  ),
-                ]),
+          const SizedBox(height: 8),
+          // Four tiles per row, like the sets in the training.
+          LayoutBuilder(builder: (context, box) {
+            final w = (box.maxWidth - 3 * 8) / 4;
+            return Wrap(spacing: 8, runSpacing: 8, children: [
+              for (var i = 0; i < rs.length; i++)
+                _PlanTile(
+                    width: w, reps: rs[i], maxReps: maxReps, weight: noWeight ? null : ws[i], onTap: () => editSet(i)),
+              if (rs.length < 12) SizedBox(width: w, child: DashedAddButton('Satz', addSet, height: noWeight ? 56 : 94)),
+            ]);
+          }),
+          const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Wiederholungs-Spanne'),
+            subtitle: Text(maxReps == null
+                ? 'Aus · feste Wiederholungen'
+                : '${setsLabel(rs, maxReps)} · Gewicht steigt erst, wenn alle Sätze $maxReps Wdh. schaffen'),
+            value: maxReps != null,
+            onChanged: (on) => setState(() => maxReps = on ? rs.reduce(max) + 3 : null),
+          ),
+          if (maxReps case final top?)
+            Row(children: [
+              Expanded(child: Text('Bis Wiederholungen', style: TextStyle(color: c.onSurfaceVariant))),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.remove, size: 20),
+                onPressed: () => setState(() => maxReps = max(rs.reduce(max), top - 1)),
               ),
-          ],
+              SizedBox(
+                width: 36,
+                child: Text('$top', textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              ),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.add, size: 20),
+                onPressed: () => setState(() => maxReps = min(50, top + 1)),
+              ),
+            ]),
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -539,8 +615,22 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 unitText: 'min:s oder s',
                 parse: parseDuration,
               ),
+              const SizedBox(height: 14),
+              Text('Nach nicht geschafftem Satz', style: muted.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              chips(
+                key: 'failpause',
+                presets: const [0, 120, 180, 240, 300], // 0 = same as above
+                current: (e.failRestSeconds ?? 0).toDouble(),
+                label: (v) => v == 0 ? 'Wie oben' : clock(v.round()),
+                set: (v) => e.failRestSeconds = v == 0 ? null : v.round(),
+                hint: 'z. B. 4:00',
+                unitText: 'min:s oder s',
+                parse: parseDuration,
+              ),
             ]),
           ),
+          if (!noWeight) ...[
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -553,34 +643,32 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.trending_up),
                 title: const Text('Steigerung bei Erfolg'),
-                subtitle: Text(e.increment > 0
+                subtitle: Text(e.up
                     ? '+${weightLabel(e.increment)}, wenn alle Sätze geschafft'
                     : 'Aus · Gewicht bleibt gleich'),
-                value: e.increment > 0,
+                value: e.up,
                 onChanged: (on) => setState(() {
-                  if (e.increment > 0) lastIncrement = e.increment;
-                  e.increment = on ? lastIncrement : 0;
+                  e.up = on;
                   if (editing == 'inc') editing = null;
                 }),
               ),
-              if (e.increment > 0) weightChips('inc', '+', e.increment, (kg) => e.increment = lastIncrement = kg),
+              if (e.up) weightChips('inc', '+', e.increment, (kg) => e.increment = kg),
               const Divider(height: 24),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.trending_down),
                 title: const Text('Senkung bei Misserfolg'),
-                subtitle: Text(e.decrement > 0
+                subtitle: Text(e.down
                     ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload}× nicht geschafft'
                     : 'Aus · Gewicht bleibt gleich'),
-                value: e.decrement > 0,
+                value: e.down,
                 onChanged: (on) => setState(() {
-                  if (e.decrement > 0) lastDecrement = e.decrement;
-                  e.decrement = on ? lastDecrement : 0;
+                  e.down = on;
                   if (editing == 'dec') editing = null;
                 }),
               ),
-              if (e.decrement > 0) ...[
-                weightChips('dec', '−', e.decrement, (kg) => e.decrement = lastDecrement = kg),
+              if (e.down) ...[
+                weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
                 const SizedBox(height: 10),
                 Row(children: [
                   Expanded(child: Text('Senken nach Fehlversuchen in Folge', style: TextStyle(color: c.onSurfaceVariant))),
@@ -602,6 +690,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ]),
           ),
           ],
+          ],
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -614,15 +703,21 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
 
   String get summary {
     final name = e.name.trim().isEmpty ? 'Neue Übung' : e.name.trim();
-    if (e.cardio) return '$name: ${cardioLabel(e.reps, e.km)}. Cardio wird nicht automatisch angepasst.';
-    final plan = perSet
-        ? ws.map((w) => '${e.reps}×${weightLabel(w)}').join(', ')
-        : '${e.sets}×${e.reps} mit ${weightLabel(ws.first)}';
+    if (e.cardio) {
+      final goal = byDistance ? '${distanceNum(e.km ?? 5)} $distanceLabel' : '${e.reps} Min';
+      return '$name: Ziel $goal. Im Training startest du die Stoppuhr mit einem Tipp.';
+    }
+    final plan = noWeight
+        ? '${setsLabel(rs, maxReps)} ohne Gewicht'
+        : ws.toSet().length == 1
+            ? '${setsLabel(rs, maxReps)} mit ${weightLabel(ws.first)}'
+            : [for (final (i, w) in ws.indexed) '${rs[i]}×${weightLabel(w)}'].join(', ');
+    if (noWeight) return '$name: $plan.';
     return [
       '$name: $plan.',
-      if (e.increment > 0) 'Bei Erfolg +${weightLabel(e.increment)}.',
-      if (e.decrement > 0) 'Nach ${e.failsToDeload}× Misserfolg −${weightLabel(e.decrement)}.',
-      if (e.increment <= 0 && e.decrement <= 0) 'Gewicht wird nicht automatisch angepasst.',
+      if (e.up) 'Bei Erfolg +${weightLabel(e.increment)}.',
+      if (e.down) 'Nach ${e.failsToDeload}× Misserfolg −${weightLabel(e.decrement)}.',
+      if (!e.up && !e.down) 'Gewicht wird nicht automatisch angepasst.',
     ].join(' ');
   }
 
@@ -636,7 +731,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         hint: unit.value == WeightUnit.kg ? 'z. B. 1,25' : 'z. B. 7,5',
         unitText: unitLabel,
         prefix: sign,
-        // Comma or point, at most 2 decimals, above 0 (0 would mean off).
+        // Comma or point, at most 2 decimals, above 0.
         parse: (s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
           final v? when v > 0 => (v * 100).roundToDouble() / 100,
           _ => null,
@@ -729,15 +824,26 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
         ..weight = d.$3
         ..increment = d.$4
         ..restSeconds = d.$5;
+      if (unit.value == WeightUnit.lb) {
+        // Catalogue values are kg; in lb start on round plates (50 kg → 110 lb, +2,5 kg → +5 lb).
+        e
+          ..weight = toKg((shown(e.weight) / 5).round() * 5.0)
+          ..increment = toKg(stepShown(e.increment));
+      }
     }
     if (store.historyOf(name).lastOrNull?.$2 case final logged?) e.weight = logged.weight;
   }
   if (sets != null && sets != e.sets) {
     e
       ..sets = sets
-      ..setWeights = null; // a different set count can't keep a per-set shape
+      ..setWeights = null // a different set count can't keep a per-set shape
+      ..setReps = null;
   }
-  if (reps != null) e.reps = reps;
+  if (reps != null) {
+    e
+      ..reps = reps
+      ..setReps = null;
+  }
   return e;
 }
 
@@ -798,67 +904,54 @@ class _BigStepper extends StatelessWidget {
   }
 }
 
-class _StepButton extends StatelessWidget {
-  final IconData icon;
+/// A planned set in the editor: reps on top, weight below (none without weight). Tap to edit.
+class _PlanTile extends StatelessWidget {
   final double width;
-  final bool left; // outer corner rounded, inner ones square, as in the design
+  final int reps;
+  final int? maxReps;
+  final double? weight;
   final VoidCallback onTap;
-  const _StepButton(this.icon, this.width, this.onTap, {required this.left});
-
-  @override
-  Widget build(BuildContext context) {
-    const outer = Radius.circular(16), inner = Radius.circular(4);
-    final radius = left
-        ? const BorderRadius.horizontal(left: outer, right: inner)
-        : const BorderRadius.horizontal(left: inner, right: outer);
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHigh,
-      borderRadius: radius,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: SizedBox(width: width, height: 60, child: Icon(icon)),
-      ),
-    );
-  }
-}
-
-/// The weight as a typeable number in the shown unit; reports kg while typing.
-class _WeightField extends StatelessWidget {
-  final double kg;
-  final void Function(double kg) onChanged;
-  const _WeightField({super.key, required this.kg, required this.onChanged});
+  const _PlanTile({required this.width, required this.reps, required this.maxReps, required this.weight, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    const style = TextStyle(fontSize: 28, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]);
-    // Number and unit centered together ("87,5 kg"), the field only as wide as what's typed.
-    return Container(
-      height: 60,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: c.surfaceContainerHigh, borderRadius: BorderRadius.circular(4)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          IntrinsicWidth(
-            child: TextFormField(
-              initialValue: weightNum(kg),
-              textAlign: TextAlign.center,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-              style: style,
-              decoration: const InputDecoration.collapsed(hintText: '0'),
-              onChanged: (v) {
-                if (parseWeight(v) case final kg? when kg >= 0 && kg <= 1000) onChanged(kg);
-              },
-            ),
+    final w = weight;
+    const figures = [FontFeature.tabularFigures()];
+    return SizedBox(
+      width: width,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Material(
+          color: c.surfaceContainer,
+          child: InkWell(
+            onTap: onTap,
+            child: Column(children: [
+              Container(
+                height: 56,
+                color: c.surfaceContainerHigh,
+                alignment: Alignment.center,
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: '$reps', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+                  if (maxReps case final top? when top > reps)
+                    TextSpan(text: '–$top', style: TextStyle(fontSize: 16, color: c.onSurfaceVariant)),
+                ]), style: const TextStyle(fontFeatures: figures)),
+              ),
+              if (w != null) ...[
+                const SizedBox(height: 2),
+                SizedBox(
+                  height: 36,
+                  child: Center(
+                    child: Text.rich(TextSpan(children: [
+                      TextSpan(text: weightNum(w)),
+                      TextSpan(text: ' $unitLabel', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
+                    ]), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, fontFeatures: figures)),
+                  ),
+                ),
+              ],
+            ]),
           ),
-          const SizedBox(width: 6),
-          Text(unitLabel, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
-        ],
+        ),
       ),
     );
   }

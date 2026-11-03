@@ -62,7 +62,7 @@ double? parseDistance(String s) => switch (double.tryParse(s.trim().replaceAll('
 
 /// "25 Min · 5,2 km" for planned or done cardio.
 String cardioLabel(int? minutes, double? km) =>
-    [if (minutes != null) '$minutes Min', if (km != null) '${distanceNum(km)} $distanceLabel'].join(' · ');
+    [if (minutes != null && minutes > 0) '$minutes Min', if (km != null) '${distanceNum(km)} $distanceLabel'].join(' · ');
 
 /// Step for the −/+ buttons in the current unit: the plan's increment, but whole plate steps in lb
 /// (2.5 kg → 5 lb, 1.25 kg → 2.5 lb, 5 kg → 10 lb).

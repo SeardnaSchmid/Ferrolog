@@ -65,22 +65,35 @@ class Exercise {
   int sets;
   int reps;
 
-  /// Added to the weight when every set hit [reps]; 0 = off.
+  /// Added to the weight when every set hit [reps], if [up].
   double increment;
+  bool up;
 
-  /// Taken off after [failsToDeload] missed sessions in a row; 0 = off.
+  /// Taken off after [failsToDeload] missed sessions in a row, if [down].
   double decrement;
+  bool down;
   int failsToDeload;
 
   /// Missed sessions in a row so far; reset on success or deload.
   int fails;
   int restSeconds;
 
+  /// Rest after a set that missed its target; null = [restSeconds].
+  int? failRestSeconds;
+
   /// Weight per set when the sets differ (e.g. back-off sets); null = [weight] for all sets.
+  /// All 0 = no weight (reps only).
   List<double>? setWeights;
 
-  /// Cardio instead of strength: one "set" whose [reps] are the target minutes, no weight,
-  /// optionally a target distance.
+  /// Reps per set when they differ (e.g. 10/8/6); null = [reps] for every set.
+  List<int>? setReps;
+
+  /// Rep range: each set aims for its reps up to [maxReps]; the weight only goes up once every
+  /// set reaches [maxReps]. Null = fixed reps.
+  int? maxReps;
+
+  /// Cardio instead of strength: one "set", no weight. The goal is either a duration ([reps] minutes,
+  /// [km] null) or a distance ([km], [reps] 0).
   bool cardio;
   double? km;
 
@@ -90,22 +103,29 @@ class Exercise {
     this.sets = 3,
     this.reps = 8,
     this.increment = 2.5,
-    this.decrement = 0,
+    this.up = true,
+    this.decrement = 2.5,
+    this.down = false,
     this.failsToDeload = 3,
     this.fails = 0,
     this.restSeconds = 120,
+    this.failRestSeconds,
     this.setWeights,
+    this.setReps,
+    this.maxReps,
     this.cardio = false,
     this.km,
   });
 
-  /// A cardio exercise: [minutes] long, optionally [km] far.
+  /// A cardio exercise with a distance goal ([km]) or else a duration goal ([minutes]).
   Exercise.cardio({required this.name, required int minutes, this.km})
       : weight = 0,
         sets = 1,
-        reps = minutes,
-        increment = 0,
-        decrement = 0,
+        reps = km == null ? minutes : 0,
+        increment = 2.5,
+        up = false,
+        decrement = 2.5,
+        down = false,
         failsToDeload = 3,
         fails = 0,
         restSeconds = 0,
@@ -115,10 +135,13 @@ class Exercise {
   void applyResult(ExerciseLog log) {
     if (cardio) return; // cardio stays as planned
     var delta = 0.0;
-    if (log.succeeded) {
-      delta = increment;
+    final top = maxReps;
+    if (top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top)) {
+      if (up) delta = increment;
       fails = 0;
-    } else if (++fails >= failsToDeload && decrement > 0) {
+    } else if (log.succeeded) {
+      fails = 0; // within the range: same weight, go for more reps
+    } else if (++fails >= failsToDeload && down) {
       delta = -decrement;
       fails = 0;
     }
@@ -135,6 +158,12 @@ class Exercise {
   /// The planned weight of each set.
   List<double> get weights => setWeights ?? List.filled(sets, weight);
 
+  /// The planned reps of each set.
+  List<int> get repsPerSet => setReps ?? List.filled(sets, reps);
+
+  /// Reps only, no weight.
+  bool get noWeight => !cardio && weights.every((w) => w == 0);
+
   Exercise copy() => Exercise.fromJson(toJson());
 
   Map<String, dynamic> toJson() => {
@@ -143,11 +172,16 @@ class Exercise {
         'sets': sets,
         'reps': reps,
         'increment': increment,
+        'up': up,
         'decrement': decrement,
+        'down': down,
         'failsToDeload': failsToDeload,
         'fails': fails,
         'restSeconds': restSeconds,
+        if (failRestSeconds != null) 'failRestSeconds': failRestSeconds,
         if (setWeights != null) 'setWeights': setWeights,
+        if (setReps != null) 'setReps': setReps,
+        if (maxReps != null) 'maxReps': maxReps,
         if (cardio) 'type': 'cardio',
         if (km != null) 'km': km,
       };
@@ -157,12 +191,18 @@ class Exercise {
         weight: (j['weight'] as num).toDouble(),
         sets: j['sets'],
         reps: j['reps'],
-        increment: (j['increment'] as num).toDouble(),
-        decrement: (j['decrement'] as num?)?.toDouble() ?? 0,
+        // Older files had no flags: a step of 0 meant off.
+        increment: switch ((j['increment'] as num).toDouble()) { 0 => 2.5, final v => v },
+        up: j['up'] ?? (j['increment'] as num) > 0,
+        decrement: switch ((j['decrement'] as num?)?.toDouble()) { null || 0 => 2.5, final v => v },
+        down: j['down'] ?? ((j['decrement'] as num?) ?? 0) > 0,
         failsToDeload: j['failsToDeload'] ?? 3,
         fails: j['fails'] ?? 0,
         restSeconds: j['restSeconds'] ?? 120,
+        failRestSeconds: j['failRestSeconds'],
         setWeights: j['setWeights'] == null ? null : [for (final w in j['setWeights']) (w as num).toDouble()],
+        setReps: j['setReps'] == null ? null : List<int>.from(j['setReps']),
+        maxReps: j['maxReps'],
         cardio: j['type'] == 'cardio',
         km: (j['km'] as num?)?.toDouble(),
       );
@@ -196,32 +236,50 @@ class Workout {
 /// `reps[i] == null` means set i was not done.
 class ExerciseLog {
   final String name;
-  final int targetReps;
+
+  /// Target reps per set, same length as [reps].
+  final List<int> targets;
   final List<int?> reps;
+
+  /// Top of the rep range, if the plan has one.
+  final int? maxReps;
 
   /// Weight per set, same length as [reps].
   final List<double> weights;
 
-  /// Cardio: one "set", [reps] holds the minutes done and [targetReps] the planned minutes.
+  /// Cardio: one "set", [reps] holds the minutes done and [targetReps] the planned minutes
+  /// (0 with a distance goal, [targetKm]).
   final bool cardio;
   double? km;
   final double? targetKm;
 
+  /// Cardio stopwatch: when it was started, while it runs.
+  DateTime? startedAt;
+
   ExerciseLog({
     required this.name,
     required double weight,
-    required this.targetReps,
+    required int targetReps,
     required this.reps,
+    List<int>? targets,
+    this.maxReps,
     List<double>? weights,
     this.cardio = false,
     this.km,
     this.targetKm,
-  }) : weights = weights ?? List.filled(reps.length, weight);
+    this.startedAt,
+  })  : weights = weights ?? List.filled(reps.length, weight),
+        targets = targets ?? List.filled(reps.length, targetReps);
+
+  /// Target reps of the first set; for cardio the planned minutes.
+  int get targetReps => targets.first;
 
   /// Working weight: the heaviest set. Progression and stats build on it.
   double get weight => weights.fold(0, max);
 
-  bool get succeeded => reps.every((r) => r != null && r >= targetReps);
+  bool get succeeded => cardio && targetKm != null
+      ? reps.first != null && (km ?? 0) >= targetKm!
+      : [for (final (i, r) in reps.indexed) r != null && r >= targets[i]].every((ok) => ok);
   int get setsDone => reps.where((r) => r != null).length;
   double get volume => [for (final (i, r) in reps.indexed) (r ?? 0) * weights[i]].fold(0, (a, b) => a + b);
 
@@ -230,10 +288,13 @@ class ExerciseLog {
         'weight': weight,
         'weights': weights,
         'targetReps': targetReps,
+        if (targets.any((t) => t != targetReps)) 'targets': targets,
+        if (maxReps != null) 'maxReps': maxReps,
         'reps': reps,
         if (cardio) 'type': 'cardio',
         if (km != null) 'km': km,
         if (targetKm != null) 'targetKm': targetKm,
+        if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
       };
 
   // Older data has only "weight"; it then applies to every set.
@@ -242,10 +303,13 @@ class ExerciseLog {
         weight: (j['weight'] as num).toDouble(),
         weights: j['weights'] == null ? null : [for (final w in j['weights']) (w as num).toDouble()],
         targetReps: j['targetReps'],
+        targets: j['targets'] == null ? null : List<int>.from(j['targets']),
+        maxReps: j['maxReps'],
         reps: List<int?>.from(j['reps']),
         cardio: j['type'] == 'cardio',
         km: (j['km'] as num?)?.toDouble(),
         targetKm: (j['targetKm'] as num?)?.toDouble(),
+        startedAt: j['startedAt'] == null ? null : DateTime.parse(j['startedAt']),
       );
 }
 
@@ -270,6 +334,8 @@ class Session {
               weight: e.weight,
               weights: List.of(e.weights),
               targetReps: e.reps,
+              targets: e.repsPerSet,
+              maxReps: e.maxReps,
               reps: List.filled(e.sets, null),
               cardio: e.cardio,
               targetKm: e.km,
@@ -331,11 +397,13 @@ class Store extends ChangeNotifier {
         'exportedAt': DateTime.now().toIso8601String(),
         'units': 'kg',
         'format': 'workouts = plans; exercise.weight is the weight for the NEXT session (setWeights, if '
-            'present, per set) and rises by "increment" when all sets hit "reps" (progressive overload); '
-            'after "failsToDeload" missed sessions in a row it drops by "decrement" (0 = off). sessions = completed trainings, '
-            'newest first; exercises[].reps holds reps done per set, null = set skipped; exercises[].weights '
+            'present, per set; all 0 = no weight) and rises by "increment" when all sets hit "reps" (setReps, if present, '
+            'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
+            'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true. sessions = completed trainings, '
+            'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
+            'they differ); "failRestSeconds" = rest after a missed set; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
-            'minutes (targetReps = planned minutes), km/targetKm = distance in km, no weight.',
+            'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
         'sessions': sessions.map((s) => s.toJson()).toList(),
       };
@@ -430,11 +498,12 @@ const exerciseCatalogue = <String, (int, int, double, double, int)>{
 };
 
 /// Cardio catalogue: name -> default minutes and distance in km (null = no distance).
+/// Cardio defaults: (minutes, km); with km the goal is the distance.
 const cardioCatalogue = <String, (int, double?)>{
   'Laufen': (30, 5.0),
-  'Laufband': (20, 3.0),
-  'Radfahren': (45, 15.0),
-  'Ergometer-Rudern': (15, 3.0),
+  'Laufband': (20, null),
+  'Radfahren': (45, null),
+  'Ergometer-Rudern': (10, 2.0),
   'Crosstrainer': (20, null),
   'Seilspringen': (10, null),
   'Treppensteiger': (15, null),
@@ -501,4 +570,10 @@ List<String> searchExercises(String query, Iterable<String> names) {
   }
 
   return (names.where((n) => score(n) < 2).toList()..sort((a, b) => score(a).compareTo(score(b)))).toList();
+}
+
+/// Planned sets and reps: "3×5", "3×5–8", "10/8/6".
+String setsLabel(List<int> reps, int? maxReps) {
+  final range = maxReps == null ? '' : '–$maxReps';
+  return reps.toSet().length == 1 ? '${reps.length}×${reps.first}$range' : '${reps.join('/')}$range';
 }

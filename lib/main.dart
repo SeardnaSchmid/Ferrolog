@@ -280,7 +280,8 @@ class AddWorkoutButton extends StatelessWidget {
 class DashedAddButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
-  const DashedAddButton(this.label, this.onTap, {super.key});
+  final double height;
+  const DashedAddButton(this.label, this.onTap, {super.key, this.height = 44});
 
   @override
   Widget build(BuildContext context) {
@@ -291,12 +292,14 @@ class DashedAddButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: SizedBox(
-          height: 44,
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.add, color: c.primary),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: c.primary)),
-          ]),
+          height: height,
+          // Wraps the label under the icon when narrow (the "+ Satz" tile).
+          child: Center(
+            child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              Icon(Icons.add, color: c.primary),
+              Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: c.primary)),
+            ]),
+          ),
         ),
       ),
     );
@@ -389,7 +392,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
         key: const ValueKey('expanded'),
         title: s.workoutName,
         live: s,
-        rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targetReps, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+        rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
         onTap: () => setState(() => expanded = false), // tap anywhere to collapse
         actions: [
           IconButton(
@@ -447,7 +450,7 @@ class WorkoutCard extends StatelessWidget {
       rows: [
         for (final e in workout.exercises)
           // Weight went up when last time every set hit the target (the store already added the increment).
-          (e.name, e.weights, List<int?>.filled(e.sets, null), e.reps, _improved(last, e), e.km, e.cardio),
+          (e.name, e.weights, List<int?>.filled(e.sets, null), e.repsPerSet, _improved(last, e), e.km, e.cardio),
       ],
       actions: [
         IconButton(
@@ -484,9 +487,10 @@ class OverviewCard extends StatelessWidget {
   final String title;
   final String? subtitle;
 
-  /// (name, weight per set, reps done or null per set, target reps, weight went up, km, cardio).
+  /// (name, weight per set, reps done or null per set, target reps per set, weight went up, km, cardio).
   /// Cardio rows have one "set" whose reps are minutes; they show "25 Min · 5 km" instead of weights.
-  final List<(String, List<double>, List<int?>, int, bool, double?, bool)> rows;
+  /// A weight of 0 is shown as reps only.
+  final List<(String, List<double>, List<int?>, List<int>, bool, double?, bool)> rows;
   final List<Widget> actions;
 
   /// The running training, if this card shows it: highlighted, with elapsed time and progress.
@@ -555,7 +559,7 @@ class OverviewCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              for (final (name, weights, reps, target, up, km, cardio) in rows)
+              for (final (name, weights, reps, targets, up, km, cardio) in rows)
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(border: Border(bottom: line)),
@@ -565,19 +569,19 @@ class OverviewCard extends StatelessWidget {
                         child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
                       ),
                       if (cardio)
-                        CardioPill(reps.first, target, km)
+                        CardioPill(reps.first, targets.first, km)
                       else
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          for (final (i, (weight, sets)) in groupByWeight(weights, reps).indexed)
+                          for (final (i, (weight, sets)) in groupByWeight(weights).indexed)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (up && i == 0) Icon(Icons.arrow_upward, size: 16, color: c.primary),
-                                  Text.rich(
+                                  if (weight > 0) Text.rich(
                                     TextSpan(
                                       children: [
                                         TextSpan(text: weightNum(weight)),
@@ -595,7 +599,7 @@ class OverviewCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  RepPills(sets, target),
+                                  RepPills([for (final j in sets) reps[j]], [for (final j in sets) targets[j]]),
                                 ],
                               ),
                             ),
@@ -645,12 +649,12 @@ class CardioPill extends StatelessWidget {
   }
 }
 
-/// Consecutive sets with the same weight, e.g. 72.5: [5, 5], 70: [3].
-List<(double, List<int?>)> groupByWeight(List<double> weights, List<int?> reps) {
-  final groups = <(double, List<int?>)>[];
+/// Consecutive sets with the same weight, as set indexes, e.g. 72.5: [0, 1], 70: [2].
+List<(double, List<int>)> groupByWeight(List<double> weights) {
+  final groups = <(double, List<int>)>[];
   for (final (i, w) in weights.indexed) {
     if (groups.isEmpty || groups.last.$1 != w) groups.add((w, []));
-    groups.last.$2.add(reps[i]);
+    groups.last.$2.add(i);
   }
   return groups;
 }
@@ -658,8 +662,8 @@ List<(double, List<int?>)> groupByWeight(List<double> weights, List<int?> reps) 
 /// Sets as a joined row of pills: open sets show the target, logged ones their reps.
 class RepPills extends StatelessWidget {
   final List<int?> reps;
-  final int target;
-  const RepPills(this.reps, this.target, {super.key});
+  final List<int> targets;
+  const RepPills(this.reps, this.targets, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -669,7 +673,8 @@ class RepPills extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final (i, r) in reps.indexed) ...[
+          for (final (i, r) in reps.indexed)
+            if (targets[i] case final target) ...[
             if (i > 0) const SizedBox(width: 2),
             Container(
               constraints: const BoxConstraints(minWidth: 30),
@@ -697,6 +702,9 @@ class RepPills extends StatelessWidget {
 class SetTile extends StatelessWidget {
   final int? reps;
   final int target;
+
+  /// Top of a rep range: shows "/5–8".
+  final int? targetMax;
   final String weight;
   final bool selected;
 
@@ -708,6 +716,7 @@ class SetTile extends StatelessWidget {
     super.key,
     required this.reps,
     required this.target,
+    this.targetMax,
     required this.weight,
     this.repsUnit = '',
     this.weightUnit,
@@ -730,7 +739,7 @@ class SetTile extends StatelessWidget {
             TextSpan(children: [
               TextSpan(text: r?.toString() ?? '–', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
               TextSpan(
-                text: '/$target$repsUnit',
+                text: '/$target${targetMax != null && targetMax! > target ? '–$targetMax' : ''}$repsUnit',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: fg.withValues(alpha: .7)),
               ),
             ]),
@@ -763,7 +772,8 @@ class SetTile extends StatelessWidget {
                     child: Text.rich(
                       TextSpan(children: [
                         TextSpan(text: weight),
-                        TextSpan(text: ' ${weightUnit ?? unitLabel}', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
+                        if (weightUnit != '')
+                          TextSpan(text: ' ${weightUnit ?? unitLabel}', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
                       ]),
                       style: TextStyle(
                         fontSize: 15,
@@ -1011,7 +1021,7 @@ class _HistoryListState extends State<HistoryList> {
           OverviewCard(
             title: s.workoutName,
             subtitle: dayLabel(s.date),
-            rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targetReps, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+            rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
             actions: [
               IconButton(
                 icon: const Icon(Icons.delete_outline),

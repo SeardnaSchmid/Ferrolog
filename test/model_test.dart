@@ -54,26 +54,28 @@ void main() {
     expect(log.weight, 72.5);
     expect(log.volume, 5 * 72.5 * 2 + 3 * 70);
     expect(ExerciseLog.fromJson(log.toJson()).weights, [72.5, 72.5, 70]);
-    expect(groupByWeight(log.weights, log.reps).map((g) => '${g.$1}: ${g.$2}'), ['72.5: [5, 5]', '70.0: [3]']);
+    expect(groupByWeight(log.weights).map((g) => '${g.$1}: ${g.$2}'), ['72.5: [0, 1]', '70.0: [2]']);
   });
 
-  test('cardio: one set of minutes, survives JSON, never auto-adjusted', () {
+  test('cardio: one set, goal is distance or duration, survives JSON, never auto-adjusted', () {
     final run = Exercise.cardio(name: 'Laufen', minutes: 30, km: 5);
     final w = Workout(name: 'Mix', exercises: [Exercise(name: 'Kniebeuge'), run]);
     final again = Workout.fromJson(jsonDecode(jsonEncode(w.toJson()))).exercises.last;
-    expect((again.cardio, again.reps, again.km, again.sets), (true, 30, 5.0, 1));
+    expect((again.cardio, again.reps, again.km, again.sets), (true, 0, 5.0, 1), reason: 'distance goal');
 
     final log = Session.start(w).exercises.last;
-    expect((log.cardio, log.targetReps, log.targetKm, log.reps.length, log.reps.first), (true, 30, 5.0, 1, null));
+    expect((log.cardio, log.targetReps, log.targetKm, log.reps.length, log.reps.first), (true, 0, 5.0, 1, null));
     log
       ..reps[0] = 25
       ..km = 4.2;
     final logAgain = ExerciseLog.fromJson(jsonDecode(jsonEncode(log.toJson())));
     expect((logAgain.cardio, logAgain.reps.single, logAgain.km, logAgain.succeeded), (true, 25, 4.2, false));
+    logAgain.km = 5.1;
+    expect(logAgain.succeeded, true, reason: 'distance reached, time does not matter');
     expect(logAgain.volume, 0);
 
     run.applyResult(log);
-    expect((run.reps, run.km, run.weight), (30, 5.0, 0.0));
+    expect((run.reps, run.km, run.weight), (0, 5.0, 0.0));
   });
 
   test('weekly summary and 30-day weight change', () {
@@ -97,5 +99,40 @@ void main() {
     ];
     expect(weightChange(history, now)?.$1, 5, reason: '77,5 on Oct 1 (last before the window) → 82,5');
     expect(weightChange([history.last], now), isNull);
+  });
+
+  test('switching increase/decrease off keeps the step; old files with 0 read as off', () {
+    final e = Exercise(name: 'Kniebeuge', weight: 100, sets: 1, reps: 5, increment: 5, up: false);
+    final back = Exercise.fromJson(jsonDecode(jsonEncode(e.toJson())));
+    expect((back.up, back.increment, back.down), (false, 5.0, false));
+    back.applyResult(ExerciseLog(name: 'Kniebeuge', weight: 100, reps: [5], targetReps: 5));
+    expect(back.weight, 100, reason: 'off: no increase');
+
+    final old = Exercise.fromJson({'name': 'X', 'weight': 50, 'sets': 3, 'reps': 5, 'increment': 0, 'decrement': 5});
+    expect((old.up, old.increment, old.down, old.decrement), (false, 2.5, true, 5.0));
+  });
+
+  test('rep range: weight goes up only when every set reaches the top; custom reps per set', () {
+    final e = Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5, maxReps: 8, failRestSeconds: 180);
+    final again = Exercise.fromJson(jsonDecode(jsonEncode(e.toJson())));
+    expect((again.maxReps, again.failRestSeconds), (8, 180));
+    ExerciseLog log(List<int?> reps) => Session.start(Workout(name: 'A', exercises: [again])).exercises.single
+      ..reps.setAll(0, reps);
+    again.applyResult(log([8, 6]));
+    expect((again.weight, again.fails), (50, 0), reason: 'in the range, not at the top');
+    again.applyResult(log([8, 8]));
+    expect(again.weight, 52.5);
+    again.applyResult(log([4, 8]));
+    expect(again.fails, 1, reason: 'below the bottom counts as a miss');
+
+    final pyramid = Exercise(name: 'Bank', sets: 3, reps: 10, setReps: [10, 8, 6]);
+    final l = Session.start(Workout(name: 'B', exercises: [pyramid])).exercises.single;
+    expect(l.targets, [10, 8, 6]);
+    l.reps.setAll(0, [10, 8, 6]);
+    final back = ExerciseLog.fromJson(jsonDecode(jsonEncode(l.toJson())));
+    expect(back.targets, [10, 8, 6]);
+    expect(back.succeeded, true);
+    expect(setsLabel(pyramid.repsPerSet, null), '10/8/6');
+    expect(setsLabel([5, 5, 5], 8), '3×5–8');
   });
 }

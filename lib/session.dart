@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,25 +73,34 @@ class _SessionPageState extends State<SessionPage> {
 
   void tapSet(ExerciseLog log, int i) {
     if (log.cardio) {
-      // Cardio: done as planned, tap again to undo. No rest timer.
+      // Cardio stopwatch: start, stop (the minutes are logged, a distance goal counts as reached),
+      // tap again to undo. No rest timer.
       setState(() {
         touched = log;
-        final done = log.reps[0] != null;
-        log.reps[0] = done ? null : log.targetReps;
-        log.km = done ? null : log.targetKm;
+        if (log.reps[0] != null) {
+          log.reps[0] = log.km = null;
+        } else if (log.startedAt case final start?) {
+          log.reps[0] = max(1, (DateTime.now().difference(start).inSeconds / 60).round());
+          log.km ??= log.targetKm;
+          log.startedAt = null;
+        } else {
+          log.startedAt = DateTime.now();
+        }
       });
       store.saveActive(s);
       return;
     }
     setState(() {
       touched = log;
-      final r = log.reps[i];
-      log.reps[i] = r == null ? log.targetReps : (r > 1 ? r - 1 : null);
-      if (log.reps[i] != null) {
+      final r = log.reps[i], target = log.targets[i];
+      // First tap: the goal (top of the range, if any), then one rep less per tap, then empty again.
+      log.reps[i] = r == null ? log.maxReps ?? target : (r > 1 ? r - 1 : null);
+      if (log.reps[i] case final done?) {
         lastSetAt = DateTime.now();
         pausedAt = null;
         alerted = false;
-        restTarget = planOf(log)?.restSeconds ?? 120;
+        final plan = planOf(log);
+        restTarget = (done < target ? plan?.failRestSeconds : null) ?? plan?.restSeconds ?? 120;
       }
     });
     store.saveActive(s);
@@ -126,7 +136,8 @@ class _SessionPageState extends State<SessionPage> {
   /// Sheet to enter the actual minutes and distance of a cardio exercise.
   Future<void> editCardio(ExerciseLog log) async {
     setState(() => touched = log);
-    final minutes = TextEditingController(text: '${log.reps[0] ?? log.targetReps}');
+    final running = switch (log.startedAt) { final t? => (DateTime.now().difference(t).inSeconds / 60).round(), null => null };
+    final minutes = TextEditingController(text: '${log.reps[0] ?? running ?? (log.targetReps > 0 ? log.targetReps : '')}');
     final distance = TextEditingController(text: switch (log.km ?? log.targetKm) { final km? => distanceNum(km), null => '' });
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -182,6 +193,7 @@ class _SessionPageState extends State<SessionPage> {
     setState(() {
       log.reps[0] = m != null && m > 0 ? m : null;
       log.km = log.reps[0] == null ? null : parseDistance(distance.text);
+      if (log.reps[0] != null) log.startedAt = null;
     });
     store.saveActive(s);
   }
@@ -451,7 +463,7 @@ class _SessionPageState extends State<SessionPage> {
                       log.cardio
                           ? 'Cardio · Ziel ${cardioLabel(log.targetReps, log.targetKm)}'
                           : [
-                              '${log.reps.length}×${log.targetReps}',
+                              setsLabel(log.targets, log.maxReps),
                               if (planOf(log) case final p?) 'Pause ${clock(p.restSeconds)}',
                             ].join(' · '),
                       style: muted,
@@ -466,16 +478,7 @@ class _SessionPageState extends State<SessionPage> {
               ]),
               const SizedBox(height: 10),
               if (log.cardio)
-                // One wide tile: minutes on top (tap = done as planned), distance below (tap = enter actual).
-                SetTile(
-                  reps: log.reps[0],
-                  target: log.targetReps,
-                  repsUnit: ' Min',
-                  weight: switch (log.km ?? log.targetKm) { final km? => distanceNum(km), null => '–' },
-                  weightUnit: distanceLabel,
-                  onTapReps: () => tapSet(log, 0),
-                  onTapWeight: () => editCardio(log),
-                )
+                _cardioTile(log, c)
               else
               Row(
                 children: [
@@ -486,8 +489,11 @@ class _SessionPageState extends State<SessionPage> {
                         constraints: const BoxConstraints(maxWidth: 84),
                         child: SetTile(
                           reps: r,
-                          target: log.targetReps,
-                          weight: weightNum(log.weights[i]),
+                          target: log.targets[i],
+                          targetMax: log.maxReps,
+                          // No weight: reps only, the weight can still be added by tapping.
+                          weight: log.weights[i] == 0 ? '–' : weightNum(log.weights[i]),
+                          weightUnit: log.weights[i] == 0 ? '' : null,
                           onTapReps: () => tapSet(log, i),
                           onTapWeight: () => pickWeight(log, i),
                         ),
@@ -500,6 +506,63 @@ class _SessionPageState extends State<SessionPage> {
           ),
         ),
       );
+
+  /// Cardio as one wide tile: a stopwatch on top (start / stop / undo), what was done below (tap to edit).
+  Widget _cardioTile(ExerciseLog log, ColorScheme c) {
+    final minutes = log.reps[0], start = log.startedAt;
+    final (bg, fg) = minutes != null
+        ? (log.succeeded ? (c.primary, c.onPrimary) : (c.tertiaryContainer, c.onTertiaryContainer))
+        : start != null
+            ? (c.primaryContainer, c.onPrimaryContainer)
+            : (c.surfaceContainerHigh, c.onSurfaceVariant);
+    final big = TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: fg, fontFeatures: const [FontFeature.tabularFigures()]);
+    final small = TextStyle(fontSize: 13, color: fg.withValues(alpha: .75));
+    final goal = 'Ziel ${cardioLabel(log.targetReps, log.targetKm)}';
+    final top = switch ((minutes, start)) {
+      (final m?, _) => Text.rich(TextSpan(children: [
+          TextSpan(text: '$m Min', style: big),
+          TextSpan(text: '  ·  $goal', style: small),
+        ])),
+      (null, final t?) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(clock(DateTime.now().difference(t).inSeconds), style: big),
+          const SizedBox(width: 10),
+          Icon(Icons.stop_circle_outlined, color: fg),
+          Text(' Stopp', style: small),
+        ]),
+      _ => Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.play_arrow, color: fg),
+          Text(' Start', style: big.copyWith(fontSize: 20)),
+          Text('  ·  $goal', style: small),
+        ]),
+    };
+    final km = log.km;
+    final radius = BorderRadius.circular(14);
+    return ClipRRect(
+      borderRadius: radius,
+      child: Column(children: [
+        Material(
+          color: bg,
+          child: InkWell(onTap: () => tapSet(log, 0), child: SizedBox(height: 56, child: Center(child: top))),
+        ),
+        const SizedBox(height: 2),
+        Material(
+          color: c.surfaceContainer,
+          child: InkWell(
+            onTap: () => editCardio(log),
+            child: SizedBox(
+              height: 36,
+              child: Center(
+                child: Text(
+                  km == null ? 'Distanz eintragen' : '${distanceNum(km)} $distanceLabel',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: km == null ? c.onSurfaceVariant : c.onSurface),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 
   static String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }

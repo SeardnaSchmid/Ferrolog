@@ -31,10 +31,10 @@ class _StatsPageState extends State<StatsPage> {
     final text = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
 
-    // Strength exercises, most trained first; the chart shows the last one picked, else the top one.
+    // Strength exercises with weight, most trained first; the chart shows the last one picked, else the top one.
     final strength = [
       for (final name in store.loggedExercises)
-        if (!(store.historyOf(name).lastOrNull?.$2.cardio ?? true)) name,
+        if (store.historyOf(name).lastOrNull?.$2 case final l? when !l.cardio && l.weight > 0) name,
     ]..sort((a, b) => store.historyOf(b).length.compareTo(store.historyOf(a).length));
     final saved = prefs.getString('stats.exercise');
     final picked = strength.contains(saved) ? saved! : strength.firstOrNull;

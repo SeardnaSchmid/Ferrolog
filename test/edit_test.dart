@@ -38,17 +38,23 @@ void main() {
 
     await tester.tap(find.text('Senkung bei Misserfolg'));
     await tester.pump();
-    await tester.tap(find.text('Gewicht pro Satz'));
+    // First set tile → sheet: one plate step lighter, this set only.
+    await tester.tap(find.text('50 kg', findRichText: true).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.remove).last); // the weight stepper
+    await tester.tap(find.text('Dieser Satz'));
     await tester.pump();
-    await tester.tap(find.byIcon(Icons.remove).at(2)); // per-set rows start after the sets/reps steppers
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Satz').last); // dashed "+ Satz": copies the last set
     await tester.pump();
     await tester.tap(find.text('Hinzufügen'));
     await tester.pumpAndSettle();
 
     expect(result?.name, 'Bankdrücken');
-    expect((result?.sets, result?.reps), (3, 5));
+    expect((result?.sets, result?.reps, result?.setReps), (4, 5, null));
     expect(result?.decrement, 2.5);
-    expect(result?.setWeights, [47.5, 50, 50], reason: 'catalogue weight 50 kg, first set −2,5');
+    expect(result?.setWeights, [47.5, 50, 50, 50], reason: 'catalogue weight 50 kg, first set −2,5, one set added');
     expect(result?.weight, 50);
     expect(result?.restSeconds, 180, reason: 'catalogue rest');
   });
@@ -66,7 +72,7 @@ void main() {
   });
 
   test('progression: up on success, down after N misses in a row', () {
-    final e = Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5, increment: 2.5, decrement: 10, failsToDeload: 2);
+    final e = Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5, increment: 2.5, decrement: 10, down: true, failsToDeload: 2);
     ExerciseLog log(List<int?> reps) => ExerciseLog(name: 'Kniebeuge', weight: e.weight, targetReps: 5, reps: reps);
     e.applyResult(log([5, 5, 5]));
     expect(e.weight, 102.5);
@@ -104,5 +110,12 @@ void main() {
     expect(saved.name, 'Starting Strength B');
     expect(saved.exercises.map((e) => '${e.name} ${e.sets}×${e.reps}'),
         ['Kniebeuge 3×5', 'Schulterdrücken 3×5', 'Kreuzheben 1×5']);
+  });
+
+  test('catalogue defaults start on round plates in lb', () {
+    unit.value = WeightUnit.lb;
+    addTearDown(() => unit.value = WeightUnit.kg);
+    final e = knownExercise('Bankdrücken'); // 50 kg, +2,5 kg
+    expect((weightNum(e.weight), weightNum(e.increment)), ('110', '5'));
   });
 }
