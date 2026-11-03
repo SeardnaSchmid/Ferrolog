@@ -71,3 +71,15 @@ double stepShown(double incrementKg) {
   if (unit.value == WeightUnit.kg) return incrementKg;
   return ((incrementKg * lbPerKg) / 2.5).round().clamp(1, 100) * 2.5;
 }
+
+/// Lifted volume: "850 kg", from a tonne on "7,2 t" (lb: "1.900 lb", "12,4k lb").
+String volumeLabel(double kg) {
+  final v = shown(kg);
+  if (v < 1000) return '${v.round()} $unitLabel';
+  final k = (v / 1000).toStringAsFixed(1).replaceAll('.', ',');
+  return unit.value == WeightUnit.kg ? '$k t' : '${k}k lb';
+}
+
+/// "48 Min", "1:05 h".
+String durationLabel(Duration d) =>
+    d.inMinutes < 60 ? '${d.inMinutes} Min' : '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')} h';

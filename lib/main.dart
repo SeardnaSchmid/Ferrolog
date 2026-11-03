@@ -27,6 +27,7 @@ Future<void> main() async {
   unit.value = unitFromSetting(prefs.getString('unit'), WidgetsBinding.instance.platformDispatcher.locale.countryCode);
   sync = GitHubSync(prefs);
   store.onSaved = sync.push;
+  await store.autoFinish();
   runApp(const Ferrolog());
 }
 
@@ -92,6 +93,21 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   int tab = 0;
+
+  /// Back in the app after a long break: a training left running ends on its own.
+  late final lifecycle = AppLifecycleListener(onResume: store.autoFinish);
+
+  @override
+  void initState() {
+    super.initState();
+    lifecycle; // start listening
+  }
+
+  @override
+  void dispose() {
+    lifecycle.dispose();
+    super.dispose();
+  }
 
   /// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
   Future<void> export() async {
@@ -907,12 +923,16 @@ class _HistoryListState extends State<HistoryList> {
     final thisWeek = store.sessions.where((s) => mondayOf(s.date) == mondayOf(today)).length;
 
     Widget cell(DateTime d) {
-      final count = inMonth.where((s) => sameDay(s.date, d)).length;
-      final (bg, fg) = count == 0
-          ? (Colors.transparent, d.month == month.month ? c.onSurfaceVariant : c.outlineVariant)
+      // Days of the neighbouring months show their trainings too (dimmed), so a streak week
+      // spanning two months doesn't look empty.
+      final count = store.sessions.where((s) => sameDay(s.date, d)).length;
+      final other = d.month != month.month;
+      var (bg, fg) = count == 0
+          ? (Colors.transparent, other ? c.outlineVariant : c.onSurfaceVariant)
           : count == 1
               ? (c.secondaryContainer, c.onSecondaryContainer)
               : (c.primary, c.onPrimary);
+      if (other && count > 0) (bg, fg) = (bg.withValues(alpha: .45), fg.withValues(alpha: .7));
       final selected = day != null && sameDay(d, day!);
       return Padding(
         padding: const EdgeInsets.all(3),
@@ -926,7 +946,12 @@ class _HistoryListState extends State<HistoryList> {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: count == 0 ? null : () => setState(() => day = selected ? null : d),
+            onTap: count == 0
+                ? null
+                : () => setState(() {
+                      if (other) month = DateTime(d.year, d.month); // jump to that month, day selected
+                      day = selected ? null : d;
+                    }),
             child: SizedBox(
               height: 44,
               child: Center(
@@ -982,6 +1007,15 @@ class _HistoryListState extends State<HistoryList> {
             child: Text('${_months[month.month - 1]}${month.year == today.year ? '' : ' ${month.year}'}',
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
           ),
+          // Back to the current month; hidden while it's already shown.
+          if (month.year != today.year || month.month != today.month || day != null)
+            TextButton(
+              onPressed: () => setState(() {
+                month = DateTime(today.year, today.month);
+                day = null;
+              }),
+              child: const Text('Heute'),
+            ),
           IconButton.filledTonal(icon: const Icon(Icons.chevron_left), tooltip: 'Voriger Monat', onPressed: () => go(-1)),
           IconButton.filledTonal(
             icon: const Icon(Icons.chevron_right),

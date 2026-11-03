@@ -320,9 +320,27 @@ class Session {
   final DateTime date;
   final List<ExerciseLog> exercises;
 
-  Session({String? id, required this.workoutId, required this.workoutName, DateTime? date, required this.exercises})
-      : id = id ?? newId(),
+  /// Last change while training (a set logged, a weight edited); decides when an abandoned
+  /// training ends on its own, see [Store.autoFinish].
+  DateTime? lastActivity;
+
+  /// When it ended; null for trainings logged before this was recorded.
+  DateTime? finishedAt;
+
+  Session({
+    String? id,
+    required this.workoutId,
+    required this.workoutName,
+    DateTime? date,
+    required this.exercises,
+    this.lastActivity,
+    this.finishedAt,
+  })  : id = id ?? newId(),
         date = date ?? DateTime.now();
+
+  int get setsDone => exercises.fold(0, (n, e) => n + e.setsDone);
+
+  Duration? get duration => finishedAt?.difference(date);
 
   factory Session.start(Workout w) => Session(
         workoutId: w.id,
@@ -348,6 +366,8 @@ class Session {
         'workoutId': workoutId,
         'workoutName': workoutName,
         'date': date.toIso8601String(),
+        if (lastActivity != null) 'lastActivity': lastActivity!.toIso8601String(),
+        if (finishedAt != null) 'finishedAt': finishedAt!.toIso8601String(),
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 
@@ -356,6 +376,8 @@ class Session {
         workoutId: j['workoutId'],
         workoutName: j['workoutName'],
         date: DateTime.parse(j['date']),
+        lastActivity: j['lastActivity'] == null ? null : DateTime.parse(j['lastActivity']),
+        finishedAt: j['finishedAt'] == null ? null : DateTime.parse(j['finishedAt']),
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
@@ -379,6 +401,7 @@ class Store extends ChangeNotifier {
   }
 
   Future<void> saveActive(Session? s) async {
+    s?.lastActivity = DateTime.now();
     active = s;
     notifyListeners();
     s == null ? await _prefs.remove('$_key.active') : await _prefs.setString('$_key.active', jsonEncode(s.toJson()));
@@ -401,7 +424,7 @@ class Store extends ChangeNotifier {
             'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true. sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
-            'they differ); "failRestSeconds" = rest after a missed set; exercises[].weights '
+            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
@@ -432,7 +455,24 @@ class Store extends ChangeNotifier {
 
   /// Stores the session and adjusts next time's weights: every exercise where all sets hit the
   /// target gets `increment` added; after `failsToDeload` misses in a row it drops by `decrement`.
-  Future<void> finishSession(Session s) {
+  /// No activity for this long and the training counts as over.
+  static const idleLimit = Duration(minutes: 30);
+
+  /// Ends the running training if nothing happened for [idleLimit], dated at its last activity, so
+  /// a forgotten "Beenden" doesn't stretch it over hours. Trainings without a logged set stay open.
+  /// Can be switched off in the settings.
+  Future<bool> autoFinish([DateTime? now]) async {
+    if (!(_prefs.getBool('session.autoFinish') ?? true)) return false;
+    final s = active;
+    final last = s?.lastActivity ?? s?.date;
+    if (s == null || last == null || s.setsDone == 0) return false;
+    if ((now ?? DateTime.now()).difference(last) < idleLimit) return false;
+    await finishSession(s, at: last);
+    return true;
+  }
+
+  Future<void> finishSession(Session s, {DateTime? at}) {
+    s.finishedAt = at ?? DateTime.now();
     active = null;
     _prefs.remove('$_key.active');
     sessions.insert(0, s);
@@ -576,4 +616,33 @@ List<String> searchExercises(String query, Iterable<String> names) {
 String setsLabel(List<int> reps, int? maxReps) {
   final range = maxReps == null ? '' : '–$maxReps';
   return reps.toSet().length == 1 ? '${reps.length}×${reps.first}$range' : '${reps.join('/')}$range';
+}
+
+/// Key figures for the trainings of the last [days] days (null = all): (trainings, trainings per week,
+/// sets per week, total volume, heaviest training's volume, average duration, heaviest weight as
+/// (exercise, kg)). Weeks count from the first training if that's later, so a new user isn't averaged down.
+({int trainings, double perWeek, double setsPerWeek, double volume, double maxVolume, Duration? avgDuration,
+    (String, double)? top}) periodStats(List<Session> sessions, DateTime now, {int? days}) {
+  final from = days == null ? null : now.subtract(Duration(days: days));
+  final inPeriod = [for (final s in sessions) if (from == null || s.date.isAfter(from)) s];
+  final first = inPeriod.map((s) => s.date).fold<DateTime?>(null, (a, d) => a == null || d.isBefore(a) ? d : a);
+  final weeks = first == null ? 1.0 : max(1.0, now.difference(first).inHours / (24 * 7));
+  final logs = inPeriod.expand((s) => s.exercises).where((e) => !e.cardio);
+  final durations = inPeriod.map((s) => s.duration).nonNulls.where((d) => d > Duration.zero).toList();
+  (String, double)? top;
+  for (final l in logs) {
+    if (l.setsDone > 0 && l.weight > (top?.$2 ?? 0)) top = (l.name, l.weight);
+  }
+  double volumeOf(Session s) => s.exercises.fold(0.0, (v, e) => v + e.volume);
+  return (
+    trainings: inPeriod.length,
+    perWeek: inPeriod.length / weeks,
+    setsPerWeek: logs.fold(0, (n, e) => n + e.setsDone) / weeks,
+    volume: inPeriod.fold(0.0, (v, s) => v + volumeOf(s)),
+    maxVolume: inPeriod.fold(0.0, (v, s) => max(v, volumeOf(s))),
+    avgDuration: durations.isEmpty
+        ? null
+        : Duration(seconds: durations.fold(0, (n, d) => n + d.inSeconds) ~/ durations.length),
+    top: top,
+  );
 }

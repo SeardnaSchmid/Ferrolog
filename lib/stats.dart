@@ -22,12 +22,16 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
+  /// Period for the key figures and the exercise list, in days; 0 = all. Remembered.
+  int days = prefs.getInt('stats.days') ?? 90;
+
   @override
   Widget build(BuildContext context) {
     final sessions = store.sessions;
     if (sessions.isEmpty) return const Center(child: Text('Statistiken gibt’s nach dem ersten Training.'));
-    final monthAgo = DateTime.now().subtract(const Duration(days: 30));
-    final volume = sessions.expand((s) => s.exercises).fold(0.0, (v, e) => v + e.volume);
+    final now = DateTime.now();
+    final p = periodStats(sessions, now, days: days == 0 ? null : days);
+    final from = days == 0 ? null : now.subtract(Duration(days: days));
     final text = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
 
@@ -41,11 +45,27 @@ class _StatsPageState extends State<StatsPage> {
     final weeks = weeklySummary(sessions, DateTime.now());
     final goal = weeklyGoal.value;
 
-    Widget tile(String label, String value) => Expanded(
+    String num1(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+    Widget tile(IconData icon, String label, String value) => Expanded(
           child: Card(
+            margin: const EdgeInsets.all(4),
             child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(children: [Text(value, style: text.headlineSmall), Text(label, style: text.bodySmall)]),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(icon, size: 16, color: c.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(label,
+                        overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+              ]),
             ),
           ),
         );
@@ -70,6 +90,38 @@ class _StatsPageState extends State<StatsPage> {
       padding: const EdgeInsets.all(12),
       children: [
         if (picked != null) progressSection(picked, strength, section, c),
+        const SizedBox(height: 8),
+        // Key figures and exercises for the chosen period.
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 30, label: Text('30 Tage')),
+            ButtonSegment(value: 90, label: Text('90 Tage')),
+            ButtonSegment(value: 365, label: Text('1 Jahr')),
+            ButtonSegment(value: 0, label: Text('Gesamt')),
+          ],
+          selected: {days},
+          onSelectionChanged: (v) {
+            setState(() => days = v.single);
+            prefs.setInt('stats.days', v.single);
+          },
+        ),
+        const SizedBox(height: 6),
+        Row(children: [
+          tile(Icons.event_available, 'Trainings', '${p.trainings}'),
+          tile(Icons.calendar_view_week, 'Ø pro Woche', num1(p.perWeek)),
+        ]),
+        Row(children: [
+          tile(Icons.repeat, 'Sätze pro Woche', num1(p.setsPerWeek)),
+          tile(Icons.timer_outlined, 'Ø Dauer', switch (p.avgDuration) { final d? => durationLabel(d), null => '–' }),
+        ]),
+        Row(children: [
+          tile(Icons.stacked_bar_chart, 'Volumen', volumeLabel(p.volume)),
+          tile(Icons.local_fire_department_outlined, 'Schwerstes Training', volumeLabel(p.maxVolume)),
+        ]),
+        if (p.top case (final name, final kg))
+          Row(children: [tile(Icons.emoji_events_outlined, 'Höchstes Gewicht', '$name · ${weightLabel(kg)}')]),
+        const SizedBox(height: 8),
         section('Trainings pro Woche', 'Ziel $goal×', [
           SizedBox(
             height: 150,
@@ -107,28 +159,40 @@ class _StatsPageState extends State<StatsPage> {
               ),
             ),
           ]),
-        const SizedBox(height: 4),
-        Row(children: [
-          tile('Trainings', '${sessions.length}'),
-          tile('Letzte 30 Tage', '${sessions.where((s) => s.date.isAfter(monthAgo)).length}'),
-          tile('Volumen', '${(shown(volume) / 1000).toStringAsFixed(1)} ${unit.value == WeightUnit.kg ? 't' : 'k lb'}'),
-        ]),
-        const SizedBox(height: 8),
-        Padding(padding: const EdgeInsets.all(8), child: Text('Übungen', style: text.titleMedium)),
-        for (final name in store.loggedExercises)
-          Builder(builder: (context) {
-            final h = store.historyOf(name);
-            final last = h.last.$2;
-            return ListTile(
+        Padding(padding: const EdgeInsets.fromLTRB(8, 12, 8, 4), child: Text('Übungen', style: text.titleMedium)),
+        // Exercises trained in the period, most often first: total lifted and best estimated 1RM there.
+        for (final (name, logs) in [
+          for (final name in store.loggedExercises)
+            (name, [for (final (d, l) in store.historyOf(name)) if (from == null || d.isAfter(from)) l]),
+        ].where((e) => e.$2.isNotEmpty).toList()
+          ..sort((a, b) => b.$2.length.compareTo(a.$2.length)))
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            child: ListTile(
               title: Text(name),
-              subtitle: Text('${h.length}× trainiert · zuletzt '
-                  '${last.cardio ? cardioLabel(last.reps.first, last.km) : weightLabel(last.weight)}'),
-              trailing: const Icon(Icons.chevron_right),
+              subtitle: Text(exerciseLine(logs)),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (!logs.last.cardio && logs.last.weight > 0)
+                  Text('1RM ${weightLabel(toKg((shown(logs.map(estimated1rm).reduce(max)) * 2).round() / 2))}', // an estimate: ±0,5
+                      style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                const Icon(Icons.chevron_right),
+              ]),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(name))),
-            );
-          }),
+            ),
+          ),
       ],
     );
+  }
+
+  /// "12× · Gesamt 7,2 t", cardio "8× · 240 Min · 35 km gesamt", without weight "6× · 18 Sätze".
+  static String exerciseLine(List<ExerciseLog> logs) {
+    final n = '${logs.length}×';
+    if (logs.last.cardio) {
+      final km = logs.fold(0.0, (k, l) => k + (l.km ?? 0));
+      return '$n · ${cardioLabel(logs.fold<int>(0, (m, l) => m + (l.reps.first ?? 0)), km > 0 ? km : null)} gesamt';
+    }
+    if (logs.last.weight == 0) return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze';
+    return '$n · Gesamt ${volumeLabel(logs.fold(0.0, (v, l) => v + l.volume))}';
   }
 
   /// Weight line and estimated 1RM for one exercise, with chips to switch and the change in 30 days.

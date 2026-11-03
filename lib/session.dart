@@ -25,6 +25,12 @@ class _SessionPageState extends State<SessionPage> {
   int restTarget = 0;
   bool alerted = false;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+    // Ended elsewhere (finished automatically after a long break, see Store.autoFinish): close.
+    if (store.active != s) {
+      ticker.cancel();
+      if (mounted) Navigator.pop(context);
+      return;
+    }
     // Rest over: sound and/or vibration once, as configured in the settings.
     if (lastSetAt != null && pausedAt == null && !alerted && restLeft <= 0) {
       alerted = true;

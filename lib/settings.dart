@@ -98,10 +98,12 @@ class _SyncSettingsState extends State<SyncSettings> {
     return ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Pause-Ende', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text('Training', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           for (final (key, icon, title, subtitle) in const [
             ('rest.sound', Icons.volume_up_outlined, 'Ton', 'Signalton, wenn die Pause bei 0 ankommt'),
             ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt'),
+            ('session.autoFinish', Icons.timer_off_outlined, 'Automatisch beenden',
+                'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz'),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

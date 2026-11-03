@@ -9,10 +9,13 @@ void main() {
   test('progressive overload and JSON round trip', () async {
     SharedPreferences.setMockInitialValues({});
     final store = await Store.open();
-    final w = Workout(name: 'A', exercises: [
-      Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5, increment: 2.5),
-      Exercise(name: 'Bankdrücken', weight: 60, sets: 2, reps: 5, increment: 2.5),
-    ]);
+    final w = Workout(
+      name: 'A',
+      exercises: [
+        Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5, increment: 2.5),
+        Exercise(name: 'Bankdrücken', weight: 60, sets: 2, reps: 5, increment: 2.5),
+      ],
+    );
     await store.saveWorkout(w);
 
     final s = Session.start(w);
@@ -35,7 +38,10 @@ void main() {
     final now = DateTime(2026, 11, 4); // Wednesday
     expect(weekStreak([], now), 0);
     // This week, last week, two weeks ago, then a gap.
-    expect(weekStreak([DateTime(2026, 11, 2), DateTime(2026, 10, 30), DateTime(2026, 10, 19), DateTime(2026, 10, 5)], now), 3);
+    expect(
+      weekStreak([DateTime(2026, 11, 2), DateTime(2026, 10, 30), DateTime(2026, 10, 19), DateTime(2026, 10, 5)], now),
+      3,
+    );
     // Nothing yet this week: the streak still counts from last week.
     expect(weekStreak([DateTime(2026, 10, 26), DateTime(2026, 10, 25)], now), 2);
     // Last training two weeks ago: broken.
@@ -48,7 +54,12 @@ void main() {
   });
 
   test('per-set weights: old data, grouping, working weight', () {
-    final old = ExerciseLog.fromJson({'name': 'Squat', 'weight': 100, 'targetReps': 5, 'reps': [5, 5, 3]});
+    final old = ExerciseLog.fromJson({
+      'name': 'Squat',
+      'weight': 100,
+      'targetReps': 5,
+      'reps': [5, 5, 3],
+    });
     expect(old.weights, [100, 100, 100]);
     final log = ExerciseLog(name: 'Bench', weight: 0, targetReps: 5, reps: [5, 5, 3], weights: [72.5, 72.5, 70]);
     expect(log.weight, 72.5);
@@ -59,7 +70,13 @@ void main() {
 
   test('cardio: one set, goal is distance or duration, survives JSON, never auto-adjusted', () {
     final run = Exercise.cardio(name: 'Laufen', minutes: 30, km: 5);
-    final w = Workout(name: 'Mix', exercises: [Exercise(name: 'Kniebeuge'), run]);
+    final w = Workout(
+      name: 'Mix',
+      exercises: [
+        Exercise(name: 'Kniebeuge'),
+        run,
+      ],
+    );
     final again = Workout.fromJson(jsonDecode(jsonEncode(w.toJson()))).exercises.last;
     expect((again.cardio, again.reps, again.km, again.sets), (true, 0, 5.0, 1), reason: 'distance goal');
 
@@ -80,14 +97,21 @@ void main() {
 
   test('weekly summary and 30-day weight change', () {
     final now = DateTime(2026, 11, 4); // Wednesday
-    Session at(DateTime d, {int? cardioMinutes}) => Session(workoutId: 'w', workoutName: 'A', date: d, exercises: [
-          ExerciseLog(name: 'Kniebeuge', weight: 80, targetReps: 5, reps: [5]),
-          if (cardioMinutes != null)
-            ExerciseLog(name: 'Laufen', weight: 0, targetReps: 30, reps: [cardioMinutes], cardio: true),
-        ]);
+    Session at(DateTime d, {int? cardioMinutes}) => Session(
+      workoutId: 'w',
+      workoutName: 'A',
+      date: d,
+      exercises: [
+        ExerciseLog(name: 'Kniebeuge', weight: 80, targetReps: 5, reps: [5]),
+        if (cardioMinutes != null)
+          ExerciseLog(name: 'Laufen', weight: 0, targetReps: 30, reps: [cardioMinutes], cardio: true),
+      ],
+    );
     final weeks = weeklySummary(
-        [at(DateTime(2026, 11, 3), cardioMinutes: 25), at(DateTime(2026, 11, 2)), at(DateTime(2026, 10, 28))], now,
-        weeks: 3);
+      [at(DateTime(2026, 11, 3), cardioMinutes: 25), at(DateTime(2026, 11, 2)), at(DateTime(2026, 10, 28))],
+      now,
+      weeks: 3,
+    );
     expect(weeks.map((w) => (w.$1.day, w.$2, w.$3)), [(19, 0, 0), (26, 1, 0), (2, 2, 25)]);
 
     ExerciseLog squat(double kg) => ExerciseLog(name: 'Kniebeuge', weight: kg, targetReps: 5, reps: [5]);
@@ -116,8 +140,8 @@ void main() {
     final e = Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5, maxReps: 8, failRestSeconds: 180);
     final again = Exercise.fromJson(jsonDecode(jsonEncode(e.toJson())));
     expect((again.maxReps, again.failRestSeconds), (8, 180));
-    ExerciseLog log(List<int?> reps) => Session.start(Workout(name: 'A', exercises: [again])).exercises.single
-      ..reps.setAll(0, reps);
+    ExerciseLog log(List<int?> reps) =>
+        Session.start(Workout(name: 'A', exercises: [again])).exercises.single..reps.setAll(0, reps);
     again.applyResult(log([8, 6]));
     expect((again.weight, again.fails), (50, 0), reason: 'in the range, not at the top');
     again.applyResult(log([8, 8]));
@@ -134,5 +158,55 @@ void main() {
     expect(back.succeeded, true);
     expect(setsLabel(pyramid.repsPerSet, null), '10/8/6');
     expect(setsLabel([5, 5, 5], 8), '3×5–8');
+  });
+
+  test('period stats: per week from the first training, heaviest, average duration', () {
+    final now = DateTime(2026, 11, 3, 20);
+    Session at(int daysAgo, double kg, {int minutes = 0}) {
+      final d = now.subtract(Duration(days: daysAgo));
+      return Session(
+        workoutId: 'w',
+        workoutName: 'A',
+        date: d,
+        finishedAt: minutes == 0 ? null : d.add(Duration(minutes: minutes)),
+        exercises: [
+          ExerciseLog(name: 'Kniebeuge', weight: kg, targetReps: 5, reps: [5, 5]),
+        ],
+      );
+    }
+
+    final sessions = [at(1, 100, minutes: 50), at(8, 90, minutes: 70), at(14, 80), at(200, 60)];
+    final p = periodStats(sessions, now, days: 90);
+    expect(p.trainings, 3);
+    expect(p.perWeek, closeTo(3 / 2, .01), reason: '3 trainings, first one 2 weeks ago');
+    expect(p.setsPerWeek, closeTo(6 / 2, .01));
+    expect(p.maxVolume, 1000);
+    expect(p.avgDuration, const Duration(minutes: 60), reason: 'only trainings with an end time');
+    expect(p.top, ('Kniebeuge', 100.0));
+    expect(periodStats(sessions, now).trainings, 4);
+  });
+
+  test('a training left running ends at its last activity after 30 minutes', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final w = Workout(
+      name: 'A',
+      exercises: [Exercise(name: 'Kniebeuge', sets: 1, reps: 5)],
+    );
+    store.workouts.add(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    expect(await store.autoFinish(DateTime.now().add(const Duration(hours: 2))), false, reason: 'nothing logged yet');
+    s.exercises.single.reps[0] = 5;
+    await store.saveActive(s);
+    final last = s.lastActivity!;
+    expect(await store.autoFinish(last.add(const Duration(minutes: 20))), false);
+    expect(await store.autoFinish(last.add(const Duration(minutes: 31))), true);
+    expect((store.active, store.sessions.first.finishedAt), (null, last));
+
+    SharedPreferences.setMockInitialValues({'session.autoFinish': false});
+    final off = await Store.open();
+    await off.saveActive(Session.start(w)..exercises.single.reps[0] = 5);
+    expect(await off.autoFinish(DateTime.now().add(const Duration(hours: 5))), false, reason: 'switched off in the settings');
   });
 }

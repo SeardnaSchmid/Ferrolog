@@ -16,6 +16,7 @@ void main() {
     final s = Session.start(w);
     final log = s.exercises.single;
     log.reps[0] = 5; // first set done, the other two open
+    await store.saveActive(s); // the page closes when its training isn't the running one
     tester.view.physicalSize = const Size(500, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

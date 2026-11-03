@@ -537,10 +537,13 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             const SizedBox(height: 18),
             if (byDistance)
               _BigStepper('Ziel ($distanceLabel)', distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
-                  () => setState(() => e.km = nudgedKm(1)))
+                  () => setState(() => e.km = nudgedKm(1)),
+                  decimal: true, onTyped: (v) => e.km = parseDistance(v) ?? e.km)
             else
-              _BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(5, e.reps - 5)),
-                  () => setState(() => e.reps = min(600, e.reps + 5))),
+              _BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(1, e.reps - 1)),
+                  () => setState(() => e.reps = min(600, e.reps + 1)),
+                  // Typing doesn't rebuild, so the field keeps focus; the steppers swap in the new value.
+                  onTyped: (v) => e.reps = (int.tryParse(v) ?? e.reps).clamp(1, 600)),
           ] else ...[
           SegmentedButton<bool>(
             showSelectedIcon: false,
@@ -863,11 +866,16 @@ String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLe
 class _BigStepper extends StatelessWidget {
   final String label, value;
   final VoidCallback onMinus, onPlus;
-  const _BigStepper(this.label, this.value, this.onMinus, this.onPlus);
+
+  /// Makes the value typeable: whole numbers, or with [decimal] a comma/point too.
+  final void Function(String)? onTyped;
+  final bool decimal;
+  const _BigStepper(this.label, this.value, this.onMinus, this.onPlus, {this.onTyped, this.decimal = false});
 
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
+    const style = TextStyle(fontSize: 28, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]);
     Widget button(IconData icon, VoidCallback onTap, BorderRadius radius) => Expanded(
           child: Material(
             color: c.surfaceContainerHigh,
@@ -889,8 +897,19 @@ class _BigStepper extends StatelessWidget {
           color: c.surfaceContainerHigh,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16), bottom: Radius.circular(4)),
         ),
-        child: Text(value,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()])),
+        child: switch (onTyped) {
+          null => Text(value, style: style),
+          final typed => TextFormField(
+              key: ValueKey(value),
+              initialValue: value,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(decimal ? r'[0-9.,]' : r'[0-9]'))],
+              style: style,
+              decoration: const InputDecoration.collapsed(hintText: ''),
+              onChanged: typed,
+            ),
+        },
       ),
       const SizedBox(height: 2),
       Row(children: [
