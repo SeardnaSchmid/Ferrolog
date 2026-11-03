@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ring in the 108dp adaptive canvas: same proportions as the in-app logo (18 of 28, stroke 3.5). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#BDE9FF"
+        android:strokeWidth="9"
+        android:pathData="M54,35.5a18.5,18.5 0 1,1 0,37a18.5,18.5 0 1,1 0,-37z"/>
+</vector>
