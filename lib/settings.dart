@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'main.dart';
 import 'sync.dart';
+import 'units.dart';
 
 /// Guided GitHub setup: log in → create the data repo → give Ferrolog access → pick it.
 /// The first two happen on github.com; repos are reloaded whenever the app comes back.
@@ -93,11 +94,73 @@ class _SyncSettingsState extends State<SyncSettings> {
           onTap: onTap,
         );
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('GitHub-Sync')),
-      body: ListView(
+    // A tab of the home screen, so no Scaffold of its own.
+    return ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text('Pause-Ende', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          for (final (key, icon, title, subtitle) in const [
+            ('rest.sound', Icons.volume_up_outlined, 'Ton', 'Signalton, wenn die Pause bei 0 ankommt'),
+            ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt'),
+          ])
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(icon),
+              title: Text(title),
+              subtitle: Text(subtitle),
+              value: prefs.getBool(key) ?? true,
+              onChanged: (v) async {
+                await prefs.setBool(key, v);
+                setState(() {});
+              },
+            ),
+          const Divider(height: 32),
+          Text('Serie', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          const SizedBox(height: 4),
+          Text('Trainings pro Woche, damit die Woche für deine Serie zählt', style: text.bodyMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: [for (var n = 1; n <= 7; n++) ButtonSegment(value: n, label: Text('$n×'))],
+            selected: {weeklyGoal.value},
+            onSelectionChanged: (v) async {
+              weeklyGoal.value = v.single;
+              await prefs.setInt('streak.perWeek', v.single);
+              setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          Text('Einheit', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          const SizedBox(height: 8),
+          // null = automatic: lb in the US, Liberia and Myanmar, kg elsewhere (by the phone's region).
+          SegmentedButton<String?>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: null,
+                label: Text('Automatisch (${unitForRegion(WidgetsBinding.instance.platformDispatcher.locale.countryCode).name})'),
+              ),
+              const ButtonSegment(value: 'kg', label: Text('kg')),
+              const ButtonSegment(value: 'lb', label: Text('lb')),
+            ],
+            selected: {prefs.getString('unit')},
+            onSelectionChanged: (v) async {
+              final choice = v.single;
+              if (choice == null) {
+                await prefs.remove('unit');
+              } else {
+                await prefs.setString('unit', choice);
+              }
+              unit.value = unitFromSetting(choice, WidgetsBinding.instance.platformDispatcher.locale.countryCode);
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 4),
+          Text('Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.',
+              style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const Divider(height: 32),
+          Text('GitHub-Sync', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          const SizedBox(height: 8),
           const Text(
             'Ferrolog speichert deine Trainingsdaten als ferrolog.json in einem privaten '
             'GitHub-Repo. Dort kann deine KI sie lesen. Ferrolog bekommt nur Zugriff auf '
@@ -172,7 +235,6 @@ class _SyncSettingsState extends State<SyncSettings> {
           if (error != null) Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ValueListenableBuilder(valueListenable: sync.status, builder: (_, s, _) => Text(s)),
         ],
-      ),
     );
   }
 }

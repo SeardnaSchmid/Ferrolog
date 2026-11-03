@@ -10,14 +10,22 @@ import 'session.dart';
 import 'settings.dart';
 import 'stats.dart';
 import 'sync.dart';
+import 'units.dart';
 
 late final Store store;
 late final GitHubSync sync;
+late final SharedPreferences prefs;
+
+/// Trainings per week the streak asks for; set in the settings.
+final weeklyGoal = ValueNotifier(3);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   store = await Store.open();
-  sync = GitHubSync(await SharedPreferences.getInstance());
+  prefs = await SharedPreferences.getInstance();
+  weeklyGoal.value = prefs.getInt('streak.perWeek') ?? 3;
+  unit.value = unitFromSetting(prefs.getString('unit'), WidgetsBinding.instance.platformDispatcher.locale.countryCode);
+  sync = GitHubSync(prefs);
   store.onSaved = sync.push;
   runApp(const Ferrolog());
 }
@@ -26,8 +34,6 @@ const analysisPrompt = 'Hier sind meine Trainingsdaten aus Ferrolog (JSON, Forma
     'Analysiere bitte meinen Fortschritt: Welche Übungen laufen gut, wo stagniere ich (Plateaus, '
     'verpasste Wiederholungen), wie sieht Trainingsfrequenz und Volumen aus? '
     'Gib mir konkrete Vorschläge für die nächsten Wochen.';
-
-String kg(double w) => '${w == w.roundToDouble() ? w.toStringAsFixed(0) : w.toString()} kg';
 
 class Ferrolog extends StatelessWidget {
   const Ferrolog({super.key});
@@ -101,38 +107,36 @@ class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: store,
+      // Settings (unit, weekly goal) change what every tab shows.
+      listenable: Listenable.merge([store, unit, weeklyGoal]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
-          title: tab == 0 ? const Logo() : Text(const ['Workouts', 'Verlauf', 'Statistik'][tab]),
+          title: const Logo(),
           actions: [
-            IconButton(icon: const Icon(Icons.share_outlined), tooltip: 'An KI senden / exportieren', onPressed: export),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              tooltip: 'GitHub-Sync',
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncSettings())),
+            Streak(
+              weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
+              onTap: () => setState(() => tab = 1), // history highlights the streak weeks
             ),
+            IconButton(icon: const Icon(Icons.share_outlined), tooltip: 'An KI senden / exportieren', onPressed: export),
           ],
         ),
         // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
-        body: [WorkoutList(), HistoryList(), StatsPage()][tab],
-        floatingActionButton: tab == 0
-            ? FloatingActionButton.extended(
-                icon: const Icon(Icons.add),
-                label: const Text('Workout'),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => EditWorkout(Workout(name: 'Neues Workout'))),
-                ),
-              )
-            : null,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: tab,
-          onDestinationSelected: (i) => setState(() => tab = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-            NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
-            NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
+        body: [WorkoutList(), HistoryList(), StatsPage(), SyncSettings()][tab],
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The workouts tab shows the running training as its first card; elsewhere this bar.
+            if (store.active case final active? when tab != 0) ActiveBar(active),
+            NavigationBar(
+              selectedIndex: tab,
+              onDestinationSelected: (i) => setState(() => tab = i),
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
+                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
+                NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
+                NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Einstellungen'),
+              ],
+            ),
           ],
         ),
       ),
@@ -147,29 +151,287 @@ class WorkoutList extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = store.active;
     if (store.workouts.isEmpty && active == null) {
-      return const Center(child: Text('Noch keine Workouts. Leg eins an.'));
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Noch keine Workouts. Leg eins an.'),
+            SizedBox(height: 16),
+            AddWorkoutButton(),
+          ]),
+        ),
+      );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
-        if (active != null)
-          Card(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: ListTile(
-              leading: const Icon(Icons.timer_outlined),
-              title: const Text('Training läuft'),
-              subtitle: Text('${active.workoutName} · seit ${DateTime.now().difference(active.date).inMinutes} Min.'),
-              trailing: FilledButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(active))),
-                child: const Text('Fortsetzen'),
-              ),
-            ),
-          ),
+        if (active != null) ...[
+          ActiveTrainingCard(active, key: ValueKey(active.id)),
+          const SizedBox(height: 12),
+        ],
+        if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),
+        const SizedBox(height: 8),
+        const AddWorkoutButton(),
       ],
     );
   }
+}
+
+/// Slim "training running" bar above the navigation, for tabs other than Workouts.
+class ActiveBar extends StatelessWidget {
+  final Session session;
+  const ActiveBar(this.session, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Material(
+      color: c.primaryContainer,
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(children: [
+            const LiveDot(),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: session.workoutName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const TextSpan(text: ' läuft · '),
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.baseline,
+                    baseline: TextBaseline.alphabetic,
+                    child: Elapsed(session.date, style: TextStyle(color: c.onPrimaryContainer)),
+                  ),
+                ]),
+                style: TextStyle(color: c.onPrimaryContainer),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session))),
+              child: const Text('Fortsetzen'),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pulsing dot that marks something as live.
+class LiveDot extends StatefulWidget {
+  const LiveDot({super.key});
+
+  @override
+  State<LiveDot> createState() => _LiveDotState();
+}
+
+class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
+  late final pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: Tween(begin: .35, end: 1.0).animate(pulse),
+        child: Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+        ),
+      );
+}
+
+/// Time since [start] as "18 Min." or "1:05 Std.", refreshed every few seconds.
+class Elapsed extends StatelessWidget {
+  final DateTime start;
+  final TextStyle? style;
+  const Elapsed(this.start, {super.key, this.style});
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder(
+        stream: Stream.periodic(const Duration(seconds: 5)),
+        builder: (context, _) {
+          final m = DateTime.now().difference(start).inMinutes;
+          return Text(m < 60 ? '$m Min.' : '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')} Std.', style: style);
+        },
+      );
+}
+
+/// Dashed "+ Workout" button at the end of the workout list.
+class AddWorkoutButton extends StatelessWidget {
+  const AddWorkoutButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => DashedAddButton(
+        'Workout',
+        () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditWorkout(Workout(name: '')))),
+      );
+}
+
+/// Inline "+ label" button with a dashed outline, placed at the end of a list.
+class DashedAddButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const DashedAddButton(this.label, this.onTap, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return CustomPaint(
+      painter: _DashedBorder(c.outline),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: SizedBox(
+          height: 44,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.add, color: c.primary),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: c.primary)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorder extends CustomPainter {
+  final Color color;
+  _DashedBorder(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final outline = Path()
+      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(16)).deflate(.75));
+    for (final metric in outline.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += 10) {
+        canvas.drawPath(metric.extractPath(d, d + 6), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorder old) => old.color != color;
+}
+
+/// The running training on the overview: a compact banner that expands into the full card on tap.
+class ActiveTrainingCard extends StatefulWidget {
+  final Session session;
+  const ActiveTrainingCard(this.session, {super.key});
+
+  @override
+  State<ActiveTrainingCard> createState() => _ActiveTrainingCardState();
+}
+
+class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
+  bool expanded = false;
+
+  void resume() => Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(widget.session)));
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.session;
+    final c = Theme.of(context).colorScheme;
+    final Widget child;
+    if (!expanded) {
+      child = Material(
+        key: const ValueKey('collapsed'),
+        color: c.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => setState(() => expanded = true),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Row(children: [
+              Icon(Icons.timer_outlined, color: c.onPrimaryContainer),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text('Training läuft',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.onPrimaryContainer)),
+                    Icon(Icons.expand_more, size: 18, color: c.onPrimaryContainer.withValues(alpha: .7)),
+                  ]),
+                  Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: '${s.workoutName} · seit '),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: Elapsed(s.date, style: TextStyle(fontSize: 13, color: c.onPrimaryContainer)),
+                      ),
+                    ]),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: c.onPrimaryContainer),
+                  ),
+                ]),
+              ),
+              FilledButton(onPressed: resume, child: const Text('Fortsetzen')),
+            ]),
+          ),
+        ),
+      );
+    } else {
+      child = OverviewCard(
+        key: const ValueKey('expanded'),
+        title: s.workoutName,
+        live: s,
+        rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targetReps, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+        onTap: () => setState(() => expanded = false), // tap anywhere to collapse
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Training verwerfen',
+            onPressed: () async {
+              if (await confirm(context, 'Training verwerfen? Nichts wird gespeichert.')) store.saveActive(null);
+            },
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            icon: const Icon(Icons.play_circle_outline),
+            label: const Text('Training fortsetzen'),
+            onPressed: resume,
+          ),
+        ],
+      );
+    }
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 200),
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(duration: const Duration(milliseconds: 150), child: child),
+    );
+  }
+}
+
+class SectionHeader extends StatelessWidget {
+  final String title, trailing;
+  const SectionHeader(this.title, this.trailing, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+        Text(trailing, style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    ),
+  );
 }
 
 class WorkoutCard extends StatelessWidget {
@@ -179,104 +441,252 @@ class WorkoutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final last = store.lastSessionOf(workout);
-    final scheme = Theme.of(context).colorScheme;
-    final muted = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
+    return OverviewCard(
+      title: workout.name,
+      subtitle: last == null ? null : 'zuletzt ${ago(last.date)}',
+      rows: [
+        for (final e in workout.exercises)
+          // Weight went up when last time every set hit the target (the store already added the increment).
+          (e.name, e.weights, List<int?>.filled(e.sets, null), e.reps, _improved(last, e), e.km, e.cardio),
+      ],
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          tooltip: 'Bearbeiten',
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditWorkout(workout.copy()))),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          icon: const Icon(Icons.play_arrow),
+          label: const Text('Starten'),
+          // Starting another training would replace the running one.
+          onPressed: workout.exercises.isEmpty || store.active != null
+              ? null
+              : () {
+                  // Persist before opening, so a killed app can resume it.
+                  final session = Session.start(workout);
+                  store.saveActive(session);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session)));
+                },
+        ),
+      ],
+    );
+  }
+
+  static bool _improved(Session? last, Exercise e) {
+    final log = last?.exercises.where((l) => l.name == e.name).firstOrNull;
+    return log != null && log.succeeded && e.weight > log.weight;
+  }
+}
+
+/// A workout as compact rows: exercise name left, weight and joined rep pills right.
+class OverviewCard extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+
+  /// (name, weight per set, reps done or null per set, target reps, weight went up, km, cardio).
+  /// Cardio rows have one "set" whose reps are minutes; they show "25 Min · 5 km" instead of weights.
+  final List<(String, List<double>, List<int?>, int, bool, double?, bool)> rows;
+  final List<Widget> actions;
+
+  /// The running training, if this card shows it: highlighted, with elapsed time and progress.
+  final Session? live;
+
+  /// Tap anywhere on the card (buttons inside keep their own taps).
+  final VoidCallback? onTap;
+  const OverviewCard({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.rows,
+    required this.actions,
+    this.live,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final line = BorderSide(color: c.outlineVariant.withValues(alpha: .6));
+    final live = this.live;
+    final done = live?.exercises.fold(0, (n, e) => n + e.setsDone) ?? 0;
+    final total = live?.exercises.fold(0, (n, e) => n + e.reps.length) ?? 0;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Expanded(child: Text(workout.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500))),
-                if (last != null) Text(ago(last.date), style: muted),
+      clipBehavior: Clip.antiAlias,
+      color: live == null ? null : Color.alphaBlend(c.primaryContainer.withValues(alpha: .45), c.surfaceContainerLow),
+      shape: live == null
+          ? null
+          : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.primary, width: 2)),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (live != null) ...[
+                Row(children: [
+                  const LiveDot(),
+                  const SizedBox(width: 8),
+                  Text('LÄUFT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
+                  Text(' · ', style: TextStyle(color: c.onSurfaceVariant)),
+                  Elapsed(live.date, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                  const Spacer(),
+                  Text('$done/$total Sätze', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.onSurface)),
+                  if (onTap != null) Icon(Icons.expand_less, size: 20, color: c.onSurfaceVariant),
+                ]),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                  value: total == 0 ? 0 : done / total,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(3),
+                  backgroundColor: c.surface,
+                ),
+                const SizedBox(height: 10),
               ],
-            ),
-            const SizedBox(height: 6),
-            for (final e in workout.exercises) _exercise(e, last, scheme, muted),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  child: const Text('Bearbeiten'),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => EditWorkout(workout.copy())),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Expanded(
+                    child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                  ),
+                  if (subtitle != null) Text(subtitle!, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              for (final (name, weights, reps, target, up, km, cardio) in rows)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(border: Border(bottom: line)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
+                      ),
+                      if (cardio)
+                        CardioPill(reps.first, target, km)
+                      else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (final (i, (weight, sets)) in groupByWeight(weights, reps).indexed)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (up && i == 0) Icon(Icons.arrow_upward, size: 16, color: c.primary),
+                                  Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(text: weightNum(weight)),
+                                        TextSpan(
+                                          text: ' $unitLabel',
+                                          style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: up ? c.primary : c.onSurfaceVariant,
+                                      fontWeight: up ? FontWeight.w600 : FontWeight.w400,
+                                      fontFeatures: const [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  RepPills(sets, target),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Starten'),
-                  onPressed: workout.exercises.isEmpty
-                      ? null
-                      : () {
-                          // Persist before opening, so a killed app can resume it.
-                          final session = Session.start(workout);
-                          store.saveActive(session);
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session)));
-                        },
-                ),
-              ],
-            ),
-          ],
+              const SizedBox(height: 6),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  /// Plan plus last result as mini set tiles; a chip with the new weight when the last run fully succeeded
-  /// (the store has already added the increment to the plan by then).
-  Widget _exercise(Exercise e, Session? last, ColorScheme scheme, TextStyle muted) {
-    final log = last?.exercises.where((l) => l.name == e.name).firstOrNull;
+/// Cardio in a card row: "25 Min · 5 km", colored like a set pill (open / done / short).
+class CardioPill extends StatelessWidget {
+  final int? minutes;
+  final int target;
+  final double? km;
+  const CardioPill(this.minutes, this.target, this.km, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final m = minutes;
+    final (bg, fg) = m == null
+        ? (c.surface, c.onSurface)
+        : m >= target
+            ? (c.primary, c.onPrimary)
+            : (c.tertiaryContainer, c.onTertiaryContainer);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: .6)))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(9)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.directions_run, size: 16, color: fg),
+        const SizedBox(width: 6),
+        Text(cardioLabel(m ?? target, km),
+            style: TextStyle(fontSize: 14, fontWeight: m == null ? FontWeight.w400 : FontWeight.w600, color: fg)),
+      ]),
+    );
+  }
+}
+
+/// Consecutive sets with the same weight, e.g. 72.5: [5, 5], 70: [3].
+List<(double, List<int?>)> groupByWeight(List<double> weights, List<int?> reps) {
+  final groups = <(double, List<int?>)>[];
+  for (final (i, w) in weights.indexed) {
+    if (groups.isEmpty || groups.last.$1 != w) groups.add((w, []));
+    groups.last.$2.add(reps[i]);
+  }
+  return groups;
+}
+
+/// Sets as a joined row of pills: open sets show the target, logged ones their reps.
+class RepPills extends StatelessWidget {
+  final List<int?> reps;
+  final int target;
+  const RepPills(this.reps, this.target, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(e.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
+          for (final (i, r) in reps.indexed) ...[
+            if (i > 0) const SizedBox(width: 2),
+            Container(
+              constraints: const BoxConstraints(minWidth: 30),
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              alignment: Alignment.center,
+              color: r == null ? c.surface : (r >= target ? c.primary : c.tertiaryContainer),
+              child: Text(
+                '${r ?? target}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: r == null ? FontWeight.w400 : FontWeight.w600,
+                  color: r == null ? c.onSurface : (r >= target ? c.onPrimary : c.onTertiaryContainer),
+                ),
               ),
-              Text('${e.sets}×${e.reps}', style: muted),
-              if (log != null && log.succeeded && e.increment > 0) ...[
-                const SizedBox(width: 8),
-                Container(
-                  height: 22,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(11)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.arrow_upward, size: 13, color: scheme.onSecondaryContainer),
-                    Text(kg(e.weight),
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: scheme.onSecondaryContainer)),
-                  ]),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final r in log?.reps ?? List<int?>.filled(e.sets, null))
-                SizedBox(
-                  width: 44,
-                  child: SetTile(
-                    reps: r,
-                    target: log?.targetReps ?? e.reps,
-                    weight: kgNum(log?.weight ?? e.weight),
-                    small: true,
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -288,15 +698,19 @@ class SetTile extends StatelessWidget {
   final int? reps;
   final int target;
   final String weight;
-  final bool small;
   final bool selected;
+
+  /// After the target ("/30 Min") and after the bottom value (default: the weight unit).
+  final String repsUnit;
+  final String? weightUnit;
   final VoidCallback? onTapReps, onTapWeight;
   const SetTile({
     super.key,
     required this.reps,
     required this.target,
     required this.weight,
-    this.small = false,
+    this.repsUnit = '',
+    this.weightUnit,
     this.selected = false,
     this.onTapReps,
     this.onTapWeight,
@@ -311,14 +725,12 @@ class SetTile extends StatelessWidget {
         : r >= target
             ? (c.primary, c.onPrimary)
             : (c.tertiaryContainer, c.onTertiaryContainer);
-    final radius = BorderRadius.circular(small ? 8 : 14);
-    final top = small
-        ? Text(r == null ? '$target' : '$r', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: fg))
-        : Text.rich(
+    final radius = BorderRadius.circular(14);
+    final top = Text.rich(
             TextSpan(children: [
               TextSpan(text: r?.toString() ?? '–', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
               TextSpan(
-                text: '/$target',
+                text: '/$target$repsUnit',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: fg.withValues(alpha: .7)),
               ),
             ]),
@@ -337,27 +749,27 @@ class SetTile extends StatelessWidget {
               color: bg,
               child: InkWell(
                 onTap: onTapReps,
-                child: SizedBox(height: small ? 22 : 56, child: Center(child: top)),
+                child: SizedBox(height: 56, child: Center(child: top)),
               ),
             ),
-            SizedBox(height: small ? 1 : 2),
+            SizedBox(height: 2),
             Material(
-              color: small || selected ? (selected ? c.secondaryContainer : c.surfaceContainerHigh) : c.surfaceContainer,
+              color: selected ? c.secondaryContainer : c.surfaceContainer,
               child: InkWell(
                 onTap: onTapWeight,
                 child: SizedBox(
-                  height: small ? 18 : 36,
+                  height: 36,
                   child: Center(
                     child: Text.rich(
                       TextSpan(children: [
                         TextSpan(text: weight),
-                        if (!small) TextSpan(text: ' kg', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
+                        TextSpan(text: ' ${weightUnit ?? unitLabel}', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
                       ]),
                       style: TextStyle(
-                        fontSize: small ? 10.5 : 15,
+                        fontSize: 15,
                         fontWeight: FontWeight.w500,
                         fontFeatures: const [FontFeature.tabularFigures()],
-                        color: small ? c.onSurfaceVariant : c.onSurface,
+                        color: c.onSurface,
                       ),
                     ),
                   ),
@@ -365,6 +777,46 @@ class SetTile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Flame badge with the number of weeks trained in a row.
+class Streak extends StatelessWidget {
+  final int weeks;
+  final VoidCallback? onTap;
+  const Streak(this.weeks, {super.key, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final active = weeks > 0;
+    return Tooltip(
+      message: '${weeks == 1 ? '1 Woche' : '$weeks Wochen'} in Folge mindestens ${weeklyGoal.value}× trainiert',
+      child: Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: Material(
+          color: active ? c.tertiaryContainer : c.surfaceContainerHigh,
+          shape: const StadiumBorder(),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: onTap,
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.local_fire_department, size: 22, color: active ? c.tertiary : c.outline),
+                const SizedBox(width: 2),
+                Text('$weeks',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: active ? c.onTertiaryContainer : c.onSurfaceVariant)),
+              ]),
+            ),
+          ),
         ),
       ),
     );
@@ -399,11 +851,13 @@ class Logo extends StatelessWidget {
   }
 }
 
-/// Weight without unit, German decimal comma: 82.5 → "82,5".
-String kgNum(double w) => (w == w.roundToDouble() ? w.toStringAsFixed(0) : w.toString()).replaceAll('.', ',');
-
 String dateLabel(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+/// "Montag, 2. November"
+String dayLabel(DateTime d) =>
+    '${const ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'][d.weekday - 1]}, '
+    '${d.day}. ${const ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][d.month - 1]}';
 
 String ago(DateTime d) {
   final now = DateTime.now();
@@ -411,75 +865,163 @@ String ago(DateTime d) {
   return switch (days) { <= 0 => 'heute', 1 => 'gestern', _ => 'vor $days Tagen' };
 }
 
-class HistoryList extends StatelessWidget {
+const _months = [
+  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+];
+
+/// Month calendar with training days marked; below it the month's (or the tapped day's) trainings.
+class HistoryList extends StatefulWidget {
   const HistoryList({super.key});
+
+  @override
+  State<HistoryList> createState() => _HistoryListState();
+}
+
+class _HistoryListState extends State<HistoryList> {
+  DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime? day;
+
+  static bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 
   @override
   Widget build(BuildContext context) {
     if (store.sessions.isEmpty) return const Center(child: Text('Noch keine Trainings geloggt.'));
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      children: [
-        for (final s in store.sessions)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 8, 10),
-              child: Column(
-                children: [
-                  Row(children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.workoutName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                        Text(dateLabel(s.date), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                      ]),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline, size: 20, color: scheme.onSurfaceVariant),
-                      tooltip: 'Löschen',
-                      onPressed: () async {
-                        final ok = await confirm(context, 'Training vom ${dateLabel(s.date)} löschen?');
-                        if (ok) store.deleteSession(s);
-                      },
-                    ),
-                  ]),
-                  for (final e in s.exercises)
-                    SizedBox(
-                      height: 26,
-                      child: Row(children: [
-                        Expanded(child: Text(e.name, style: const TextStyle(fontSize: 13))),
-                        SizedBox(
-                          width: 64,
-                          child: Text(kg(e.weight).replaceAll('.', ','),
-                              textAlign: TextAlign.end,
-                              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
-                        ),
-                        SizedBox(
-                          width: 66,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: e.succeeded
-                                ? Padding(
-                                    padding: const EdgeInsets.only(right: 6),
-                                    child: Icon(Icons.check, size: 18, color: scheme.primary),
-                                  )
-                                : Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                                    decoration: BoxDecoration(
-                                        color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(8)),
-                                    child: Text(e.reps.map((r) => r ?? '–').join('/'),
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: scheme.onTertiaryContainer)),
-                                  ),
-                          ),
-                        ),
-                      ]),
-                    ),
-                ],
+    final c = Theme.of(context).colorScheme;
+    final inMonth = store.sessions.where((s) => s.date.year == month.year && s.date.month == month.month).toList();
+    final shown = day == null ? inMonth : inMonth.where((s) => sameDay(s.date, day!)).toList();
+    final first = month.subtract(Duration(days: month.weekday - 1)); // Monday on or before the 1st
+    final today = DateTime.now();
+    final goal = weeklyGoal.value;
+    final streak = streakWeeks(store.sessions.map((s) => s.date), today, perWeek: goal);
+    final thisWeek = store.sessions.where((s) => mondayOf(s.date) == mondayOf(today)).length;
+
+    Widget cell(DateTime d) {
+      final count = inMonth.where((s) => sameDay(s.date, d)).length;
+      final (bg, fg) = count == 0
+          ? (Colors.transparent, d.month == month.month ? c.onSurfaceVariant : c.outlineVariant)
+          : count == 1
+              ? (c.secondaryContainer, c.onSecondaryContainer)
+              : (c.primary, c.onPrimary);
+      final selected = day != null && sameDay(d, day!);
+      return Padding(
+        padding: const EdgeInsets.all(3),
+        child: Material(
+          color: bg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: selected || sameDay(d, today)
+                ? BorderSide(color: selected ? c.primary : c.onSurface, width: selected ? 2.5 : 1.5)
+                : BorderSide.none,
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: count == 0 ? null : () => setState(() => day = selected ? null : d),
+            child: SizedBox(
+              height: 44,
+              child: Center(
+                child: Text('${d.day}',
+                    style: TextStyle(
+                        fontSize: 17, color: fg, fontWeight: count > 0 ? FontWeight.w600 : FontWeight.w400)),
               ),
             ),
+          ),
+        ),
+      );
+    }
+
+    void go(int delta) => setState(() {
+          month = DateTime(month.year, month.month + delta);
+          day = null;
+        });
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      children: [
+        if (streak.isNotEmpty || thisWeek > 0)
+          Container(
+            margin: const EdgeInsets.only(top: 4, bottom: 8),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            decoration: BoxDecoration(color: c.tertiaryContainer, borderRadius: BorderRadius.circular(16)),
+            child: Row(children: [
+              Icon(Icons.local_fire_department, color: c.tertiary, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    streak.isEmpty
+                        ? 'Ziel: $goal× pro Woche'
+                        : '${streak.length} ${streak.length == 1 ? 'Woche' : 'Wochen'} in Folge · $goal× pro Woche',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: c.onTertiaryContainer),
+                  ),
+                  Text(
+                    thisWeek >= goal
+                        ? 'Diese Woche geschafft ($thisWeek/$goal). Weiter so!'
+                        : 'Diese Woche $thisWeek/$goal · noch ${goal - thisWeek} '
+                            '${goal - thisWeek == 1 ? 'Training' : 'Trainings'}'
+                            '${streak.isEmpty ? '' : ', um die Serie zu halten'}',
+                    style: TextStyle(fontSize: 13, color: c.onTertiaryContainer.withValues(alpha: .8)),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        Row(children: [
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text('${_months[month.month - 1]}${month.year == today.year ? '' : ' ${month.year}'}',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+          ),
+          IconButton.filledTonal(icon: const Icon(Icons.chevron_left), tooltip: 'Voriger Monat', onPressed: () => go(-1)),
+          IconButton.filledTonal(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Nächster Monat',
+            onPressed: month.year == today.year && month.month == today.month ? null : () => go(1),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          for (final w in const ['M', 'D', 'M', 'D', 'F', 'S', 'S'])
+            Expanded(
+              child: Center(child: Text(w, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant))),
+            ),
+        ]),
+        const SizedBox(height: 4),
+        for (var week = 0; week < 6; week++)
+          if (first.add(Duration(days: week * 7)).month == month.month || week == 0)
+            // Weeks of the current streak get an orange band.
+            Container(
+              decoration: streak.contains(DateTime(first.year, first.month, first.day + week * 7))
+                  ? BoxDecoration(
+                      color: c.tertiaryContainer.withValues(alpha: .6), borderRadius: BorderRadius.circular(17))
+                  : null,
+              child: Row(children: [
+                for (var i = 0; i < 7; i++)
+                  // DateTime(…, day + n) rather than add(), so DST switches don't shift the date.
+                  Expanded(child: cell(DateTime(first.year, first.month, first.day + week * 7 + i))),
+              ]),
+            ),
+        SectionHeader(
+          day == null
+              ? '${inMonth.length} ${inMonth.length == 1 ? 'Training' : 'Trainings'} im ${_months[month.month - 1]}'
+              : dayLabel(day!),
+          '',
+        ),
+        for (final s in shown)
+          OverviewCard(
+            title: s.workoutName,
+            subtitle: dayLabel(s.date),
+            rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targetReps, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Löschen',
+                onPressed: () async {
+                  final ok = await confirm(context, 'Training vom ${dateLabel(s.date)} löschen?');
+                  if (ok) store.deleteSession(s);
+                },
+              ),
+            ],
           ),
       ],
     );
