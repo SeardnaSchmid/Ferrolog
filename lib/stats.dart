@@ -2,8 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'body_map.dart';
 import 'main.dart';
 import 'model.dart';
+import 'muscles.dart';
 import 'units.dart';
 
 /// Epley estimate of the one-rep max from the best set.
@@ -122,6 +124,7 @@ class _StatsPageState extends State<StatsPage> {
         if (p.top case (final name, final kg))
           Row(children: [tile(Icons.emoji_events_outlined, 'Höchstes Gewicht', '$name · ${weightLabel(kg)}')]),
         const SizedBox(height: 8),
+        musclesSection([for (final s in sessions) if (from == null || s.date.isAfter(from)) s], section, c),
         section('Trainings pro Woche', 'Ziel $goal×', [
           SizedBox(
             height: 150,
@@ -182,6 +185,39 @@ class _StatsPageState extends State<StatsPage> {
           ),
       ],
     );
+  }
+
+  /// Body map of the period (darker = more sets) and sets per body region, most first.
+  Widget musclesSection(
+      List<Session> sessions, Widget Function(String, String?, List<Widget>) section, ColorScheme c) {
+    final perMuscle = setsPerSingleMuscle(sessions);
+    final top = perMuscle.values.fold(0.0, max);
+    if (top == 0) return const SizedBox();
+    final regions = setsPerMuscle(sessions).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    String sets(double v) => '${v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1).replaceAll('.', ',')} Sätze';
+    return section('Muskeln', 'Hilfsmuskeln zählen halb', [
+      Center(child: BodyMap.heat({for (final e in perMuscle.entries) e.key: e.value / top}, height: 190)),
+      const SizedBox(height: 14),
+      for (final MapEntry(key: g, value: v) in regions)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(children: [
+            SizedBox(width: 80, child: Text(g.label, style: const TextStyle(fontSize: 14))),
+            Expanded(
+              child: LinearProgressIndicator(
+                value: regions.first.value == 0 ? 0 : v / regions.first.value,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
+                backgroundColor: c.surfaceContainerHighest,
+              ),
+            ),
+            SizedBox(
+              width: 76,
+              child: Text(sets(v), textAlign: TextAlign.end, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+            ),
+          ]),
+        ),
+    ]);
   }
 
   /// "12× · Gesamt 7,2 t", cardio "8× · 240 Min · 35 km gesamt", without weight "6× · 18 Sätze".

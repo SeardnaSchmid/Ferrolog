@@ -165,3 +165,21 @@ Map<MuscleGroup, double> setsPerMuscle(Iterable<Session> sessions) {
   }
   return sets;
 }
+
+/// Done sets per muscle: 1 where it's a primary muscle, ½ where it helps.
+Map<Muscle, double> setsPerSingleMuscle(Iterable<Session> sessions) {
+  final sets = {for (final m in Muscle.values) m: 0.0};
+  for (final s in sessions) {
+    for (final e in s.exercises) {
+      if (e.cardio || e.setsDone == 0) continue;
+      final (p, sec) = musclesOf(e.name) ?? (0, 0);
+      for (final m in musclesIn(p)) {
+        sets[m] = sets[m]! + e.setsDone;
+      }
+      for (final m in musclesIn(sec)) {
+        sets[m] = sets[m]! + e.setsDone / 2;
+      }
+    }
+  }
+  return sets;
+}

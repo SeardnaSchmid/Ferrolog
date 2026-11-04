@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'muscles.dart';
 
-/// Front and back of a body with the muscles of an exercise filled in: primary strong,
-/// secondary light, the rest grey.
+/// Front and back of a body with muscles filled in by how much they work, 0 (grey) to 1 (full colour).
 class BodyMap extends StatelessWidget {
-  final Muscles muscles;
+  final Map<Muscle, double> level;
   final double height;
-  const BodyMap(this.muscles, {super.key, this.height = 200});
+
+  /// The muscles of an exercise: primary strong, secondary light.
+  BodyMap(Muscles muscles, {super.key, this.height = 200})
+      : level = {
+          for (final m in musclesIn(muscles.$2)) m: .4,
+          for (final m in musclesIn(muscles.$1)) m: 1,
+        };
+
+  /// How much each muscle was trained, as a share of the most trained one.
+  const BodyMap.heat(this.level, {super.key, this.height = 200});
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +28,8 @@ class BodyMap extends StatelessWidget {
             child: CustomPaint(
               painter: _BodyPainter(
                 front: front,
-                muscles: muscles,
+                level: level,
                 primary: c.primary,
-                secondary: c.primary.withValues(alpha: .4),
                 idle: c.onSurface.withValues(alpha: .16),
                 body: c.onSurface.withValues(alpha: .07),
               ),
@@ -40,13 +47,12 @@ const double _w = 100, _h = 200;
 
 class _BodyPainter extends CustomPainter {
   final bool front;
-  final Muscles muscles;
-  final Color primary, secondary, idle, body;
+  final Map<Muscle, double> level;
+  final Color primary, idle, body;
   const _BodyPainter({
     required this.front,
-    required this.muscles,
+    required this.level,
     required this.primary,
-    required this.secondary,
     required this.idle,
     required this.body,
   });
@@ -54,15 +60,7 @@ class _BodyPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / _w, size.height / _h);
-    final (p, s) = muscles;
-    Paint fill(Muscle? m) => Paint()
-      ..color = m == null
-          ? body
-          : p & m.bit != 0
-              ? primary
-              : s & m.bit != 0
-                  ? secondary
-                  : idle;
+    Paint fill(Muscle? m) => Paint()..color = m == null ? body : Color.lerp(idle, primary, level[m] ?? 0)!;
 
     // Shapes are given for the left half (as seen) and mirrored.
     void oval(Muscle? m, double x, double y, double rx, double ry, {bool mirror = true}) {
@@ -130,5 +128,5 @@ class _BodyPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BodyPainter old) =>
-      old.muscles != muscles || old.primary != primary || old.idle != idle || old.front != front;
+      old.level != level || old.primary != primary || old.idle != idle || old.front != front;
 }
