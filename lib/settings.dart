@@ -161,6 +161,18 @@ class _SyncSettingsState extends State<SyncSettings> {
           Text('Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.',
               style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const Divider(height: 32),
+          Text('Daten', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.share_outlined),
+            title: Text('An KI senden / exportieren'),
+            subtitle: Text('Alle Daten als JSON, mit fertigem Analyse-Prompt'),
+            onTap: export,
+          ),
+          // CC-BY-SA asks for the source to be named.
+          Text('Muskeln der Übungen: wger.de (CC-BY-SA), free-exercise-db',
+              style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const Divider(height: 32),
           Text('GitHub-Sync', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 8),
           const Text(

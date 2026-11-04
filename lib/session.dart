@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'main.dart';
 import 'model.dart';
+import 'recap.dart';
 import 'units.dart';
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
@@ -130,11 +131,16 @@ class _SessionPageState extends State<SessionPage> {
   Future<void> finish() async {
     if (s.exercises.every((e) => e.setsDone == 0)) {
       if (!await confirm(context, 'Keine Sätze geloggt. Training verwerfen?')) return;
+      ticker.cancel();
       await store.saveActive(null);
     } else {
       final missing = s.exercises.any((e) => e.setsDone < e.reps.length);
       if (missing && !await confirm(context, 'Nicht alle Sätze erledigt. Trotzdem beenden?')) return;
+      // Stop the "ended elsewhere → close" check first, it would close the recap pushed below.
+      ticker.cancel();
       await store.finishSession(s);
+      if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => RecapPage(s)));
+      return;
     }
     if (mounted) Navigator.pop(context);
   }

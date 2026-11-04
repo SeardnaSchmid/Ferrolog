@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'edit.dart';
 import 'model.dart';
+import 'recap.dart';
 import 'session.dart';
 import 'settings.dart';
 import 'stats.dart';
@@ -36,6 +38,17 @@ const analysisPrompt = 'Hier sind meine Trainingsdaten aus FerroLog (JSON, Forma
     'Analysiere bitte meinen Fortschritt: Welche Übungen laufen gut, wo stagniere ich (Plateaus, '
     'verpasste Wiederholungen), wie sieht Trainingsfrequenz und Volumen aus? '
     'Gib mir konkrete Vorschläge für die nächsten Wochen.';
+
+/// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
+Future<void> export() async {
+  final name = 'ferrolog-${DateTime.now().toIso8601String().substring(0, 10)}.json';
+  final file = XFile.fromData(utf8.encode(store.exportJson()), mimeType: 'application/json', name: name);
+  await SharePlus.instance.share(ShareParams(
+    files: [file],
+    fileNameOverrides: [name],
+    text: analysisPrompt,
+  ));
+}
 
 class Ferrolog extends StatelessWidget {
   const Ferrolog({super.key});
@@ -110,17 +123,6 @@ class _HomeState extends State<Home> {
     super.dispose();
   }
 
-  /// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
-  Future<void> export() async {
-    final name = 'ferrolog-${DateTime.now().toIso8601String().substring(0, 10)}.json';
-    final file = XFile.fromData(utf8.encode(store.exportJson()), mimeType: 'application/json', name: name);
-    await SharePlus.instance.share(ShareParams(
-      files: [file],
-      fileNameOverrides: [name],
-      text: analysisPrompt,
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -134,8 +136,6 @@ class _HomeState extends State<Home> {
               weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
               onTap: () => setState(() => tab = 2), // history highlights the streak weeks
             ),
-            if (tab == 1 || tab == 2) // stats and history: where the data is
-              IconButton(icon: const Icon(Icons.share_outlined), tooltip: 'An KI senden / exportieren', onPressed: export),
           ],
         ),
         // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
@@ -187,6 +187,7 @@ class WorkoutList extends StatelessWidget {
           ActiveTrainingCard(active, key: ValueKey(active.id)),
           const SizedBox(height: 12),
         ],
+        if (active == null) ...[const InsightCard(), const SizedBox(height: 4)],
         if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),
         const SizedBox(height: 8),
@@ -437,6 +438,86 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
   }
 }
 
+/// Top of the workouts tab: little facts about recent training, one at a time, swipe for the next.
+class InsightCard extends StatefulWidget {
+  const InsightCard({super.key});
+
+  @override
+  State<InsightCard> createState() => _InsightCardState();
+}
+
+class _InsightCardState extends State<InsightCard> {
+  int page = 0;
+
+  static const icons = {
+    Fact.record: Icons.local_fire_department,
+    Fact.streak: Icons.check_circle_outline,
+    Fact.gain: Icons.trending_up,
+    Fact.close: Icons.flag_outlined,
+    Fact.milestone: Icons.emoji_events_outlined,
+    Fact.week: Icons.calendar_today_outlined,
+    Fact.stall: Icons.landscape_outlined,
+    Fact.pause: Icons.bedtime_outlined,
+    Fact.tonnage: Icons.fitness_center,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final facts = homeFacts(store.sessions, store.workouts, DateTime.now(), perWeek: weeklyGoal.value);
+    if (facts.isEmpty) return const SizedBox();
+    final current = page.clamp(0, facts.length - 1);
+    return Card(
+      // A light tint sets it apart from the workout cards below, softer than the running training.
+      color: Color.alphaBlend(c.primaryContainer.withValues(alpha: .25), c.surfaceContainerLow),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide.none),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
+        child: Column(children: [
+          SizedBox(
+            height: 38, // two lines of text
+            child: PageView(
+              // Mouse drags too, so it swipes in the browser as well.
+              scrollBehavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+              onPageChanged: (i) => setState(() => page = i),
+              children: [
+                for (final (kind, text) in facts)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(children: [
+                      Icon(icons[kind], size: 20, color: kind == Fact.record ? c.tertiary : c.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(text,
+                            maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.25)),
+                      ),
+                    ]),
+                  ),
+              ],
+            ),
+          ),
+          if (facts.length > 1) ...[
+            const SizedBox(height: 2),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              for (var i = 0; i < facts.length; i++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: i == current ? 14 : 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: i == current ? c.primary : c.outlineVariant,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+            ]),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
 class SectionHeader extends StatelessWidget {
   final String title, trailing;
   const SectionHeader(this.title, this.trailing, {super.key});
@@ -516,6 +597,9 @@ class OverviewCard extends StatelessWidget {
 
   /// Tap anywhere on the card (buttons inside keep their own taps).
   final VoidCallback? onTap;
+
+  /// Small text left of the actions, e.g. mood, body weight and note of a past training.
+  final String? footer;
   const OverviewCard({
     super.key,
     required this.title,
@@ -524,6 +608,7 @@ class OverviewCard extends StatelessWidget {
     required this.actions,
     this.live,
     this.onTap,
+    this.footer,
   });
 
   @override
@@ -627,7 +712,15 @@ class OverviewCard extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 6),
-              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+              Row(children: [
+                Expanded(
+                  child: Text(footer ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                ),
+                ...actions,
+              ]),
             ],
           ),
         ),
@@ -1077,6 +1170,12 @@ class _HistoryListState extends State<HistoryList> {
             title: s.workoutName,
             subtitle: dayLabel(s.date),
             rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RecapPage(s))),
+            footer: [
+              if (s.mood case final m?) const ['😣', '😐', '😄'][m - 1],
+              if (s.bodyWeight case final kg?) weightLabel(kg),
+              if (s.note case final n?) '„$n“',
+            ].join(' · '),
             actions: [
               IconButton(
                 icon: const Icon(Icons.delete_outline),

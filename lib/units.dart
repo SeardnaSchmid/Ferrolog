@@ -76,7 +76,7 @@ double stepShown(double incrementKg) {
 String volumeLabel(double kg) {
   final v = shown(kg);
   if (v < 1000) return '${v.round()} $unitLabel';
-  final k = (v / 1000).toStringAsFixed(1).replaceAll('.', ',');
+  final k = (v / 1000).toStringAsFixed(1).replaceAll('.', ',').replaceAll(RegExp(r',0$'), ''); // 10,0 t → 10 t
   return unit.value == WeightUnit.kg ? '$k t' : '${k}k lb';
 }
 

@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'units.dart';
+
 DateTime mondayOf(DateTime d) => DateTime(d.year, d.month, d.day - (d.weekday - 1));
 
 /// The Mondays of the current streak, newest first: weeks in a row (Monday to Sunday) with at least
@@ -327,6 +329,13 @@ class Session {
   /// When it ended; null for trainings logged before this was recorded.
   DateTime? finishedAt;
 
+  /// Entered on the recap after training: body weight in kg and a free note.
+  double? bodyWeight;
+  String? note;
+
+  /// How the training felt: 1 schlecht, 2 okay, 3 gut.
+  int? mood;
+
   Session({
     String? id,
     required this.workoutId,
@@ -335,6 +344,9 @@ class Session {
     required this.exercises,
     this.lastActivity,
     this.finishedAt,
+    this.bodyWeight,
+    this.note,
+    this.mood,
   })  : id = id ?? newId(),
         date = date ?? DateTime.now();
 
@@ -368,6 +380,9 @@ class Session {
         'date': date.toIso8601String(),
         if (lastActivity != null) 'lastActivity': lastActivity!.toIso8601String(),
         if (finishedAt != null) 'finishedAt': finishedAt!.toIso8601String(),
+        if (bodyWeight != null) 'bodyWeight': bodyWeight,
+        if (note != null) 'note': note,
+        if (mood != null) 'mood': mood,
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 
@@ -378,6 +393,9 @@ class Session {
         date: DateTime.parse(j['date']),
         lastActivity: j['lastActivity'] == null ? null : DateTime.parse(j['lastActivity']),
         finishedAt: j['finishedAt'] == null ? null : DateTime.parse(j['finishedAt']),
+        bodyWeight: (j['bodyWeight'] as num?)?.toDouble(),
+        note: j['note'],
+        mood: j['mood'],
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
@@ -389,6 +407,10 @@ class Store extends ChangeNotifier {
   final SharedPreferences _prefs;
   List<Workout> workouts = [];
   List<Session> sessions = []; // newest first
+
+  /// Muscle groups the user picked for an exercise, by name: {"primary": [...], "secondary": [...]}.
+  /// Read through musclesOf in muscles.dart.
+  Map<String, dynamic> muscles = {};
 
   /// The session currently being trained, persisted so it survives the app being killed.
   Session? active;
@@ -412,7 +434,11 @@ class Store extends ChangeNotifier {
   void _load(Map<String, dynamic> j) {
     workouts = [for (final w in j['workouts']) Workout.fromJson(w)];
     sessions = [for (final s in j['sessions']) Session.fromJson(s)];
+    muscles = Map.of(j['muscles'] ?? const {});
   }
+
+  /// Saves [muscles] after a change.
+  Future<void> saveMuscles() => _save();
 
   Map<String, dynamic> toJson() => {
         'app': 'ferrolog',
@@ -424,11 +450,14 @@ class Store extends ChangeNotifier {
             'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true. sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
-            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; exercises[].weights '
+            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note and mood (1 bad, 2 okay, 3 good) as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
-            'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight.',
+            'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
+            'muscles = muscle groups the user set for an exercise (primary; secondary count half); other exercises '
+            'use a built-in list.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
         'sessions': sessions.map((s) => s.toJson()).toList(),
+        if (muscles.isNotEmpty) 'muscles': muscles,
       };
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(toJson());
@@ -486,6 +515,9 @@ class Store extends ChangeNotifier {
     }
     return _save();
   }
+
+  /// Saves changes made in place to a stored session (body weight, note).
+  Future<void> updateSession(Session s) => _save();
 
   Future<void> deleteSession(Session s) {
     sessions.removeWhere((x) => x.id == s.id);
@@ -644,5 +676,115 @@ String setsLabel(List<int> reps, int? maxReps) {
         ? null
         : Duration(seconds: durations.fold(0, (n, d) => n + d.inSeconds) ~/ durations.length),
     top: top,
+  );
+}
+
+/// Kinds of facts on the home card; the UI picks an icon per kind.
+enum Fact { record, streak, gain, close, milestone, week, stall, pause, tonnage }
+
+/// Little motivating facts for the home card, freshest first (sessions newest first). Only what's
+/// true right now, worded positively; no "do this" prompts.
+List<(Fact, String)> homeFacts(List<Session> sessions, List<Workout> workouts, DateTime now, {int perWeek = 1}) {
+  final facts = <(Fact, String)>[];
+  final last = sessions.firstOrNull;
+  if (last == null) return facts;
+  List<ExerciseLog> logsOf(String name, Iterable<Session> from) => [
+        for (final s in from)
+          for (final e in s.exercises)
+            if (e.name == name && e.setsDone > 0) e,
+      ];
+
+  // Last training: a record, else the longest run of trainings with every set hit.
+  (String, double)? record;
+  (String, int)? streak;
+  for (final l in last.exercises) {
+    if (l.cardio || l.setsDone == 0 || l.weight == 0) continue;
+    final before = logsOf(l.name, sessions.skip(1));
+    if (before.isNotEmpty && l.weight > before.map((e) => e.weight).reduce(max) && l.weight > (record?.$2 ?? 0)) {
+      record = (l.name, l.weight);
+    }
+    final run = l.succeeded ? 1 + before.takeWhile((e) => e.succeeded).length : 0;
+    if (run >= 3 && run > (streak?.$2 ?? 0)) streak = (l.name, run);
+  }
+  if (record case (final name, final kg)?) facts.add((Fact.record, '$name: neues Höchstgewicht, ${weightLabel(kg)}'));
+  if (streak case (final name, final n)?) facts.add((Fact.streak, '$name: $n× in Folge alle Sätze geschafft'));
+
+  // Before and after: the biggest relative gain within 90 days, only if there is one.
+  final window = [for (final s in sessions) if (now.difference(s.date).inDays <= 90) s];
+  (String, double, double, DateTime)? gain;
+  for (final name in {for (final s in window) for (final e in s.exercises) if (!e.cardio && e.weight > 0) e.name}) {
+    final firstSession = window.lastWhere((s) => logsOf(name, [s]).isNotEmpty);
+    final from = logsOf(name, [firstSession]).first.weight, to = logsOf(name, window).first.weight;
+    if (to > from && (gain == null || to / from > gain.$3 / gain.$2)) gain = (name, from, to, firstSession.date);
+  }
+  if (gain case (final name, final from, final to, final since)?) {
+    facts.add((Fact.gain, '$name: ${weightNum(from)} → ${weightLabel(to)} seit ${since.day}.${since.month}.'));
+  }
+
+  // Planned exercises that missed last time: 1–2 reps short, or stuck for a while.
+  for (final w in workouts) {
+    for (final e in w.exercises) {
+      if (e.cardio || e.fails == 0) continue;
+      final log = logsOf(e.name, sessions).firstOrNull;
+      if (log == null) continue;
+      final missing = [for (final (i, r) in log.reps.indexed) max(0, (log.maxReps ?? log.targets[i]) - (r ?? 0))]
+          .fold(0, (a, b) => a + b);
+      if (missing case 1 || 2) {
+        facts.add((Fact.close, '${e.name}: nur $missing ${missing == 1 ? 'Wiederholung' : 'Wiederholungen'} bis zur Steigerung'));
+      } else if (e.fails >= 3) {
+        facts.add((Fact.stall, '${e.name}: seit ${e.fails} Trainings bei ${weightLabel(e.weight)}, das Plateau wackelt'));
+      }
+    }
+  }
+
+  const marks = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
+  if (marks.contains(sessions.length)) facts.add((Fact.milestone, '${sessions.length}. Training geschafft 🎉'));
+
+  final thisWeek = sessions.where((s) => !s.date.isBefore(mondayOf(now))).length;
+  final weeks = weekStreak(sessions.map((s) => s.date), now, perWeek: perWeek);
+  final series = weeks > 1 ? ' · $weeks Wochen in Folge' : '';
+  facts.add((
+    Fact.week,
+    thisWeek >= perWeek ? 'Woche geschafft ✓$series' : '$thisWeek von $perWeek Trainings diese Woche$series',
+  ));
+
+  final rest = now.difference(last.date).inDays;
+  if (rest >= 5) facts.add((Fact.pause, '$rest Tage Pause, Erholung zählt auch'));
+
+  // Tonnage: the next round mark, in tonnes lifted overall.
+  final total = sessions.fold(0.0, (v, s) => v + s.exercises.fold(0.0, (v, e) => v + e.volume));
+  final next = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000].map((t) => t * 1000.0).where((t) => t > total).firstOrNull;
+  if (total > 0) {
+    facts.add((
+      Fact.tonnage,
+      'Insgesamt ${volumeLabel(total)} bewegt${next == null ? '' : ', noch ${volumeLabel(next - total)} bis ${volumeLabel(next)}'}',
+    ));
+  }
+  return facts;
+}
+
+/// Numbers for the recap after a training. [sessions] newest first, may contain [s]; only those
+/// before it count as history.
+/// - [volumeBefore]: volume of the previous training of the same workout,
+/// - [succeeded]: exercises where every set hit its target,
+/// - [records]: exercises lifted heavier than ever before (not on their first training).
+({int setsDone, int sets, double volume, double? volumeBefore, int succeeded, List<(String, double)> records}) sessionRecap(
+    Session s, List<Session> sessions) {
+  final before = sessions.where((x) => x.date.isBefore(s.date)).toList();
+  double volumeOf(Session x) => x.exercises.fold(0.0, (v, e) => v + e.volume);
+  final previous = before.where((x) => x.workoutId == s.workoutId).firstOrNull;
+  return (
+    setsDone: s.setsDone,
+    sets: s.exercises.fold(0, (n, e) => n + e.reps.length),
+    volume: volumeOf(s),
+    volumeBefore: previous == null ? null : volumeOf(previous),
+    succeeded: s.exercises.where((e) => e.succeeded).length,
+    records: [
+      for (final l in s.exercises)
+        if (!l.cardio && l.setsDone > 0 && l.weight > 0)
+          if ([for (final x in before) for (final e in x.exercises) if (e.name == l.name && e.setsDone > 0) e.weight]
+              case final w when w.isNotEmpty && l.weight > w.reduce(max))
+            (l.name, l.weight),
+    ],
   );
 }

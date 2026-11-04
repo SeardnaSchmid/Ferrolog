@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'main.dart';
+import 'body_map.dart';
 import 'model.dart';
+import 'muscles.dart';
 import 'templates.dart';
 import 'units.dart';
 
@@ -245,6 +247,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
   String? filledFrom; // catalogue/used exercise whose defaults were taken
   bool typed = false; // suggestions only once the name was typed, not for an opened exercise
   String? editing; // chip group with its "Eigene" input open: 'pause', 'inc' or 'dec'
+  Muscles? muscles; // changed in this editor; null = follow the name
   final draft = TextEditingController();
 
   @override
@@ -305,6 +308,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
 
   Exercise result() {
     e.name = e.name.trim();
+    if (muscles case final m? when !e.cardio) setMuscles(e.name, m);
     if (e.cardio) {
       return e
         ..sets = 1
@@ -355,13 +359,13 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             const SizedBox(height: 16),
             Row(children: [
               Expanded(
-                child: _BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
+                child: BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
                     () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1))),
               ),
               if (!noWeight) ...[
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
+                  child: BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
                       () => setSheet(() => w = nudged(w, 1))),
                 ),
               ],
@@ -424,6 +428,36 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       }
       if (maxReps case final top?) maxReps = max(top, rs.reduce(max)); // the range top stays above every set
     });
+  }
+
+  /// Muscles as chips; a tap goes primary → secondary (counts half) → off.
+  Widget musclePicker(BoxDecoration card, TextStyle muted) {
+    final (p, s) = muscles ?? musclesOf(e.name) ?? (0, 0);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: card,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Muskeln', style: TextStyle(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 12),
+        BodyMap((p, s), height: 180),
+        const SizedBox(height: 14),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final g in Muscle.values) // ordered by body region
+            FilterChip(
+              label: Text(s & g.bit != 0 ? '${g.label} ½' : g.label),
+              selected: (p | s) & g.bit != 0,
+              showCheckmark: p & g.bit != 0,
+              onSelected: (_) => setState(() => muscles = p & g.bit != 0
+                  ? (p & ~g.bit, s | g.bit)
+                  : s & g.bit != 0
+                      ? (p, s & ~g.bit)
+                      : (p | g.bit, s)),
+            ),
+        ]),
+        const SizedBox(height: 8),
+        Text('Antippen: Hauptmuskel ✓ → hilft mit ½ → aus. Für die Statistik.', style: muted),
+      ]),
+    );
   }
 
   /// A new set, copied from the last one.
@@ -539,11 +573,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ),
             const SizedBox(height: 18),
             if (byDistance)
-              _BigStepper('Ziel ($distanceLabel)', distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
+              BigStepper('Ziel ($distanceLabel)', distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
                   () => setState(() => e.km = nudgedKm(1)),
                   decimal: true, onTyped: (v) => e.km = parseDistance(v) ?? e.km)
             else
-              _BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(1, e.reps - 1)),
+              BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(1, e.reps - 1)),
                   () => setState(() => e.reps = min(600, e.reps + 1)),
                   // Typing doesn't rebuild, so the field keeps focus; the steppers swap in the new value.
                   onTyped: (v) => e.reps = (int.tryParse(v) ?? e.reps).clamp(1, 600)),
@@ -599,6 +633,8 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 onPressed: () => setState(() => maxReps = min(50, top + 1)),
               ),
             ]),
+          const SizedBox(height: 18),
+          musclePicker(card, muted),
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -866,14 +902,14 @@ double? parseDuration(String s) {
 String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
 /// Big number with −/+ underneath, as in the design's sets/reps fields.
-class _BigStepper extends StatelessWidget {
+class BigStepper extends StatelessWidget {
   final String label, value;
   final VoidCallback onMinus, onPlus;
 
   /// Makes the value typeable: whole numbers, or with [decimal] a comma/point too.
   final void Function(String)? onTyped;
   final bool decimal;
-  const _BigStepper(this.label, this.value, this.onMinus, this.onPlus, {this.onTyped, this.decimal = false});
+  const BigStepper(this.label, this.value, this.onMinus, this.onPlus, {super.key, this.onTyped, this.decimal = false});
 
   @override
   Widget build(BuildContext context) {

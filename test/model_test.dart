@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
+import 'package:ferrolog/units.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -208,5 +209,75 @@ void main() {
     final off = await Store.open();
     await off.saveActive(Session.start(w)..exercises.single.reps[0] = 5);
     expect(await off.autoFinish(DateTime.now().add(const Duration(hours: 5))), false, reason: 'switched off in the settings');
+  });
+
+  test('home facts: record, streak, gain, near miss, week, tonnage; nothing made up', () async {
+    SharedPreferences.setMockInitialValues({});
+    unit.value = WeightUnit.kg;
+    final store = await Store.open();
+    final a = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5),
+      Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5),
+    ]);
+    await store.saveWorkout(a);
+    final now = DateTime(2026, 11, 4); // Wednesday
+    expect(homeFacts(store.sessions, store.workouts, now), isEmpty, reason: 'nothing trained yet');
+
+    for (final day in [26, 28, 30, 2, 3]) {
+      final s = Session.start(a);
+      s.exercises[0].reps.setAll(0, [5, 5]);
+      s.exercises[1].reps.setAll(0, day == 3 ? [5, 4] : [5, 5]); // last time 1 rep short
+      await store.finishSession(s);
+      store.sessions[0] = Session.fromJson({...s.toJson(), 'date': DateTime(2026, day > 20 ? 10 : 11, day).toIso8601String()});
+    }
+    final facts = {for (final (k, t) in homeFacts(store.sessions, store.workouts, now, perWeek: 2)) k: t};
+    expect(facts[Fact.record], 'Kniebeuge: neues Höchstgewicht, 110 kg');
+    expect(facts[Fact.streak], 'Kniebeuge: 5× in Folge alle Sätze geschafft');
+    expect(facts[Fact.gain], 'Rudern: 50 → 60 kg seit 26.10.', reason: '+20 % beats +10 %');
+    expect(facts[Fact.close], 'Rudern: nur 1 Wiederholung bis zur Steigerung');
+    expect(facts[Fact.week], 'Woche geschafft ✓ · 2 Wochen in Folge');
+    expect(facts.containsKey(Fact.pause), isFalse);
+    expect(facts[Fact.tonnage], 'Insgesamt 7,9 t bewegt, noch 2,1 t bis 10 t');
+  });
+
+  test('session recap: sets, volume vs last time, records; body weight and note survive JSON', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final w = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5),
+      Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5),
+    ]);
+    await store.saveWorkout(w);
+
+    Future<Session> train(DateTime date, List<int?> rows) async {
+      final s = Session.start(w);
+      final dated = Session(workoutId: s.workoutId, workoutName: s.workoutName, date: date, exercises: s.exercises);
+      dated.exercises[0].reps.setAll(0, [5, 5]);
+      dated.exercises[1].reps.setAll(0, rows);
+      await store.finishSession(dated);
+      return dated;
+    }
+
+    final first = await train(DateTime(2026, 11, 1), [5, 5]);
+    var r = sessionRecap(first, store.sessions);
+    expect((r.setsDone, r.sets, r.succeeded, r.volumeBefore), (4, 4, 2, null));
+    expect(r.records, isEmpty, reason: 'a first training sets no record');
+
+    final second = await train(DateTime(2026, 11, 3), [5, null]); // squat +2.5, a row set skipped
+    r = sessionRecap(second, store.sessions);
+    expect((r.setsDone, r.succeeded), (3, 1));
+    expect(r.volume, 102.5 * 10 + 52.5 * 5);
+    expect(r.volumeBefore, 100 * 10 + 50 * 10);
+    expect(r.records, [('Kniebeuge', 102.5), ('Rudern', 52.5)]);
+
+    second
+      ..bodyWeight = 82.4
+      ..note = 'Gut geschlafen'
+      ..mood = 3;
+    await store.updateSession(second);
+    final reopened = await Store.open();
+    expect(reopened.sessions.first.bodyWeight, 82.4);
+    expect(reopened.sessions.first.note, 'Gut geschlafen');
+    expect(reopened.sessions.first.mood, 3);
   });
 }

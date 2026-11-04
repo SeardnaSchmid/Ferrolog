@@ -58,4 +58,23 @@ void main() {
 
     await tester.pumpWidget(const SizedBox()); // stops the page's timers
   });
+
+  testWidgets('finishing opens the recap, and it stays open', (tester) async {
+    unit.value = WeightUnit.kg; // store: set up by the test above (late final, once per file)
+    final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 1, reps: 5)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w)..exercises.single.reps[0] = 5;
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+
+    await tester.tap(find.text('Beenden'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(seconds: 1)); // the live page's ticker used to close it
+    }
+    expect(find.text('Alles geschafft! 💪'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
