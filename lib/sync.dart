@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Client ID of the Ferrolog GitHub App (public, safe to commit). Setup in README.
+/// Client ID of the FerroLog GitHub App (public, safe to commit). Setup in README.
 const githubClientId = 'Iv23lidZNxih8vRT1Cab';
 
 /// Slug of that app, for the install page `github.com/apps/<slug>/installations/new`.
@@ -162,7 +162,7 @@ class GitHubSync {
       url,
       headers: headers,
       body: jsonEncode({
-        'message': 'Ferrolog sync',
+        'message': 'FerroLog sync',
         'content': base64Encode(utf8.encode(json)),
         'sha': ?sha,
       }),
@@ -172,8 +172,8 @@ class GitHubSync {
 
   static String _error(http.Response r) => switch (r.statusCode) {
         401 => 'Anmeldung abgelaufen, bitte neu anmelden',
-        403 => 'Keine Schreibrechte – hat Ferrolog Zugriff auf das Repo?',
-        404 => 'Repo nicht gefunden – hat Ferrolog Zugriff darauf?',
+        403 => 'Keine Schreibrechte – hat FerroLog Zugriff auf das Repo?',
+        404 => 'Repo nicht gefunden – hat FerroLog Zugriff darauf?',
         _ => 'HTTP ${r.statusCode}',
       };
 

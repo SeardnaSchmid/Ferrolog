@@ -6,7 +6,7 @@ import 'main.dart';
 import 'sync.dart';
 import 'units.dart';
 
-/// Guided GitHub setup: log in → create the data repo → give Ferrolog access → pick it.
+/// Guided GitHub setup: log in → create the data repo → give FerroLog access → pick it.
 /// The first two happen on github.com; repos are reloaded whenever the app comes back.
 class SyncSettings extends StatefulWidget {
   const SyncSettings({super.key});
@@ -69,7 +69,7 @@ class _SyncSettingsState extends State<SyncSettings> {
 
   Future<void> loadRepos() => run(() async {
         repos = await sync.repos();
-        // Exactly one repo shared with Ferrolog: that's the one, start syncing right away.
+        // Exactly one repo shared with FerroLog: that's the one, start syncing right away.
         if (repos!.length == 1 && sync.repo != repos!.single) await select(repos!.single);
       });
 
@@ -164,8 +164,8 @@ class _SyncSettingsState extends State<SyncSettings> {
           Text('GitHub-Sync', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 8),
           const Text(
-            'Ferrolog speichert deine Trainingsdaten als ferrolog.json in einem privaten '
-            'GitHub-Repo. Dort kann deine KI sie lesen. Ferrolog bekommt nur Zugriff auf '
+            'FerroLog speichert deine Trainingsdaten als ferrolog.json in einem privaten '
+            'GitHub-Repo. Dort kann deine KI sie lesen. FerroLog bekommt nur Zugriff auf '
             'diese eine Datei in dem Repo, das du freigibst.',
           ),
           const SizedBox(height: 16),
@@ -198,10 +198,10 @@ class _SyncSettingsState extends State<SyncSettings> {
               step(1, 'Daten-Repo anlegen', 'Privates Repo „ferrolog-data“ auf GitHub erstellen',
                   done: false,
                   onTap: () => open('https://github.com/new?name=ferrolog-data&visibility=private'
-                      '&description=Ferrolog+Trainingsdaten')),
-              step(2, 'Ferrolog Zugriff geben', '„Only select repositories“ → ferrolog-data wählen',
+                      '&description=FerroLog+Trainingsdaten')),
+              step(2, 'FerroLog Zugriff geben', '„Only select repositories“ → ferrolog-data wählen',
                   done: false, onTap: () => open('https://github.com/apps/$githubAppSlug/installations/new')),
-              const Text('Danach zurück in die App wechseln, Ferrolog findet das Repo dann selbst.'),
+              const Text('Danach zurück in die App wechseln, FerroLog findet das Repo dann selbst.'),
               const SizedBox(height: 8),
               // GitHub's mobile site answers the install form with a 404; on desktop it works.
               Text(

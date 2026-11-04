@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -31,7 +32,7 @@ Future<void> main() async {
   runApp(const Ferrolog());
 }
 
-const analysisPrompt = 'Hier sind meine Trainingsdaten aus Ferrolog (JSON, Format steht im Feld "format"). '
+const analysisPrompt = 'Hier sind meine Trainingsdaten aus FerroLog (JSON, Format steht im Feld "format"). '
     'Analysiere bitte meinen Fortschritt: Welche Übungen laufen gut, wo stagniere ich (Plateaus, '
     'verpasste Wiederholungen), wie sieht Trainingsfrequenz und Volumen aus? '
     'Gib mir konkrete Vorschläge für die nächsten Wochen.';
@@ -76,7 +77,7 @@ class Ferrolog extends StatelessWidget {
     }
 
     return MaterialApp(
-      title: 'Ferrolog',
+      title: 'FerroLog',
       theme: theme(Brightness.light),
       darkTheme: theme(Brightness.dark),
       home: const Home(),
@@ -131,13 +132,14 @@ class _HomeState extends State<Home> {
           actions: [
             Streak(
               weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
-              onTap: () => setState(() => tab = 1), // history highlights the streak weeks
+              onTap: () => setState(() => tab = 2), // history highlights the streak weeks
             ),
-            IconButton(icon: const Icon(Icons.share_outlined), tooltip: 'An KI senden / exportieren', onPressed: export),
+            if (tab == 1 || tab == 2) // stats and history: where the data is
+              IconButton(icon: const Icon(Icons.share_outlined), tooltip: 'An KI senden / exportieren', onPressed: export),
           ],
         ),
         // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
-        body: [WorkoutList(), HistoryList(), StatsPage(), SyncSettings()][tab],
+        body: [WorkoutList(), StatsPage(), HistoryList(), SyncSettings()][tab],
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -148,8 +150,8 @@ class _HomeState extends State<Home> {
               onDestinationSelected: (i) => setState(() => tab = i),
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
                 NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
+                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
                 NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Einstellungen'),
               ],
             ),
@@ -858,23 +860,42 @@ class Logo extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(color: c.primary, borderRadius: BorderRadius.circular(8)),
-        child: Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.primaryContainer, width: 3.5)),
-        ),
+        child: CustomPaint(painter: _PlatePainter(plate: c.primaryContainer, cut: c.primary)),
       ),
       const SizedBox(width: 9),
       Text.rich(
-        TextSpan(children: [const TextSpan(text: 'ferro'), TextSpan(text: 'log', style: TextStyle(color: c.primary))]),
+        TextSpan(children: [const TextSpan(text: 'Ferro'), TextSpan(text: 'Log', style: TextStyle(color: c.primary))]),
         style: TextStyle(fontSize: 21, fontWeight: FontWeight.w600, letterSpacing: -.4, color: c.onSurface),
       ),
     ]);
   }
+}
+
+/// Tri-grip weight plate, same geometry as the app icon (72-unit view of the 108dp grid, centre 36).
+class _PlatePainter extends CustomPainter {
+  const _PlatePainter({required this.plate, required this.cut});
+  final Color plate, cut;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final u = size.width / 72, c = size.center(Offset.zero);
+    canvas.drawCircle(c, 24 * u, Paint()..color = plate);
+    final slot = Paint()
+      ..color = cut
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6 * u
+      ..strokeCap = StrokeCap.round;
+    for (final a in [-90, 30, 150]) {
+      canvas.drawArc(Rect.fromCircle(center: c, radius: 16 * u), (a - 32) * pi / 180, 64 * pi / 180, false, slot);
+    }
+    canvas.drawCircle(c, 6 * u, Paint()..color = cut);
+  }
+
+  @override
+  bool shouldRepaint(_PlatePainter old) => old.plate != plate || old.cut != cut;
 }
 
 String dateLabel(DateTime d) =>

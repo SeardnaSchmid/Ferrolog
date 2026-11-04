@@ -87,13 +87,16 @@ class _EditWorkoutState extends State<EditWorkout> {
                 if (context.mounted) Navigator.pop(context);
               },
             ),
-          TextButton(
-            onPressed: () {
-              if (w.name.trim().isEmpty) w.name = 'Neues Workout';
-              store.saveWorkout(w);
-              Navigator.pop(context);
-            },
-            child: const Text('Speichern'),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(
+              onPressed: () {
+                if (w.name.trim().isEmpty) w.name = 'Neues Workout';
+                store.saveWorkout(w);
+                Navigator.pop(context);
+              },
+              child: const Text('Speichern'),
+            ),
           ),
         ],
       ),

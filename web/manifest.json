@@ -1,6 +1,6 @@
 {
-    "name": "ferrolog",
-    "short_name": "ferrolog",
+    "name": "FerroLog",
+    "short_name": "FerroLog",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#116682",
