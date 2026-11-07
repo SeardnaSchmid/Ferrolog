@@ -37,7 +37,7 @@ void main() {
     expect((bench['trainings'], bench['bestWeight'], bench['next']), (2, 82.5, 82.5), reason: '80 done, so 82.5; missed a rep there');
     expect(d['setsPerMuscleWeek']['last28d']['Brust'], greaterThan(0));
     expect((d['balance90d'] as List).map((b) => b['pair']), contains('Brust ↔ oberer Rücken'));
-    expect(d['tasks'], isNotEmpty, reason: 'rows at half the bench press');
+    expect(d['tasks'], isA<List>(), reason: 'which ones depends on the day; see tasks_test');
     expect(store.toJson().containsKey('derived'), isFalse, reason: 'never stored, only exported');
 
     store.exportExtras = () => throw StateError('kaputt');

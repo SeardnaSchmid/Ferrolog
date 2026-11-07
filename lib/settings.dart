@@ -117,6 +117,24 @@ class _SyncSettingsState extends State<SyncSettings> {
               },
             ),
           const Divider(height: 32),
+          Text('Startseite', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          for (final (key, icon, title, subtitle) in const [
+            ('home.insights', Icons.auto_awesome_outlined, 'Motivation', 'Wechselnde Fakten zu deinem Training'),
+            ('home.tasks', Icons.task_alt, 'Aufgaben & Ratschläge',
+                'Zum Beispiel Gegenspieler, die zu kurz kommen, oder das Wochenziel'),
+          ])
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(icon),
+              title: Text(title),
+              subtitle: Text(subtitle),
+              value: prefs.getBool(key) ?? true,
+              onChanged: (v) async {
+                await prefs.setBool(key, v);
+                setState(() {});
+              },
+            ),
+          const Divider(height: 32),
           Text('Serie', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 4),
           Text('Trainings pro Woche, damit die Woche für deine Serie zählt', style: text.bodyMedium),

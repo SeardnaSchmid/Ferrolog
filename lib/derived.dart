@@ -15,7 +15,7 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     'managed before, next = planned weight for next time. setsPerMuscleWeek: done sets per muscle and week, '
     'helpers counting half (10–20 is a common guide for muscle growth). balance: opposing sides, b against a, '
     'by current 1RM (barbell lifts) or by sets per week, with the guide range (training practice, not a medical '
-    'limit) and the side that lags, over the last 90 days (balance90d). tasks: hints the app currently shows the user. facts: motivating facts shown '
+    'limit) and the side that lags, over the last 90 days (balance90d). tasks: hints the app currently shows the user (empty when switched off). facts: motivating facts shown '
     'on the home screen. weeks: trainings per calendar week (Monday) against goalPerWeek.';
 
 /// Statistics for the export: the numbers behind the statistics page, balance, tasks and insights,
@@ -92,7 +92,7 @@ Map<String, dynamic> derivedStats(DateTime now) {
           'lagging': b.lagging,
         },
     ],
-    'tasks': [for (final t in openTasks()) {'title': t.title, 'why': t.why}],
+    'tasks': [if (prefs.getBool('home.tasks') ?? true) for (final t in openTasks()) {'title': t.title, 'why': t.why}],
     'facts': [for (final (_, text) in homeFacts(sessions, store.workouts, now, perWeek: weeklyGoal.value)) text],
     'goalPerWeek': weeklyGoal.value,
     'weeks': [for (final (monday, n, cardio) in weeklySummary(sessions, now, weeks: 12)) {'week': day(monday), 'trainings': n, if (cardio > 0) 'cardioMinutes': cardio}],

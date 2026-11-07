@@ -209,10 +209,13 @@ class WorkoutList extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         // Keyed by the latest training, so a new one starts the card at its freshest fact.
+        // Both can be switched off in the settings.
         if (active == null) ...[
-          InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)),
-          const SizedBox(height: 4),
-          const TasksCard(),
+          if (prefs.getBool('home.insights') ?? true) ...[
+            InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)),
+            const SizedBox(height: 4),
+          ],
+          if (prefs.getBool('home.tasks') ?? true) const TasksCard(),
         ],
         if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),

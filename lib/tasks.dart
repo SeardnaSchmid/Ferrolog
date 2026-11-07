@@ -9,7 +9,7 @@ import 'muscles.dart';
 import 'recap.dart';
 
 /// What a task asks for; the UI picks icon and button from it.
-enum TaskKind { balance, untrained, week, bodyWeight, muscles, sync }
+enum TaskKind { balance, week, bodyWeight, muscles }
 
 /// Something worth doing, derived from the data: why, and (where possible) a one-tap fix. A task
 /// disappears by itself once its reason is gone; [id] stays the same while the reason does, so it can
@@ -27,19 +27,12 @@ class Task {
 
   /// Button label for the fix, null = no button.
   String? get action => switch (kind) {
-        TaskKind.balance || TaskKind.untrained => workout == null ? null : (addSet ? '+1 Satz' : 'Hinzufügen'),
+        TaskKind.balance => workout == null ? null : (addSet ? '+1 Satz' : 'Hinzufügen'),
         TaskKind.bodyWeight => 'Eintragen',
         TaskKind.muscles => 'Festlegen',
-        TaskKind.sync => 'Einrichten',
         TaskKind.week => null,
       };
 }
-
-/// Main muscles a task may ask for; the rest (neck, forearms, …) gets enough from the big lifts.
-const taskMuscles = [
-  Muscle.chest, Muscle.shoulders, Muscle.triceps, Muscle.biceps, Muscle.lats, Muscle.middleBack,
-  Muscle.lowerBack, Muscle.abdominals, Muscle.quadriceps, Muscle.hamstrings, Muscle.glutes, Muscle.calves,
-];
 
 /// What helps a muscle group that falls behind: exercises that already train it specifically (then one
 /// more set of the one in the plan), else the exercise to add. Picked to need little equipment and to
@@ -54,72 +47,70 @@ const _remedies = <String, (List<String>, String)>{
   'Latissimus': (['Klimmzüge', 'Latzug'], 'Latzug'),
 };
 
-/// The same for a muscle without a single set lately.
-const _forMuscle = <Muscle, String>{
-  Muscle.chest: 'Kurzhantel-Bankdrücken',
-  Muscle.shoulders: 'Kurzhantel-Schulterdrücken',
-  Muscle.triceps: 'Trizepsdrücken am Kabel',
-  Muscle.biceps: 'Bizepscurls',
-  Muscle.lats: 'Latzug',
-  Muscle.middleBack: 'Kurzhantelrudern',
-  Muscle.lowerBack: 'Rumänisches Kreuzheben',
-  Muscle.abdominals: 'Crunches',
-  Muscle.quadriceps: 'Beinpresse',
-  Muscle.hamstrings: 'Nordic Curls',
-  Muscle.glutes: 'Hip Thrust',
-  Muscle.calves: 'Wadenheben',
-};
+/// Training advice waits for a baseline: this many trainings over at least
+/// two weeks, so a first week doesn't flood a new user with "train X".
+const baselineTrainings = 6;
 
-/// Open tasks, most useful first: balance and untrained muscles from the last four weeks (with a fix
-/// for the workout that's up next), the weekly goal when it gets tight, then missing data (body
-/// weight, muscles of own exercises, sync for the AI). [sessions] newest first.
+/// At most one piece of training advice at a time, and a new one at most every [advicePause] after the
+/// last was acted on or put off: one thing to work on, not a list.
+const advicePause = Duration(days: 7);
+
+bool _isAdvice(String id) => id.startsWith('balance:');
+
+/// Open tasks, situational and few. Training advice comes only from opposing muscles: once there's a
+/// baseline and the last advice is a week old, the pair furthest off its guide range in the last four
+/// weeks, with a fix for the workout up next. So whoever trains chest but never the back gets told to
+/// row; muscles left out on both sides (no legs at all, no calves) are the program's choice. Besides it only what's due right now: the
+/// weekly goal when the days get tight, own exercises without muscles, a body weight that's gone stale.
+/// [sessions] newest first; [snoozed]: id → put off until.
 List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
-    {int perWeek = 3, bool syncConfigured = false}) {
+    {int perWeek = 3, Map<String, DateTime> snoozed = const {}, DateTime? lastAdvice}) {
   final result = <Task>[];
   if (workouts.isEmpty) return result;
+  bool off(String id) => snoozed[id]?.isAfter(now) ?? false;
 
   // Up next: the workout trained longest ago (never trained first).
   DateTime lastOf(Workout w) => sessions.where((s) => s.workoutId == w.id).firstOrNull?.date ?? DateTime(0);
   final upNext = [...workouts]..sort((a, b) => lastOf(a).compareTo(lastOf(b)));
 
   // The fix for a group: one more set of an exercise already planned for it, else add the remedy.
-  final planned = <String>{};
-  void fix(String id, TaskKind kind, String title, String why, List<String> specific, String add) {
+  Task fix(String id, TaskKind kind, String title, String why, List<String> specific, String add) {
     for (final w in upNext) {
       for (final name in specific) {
         if (w.exercises.any((e) => e.name == name)) {
-          if (!planned.add(name)) return;
-          result.add(Task(id, kind, title, '1 Satz $name mehr in ${w.name}. $why',
-              workout: w, exercise: name, addSet: true));
-          return;
+          return Task(id, kind, title, '1 Satz $name mehr in ${w.name}. $why', workout: w, exercise: name, addSet: true);
         }
       }
     }
-    if (!planned.add(add)) return;
     final w = upNext.first;
-    result.add(Task(id, kind, title, '$add in ${w.name} aufnehmen. $why', workout: w, exercise: add));
+    return Task(id, kind, title, '$add in ${w.name} aufnehmen. $why', workout: w, exercise: add);
   }
 
-  final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 28) s];
-  if (recent.isNotEmpty) {
+  final baseline = sessions.length >= baselineTrainings && now.difference(sessions.last.date).inDays >= 14;
+  if (baseline && (lastAdvice == null || now.difference(lastAdvice) >= advicePause)) {
+    // Candidates with how far off they are; the worst one not put off becomes the advice.
+    final candidates = <(double, Task Function())>[];
+    final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 28) s];
     for (final b in balances(recent, weeks: 4)) {
       final lagging = b.lagging;
-      if (lagging == null) continue;
-      final (specific, add) = _remedies[lagging] ?? (const <String>[], '');
-      if (add.isEmpty) continue;
-      final pct = '${(b.ratio * 100).floor()} %';
-      fix('balance:${b.pair.name}', TaskKind.balance, '$lagging stärken',
-          '${b.title}: ${b.b} bei $pct, Richtwert ${b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %'}.',
-          specific, add);
+      if (lagging == null || !_remedies.containsKey(lagging)) continue;
+      final (specific, add) = _remedies[lagging]!;
+      final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
+      final range = b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %';
+      candidates.add((
+        gap,
+        () => fix('balance:${b.pair.name}', TaskKind.balance, '$lagging stärken',
+            '${b.title}: ${b.b} bei ${(b.ratio * 100).floor()} %, Richtwert $range.', specific, add),
+      ));
     }
-    // Muscles without a set in four weeks, once there's a bit of training to judge by.
-    if (recent.length >= 3) {
-      final sets = setsPerSingleMuscle(recent);
-      for (final m in taskMuscles) {
-        if (sets[m]! > 0) continue;
-        final add = _forMuscle[m]!;
-        fix('untrained:${m.name}', TaskKind.untrained, '${m.label} trainieren', 'Seit 4 Wochen kein Satz.', [add], add);
-      }
+    // Worst first; on a tie the order of the pairs stays.
+    final ranked = [for (final (i, c) in candidates.indexed) (i, c)]
+      ..sort((a, b) => b.$2.$1 != a.$2.$1 ? b.$2.$1.compareTo(a.$2.$1) : a.$1.compareTo(b.$1));
+    for (final (_, (_, make)) in ranked) {
+      final task = make();
+      if (off(task.id)) continue;
+      result.add(task);
+      break;
     }
   }
 
@@ -133,15 +124,6 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
         'Für dein Wochenziel von $perWeek, ${daysLeft == 1 ? 'heute ist der letzte Tag' : 'noch $daysLeft Tage'}.'));
   }
 
-  // Body weight: for strength relative to it, and for the AI.
-  if (sessions.length >= 3) {
-    final last = sessions.where((s) => s.bodyWeight != null).firstOrNull;
-    if (last == null || now.difference(last.date).inDays > 30) {
-      result.add(Task('bodyweight', TaskKind.bodyWeight, 'Körpergewicht eintragen',
-          last == null ? 'Noch nie eingetragen. Damit wird Kraft vergleichbar.' : 'Zuletzt vor ${now.difference(last.date).inDays} Tagen.'));
-    }
-  }
-
   // Own exercises without known muscles don't count in the muscle map and the balance.
   for (final w in workouts) {
     for (final e in w.exercises) {
@@ -151,11 +133,11 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
     }
   }
 
-  if (!syncConfigured && sessions.length >= 5) {
-    result.add(const Task('sync', TaskKind.sync, 'Daten für deine KI',
-        'Mit dem GitHub-Sync liegen deine Trainings immer aktuell dort, wo deine KI sie lesen kann.'));
+  // Body weight, only for those who track it and haven't for a month.
+  if (sessions.where((s) => s.bodyWeight != null).firstOrNull case final last? when now.difference(last.date).inDays > 30) {
+    result.add(Task('bodyweight', TaskKind.bodyWeight, 'Körpergewicht eintragen', 'Zuletzt vor ${now.difference(last.date).inDays} Tagen.'));
   }
-  return result;
+  return [for (final t in result) if (!off(t.id)) t];
 }
 
 /// Tasks put off: id → until when, kept in the preferences.
@@ -168,37 +150,40 @@ Map<String, DateTime> get snoozedTasks {
   }
 }
 
-Future<void> snoozeTask(String id, {int days = 14}) {
+/// Puts a task off. For training advice this also starts the pause before the next one.
+Future<void> snoozeTask(String id, {int days = 14}) async {
   final now = DateTime.now();
   final map = {...snoozedTasks}..removeWhere((_, until) => until.isBefore(now));
   map[id] = now.add(Duration(days: days));
-  return prefs.setString('tasks.snoozed', jsonEncode({for (final e in map.entries) e.key: e.value.toIso8601String()}));
+  await prefs.setString('tasks.snoozed', jsonEncode({for (final e in map.entries) e.key: e.value.toIso8601String()}));
+  if (_isAdvice(id)) await prefs.setString('tasks.lastAdvice', now.toIso8601String());
 }
 
-/// The open tasks right now, without those put off.
-List<Task> openTasks() {
-  final now = DateTime.now();
-  final snoozed = snoozedTasks;
-  return [
-    for (final t in tasks(store.sessions, store.workouts, now, perWeek: weeklyGoal.value, syncConfigured: sync.configured))
-      if (!(snoozed[t.id]?.isAfter(now) ?? false)) t,
-  ];
+/// Brings a task back (after an undo), along with the advice it started the pause for.
+Future<void> unsnoozeTask(String id) async {
+  final map = {...snoozedTasks}..remove(id);
+  await prefs.setString('tasks.snoozed', jsonEncode({for (final e in map.entries) e.key: e.value.toIso8601String()}));
+  if (_isAdvice(id)) await prefs.remove('tasks.lastAdvice');
 }
+
+/// The open tasks right now.
+List<Task> openTasks() => tasks(store.sessions, store.workouts, DateTime.now(),
+    perWeek: weeklyGoal.value,
+    snoozed: snoozedTasks,
+    lastAdvice: DateTime.tryParse(prefs.getString('tasks.lastAdvice') ?? ''));
 
 const _icons = {
   TaskKind.balance: Icons.balance,
-  TaskKind.untrained: Icons.accessibility_new,
   TaskKind.week: Icons.event_available_outlined,
   TaskKind.bodyWeight: Icons.monitor_weight_outlined,
   TaskKind.muscles: Icons.help_outline,
-  TaskKind.sync: Icons.cloud_upload_outlined,
 };
 
 /// Runs a task's fix. Changes to a workout can be undone from the snackbar.
 Future<void> runTask(BuildContext context, Task t) async {
   final messenger = ScaffoldMessenger.of(context);
   switch (t.kind) {
-    case TaskKind.balance || TaskKind.untrained:
+    case TaskKind.balance:
       final w = t.workout!, name = t.exercise!;
       final before = w.copy();
       final changed = w.copy();
@@ -212,10 +197,18 @@ Future<void> runTask(BuildContext context, Task t) async {
         changed.exercises.add(knownExercise(name));
       }
       await store.saveWorkout(changed);
+      // The numbers only move after a few trainings: until then the advice is done.
+      await snoozeTask(t.id, days: 28);
       messenger.showSnackBar(SnackBar(
         content: Text(t.addSet ? '$name in ${w.name}: jetzt ${changed.exercises.firstWhere((e) => e.name == name).sets} Sätze'
             : '$name zu ${w.name} hinzugefügt'),
-        action: SnackBarAction(label: 'Rückgängig', onPressed: () => store.saveWorkout(before)),
+        action: SnackBarAction(
+          label: 'Rückgängig',
+          onPressed: () async {
+            await unsnoozeTask(t.id);
+            await store.saveWorkout(before); // also redraws the task card
+          },
+        ),
       ));
     case TaskKind.bodyWeight:
       if (store.sessions.firstOrNull case final s?) {
@@ -231,8 +224,6 @@ Future<void> runTask(BuildContext context, Task t) async {
       );
       if (result == null) return;
       await store.saveWorkout(w.copy()..exercises[i] = result);
-    case TaskKind.sync:
-      homeTab.value = 3;
     case TaskKind.week:
       break;
   }
@@ -315,6 +306,11 @@ class TasksCard extends StatefulWidget {
 class _TasksCardState extends State<TasksCard> {
   @override
   Widget build(BuildContext context) {
+    // Redrawn on every change of the data, e.g. an undo from the snackbar.
+    return ListenableBuilder(listenable: store, builder: (context, _) => card(context));
+  }
+
+  Widget card(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     // A bug here must not take the home screen down with it (a release build shows only grey).
     final List<Task> all;
