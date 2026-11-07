@@ -138,12 +138,12 @@ class _HomeState extends State<Home> {
           actions: [
             Streak(
               weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
-              onTap: () => tab = 2, // history highlights the streak weeks
+              onTap: () => tab = 1, // history highlights the streak weeks
             ),
           ],
         ),
         // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
-        body: [WorkoutList(), StatsPage(), HistoryList(), SyncSettings()][tab],
+        body: [WorkoutList(), HistoryList(), StatsPage(), SyncSettings()][tab],
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -154,8 +154,8 @@ class _HomeState extends State<Home> {
               onDestinationSelected: (i) => tab = i,
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-                NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
                 NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
+                NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
                 NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Einstellungen'),
               ],
             ),

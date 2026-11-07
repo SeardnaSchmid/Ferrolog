@@ -23,6 +23,9 @@ class _SessionPageState extends State<SessionPage> {
   Session get s => widget.session;
   DateTime? lastSetAt, pausedAt;
   ExerciseLog? touched; // highlighted: the exercise last logged or edited
+
+  /// One key per exercise card, to scroll a card back into view.
+  final cardKeys = <ExerciseLog, GlobalKey>{};
   int restTarget = 0;
   bool alerted = false;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -78,7 +81,19 @@ class _SessionPageState extends State<SessionPage> {
       .where((e) => e.name == log.name)
       .firstOrNull;
 
+  /// Keeps [log]'s card in view once the next frame is laid out: the rest timer appearing at the
+  /// bottom shrinks the list and would otherwise cover a card near the end.
+  void reveal(ExerciseLog log) => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final card = cardKeys[log]?.currentContext;
+        if (card == null || !card.mounted) return;
+        Scrollable.ensureVisible(card,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+      });
+
   void tapSet(ExerciseLog log, int i) {
+    reveal(log);
     if (log.cardio) {
       // Cardio stopwatch: start, stop (the minutes are logged, a distance goal counts as reached),
       // tap again to undo. No rest timer.
@@ -379,7 +394,11 @@ class _SessionPageState extends State<SessionPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               children: [
-                for (final log in s.exercises) _exerciseCard(log, log == current, c, muted),
+                for (final log in s.exercises)
+                  KeyedSubtree(
+                    key: cardKeys.putIfAbsent(log, GlobalKey.new),
+                    child: _exerciseCard(log, log == current, c, muted),
+                  ),
               ],
             ),
           ),
