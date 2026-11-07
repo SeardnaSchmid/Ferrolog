@@ -77,4 +77,66 @@ void main() {
     expect(find.text('Alles geschafft! 💪'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('a set logs its time; the page estimates what is left', (tester) async {
+    // The store from the tests above; their trainings have no timestamps.
+    final w = Workout(name: 'Push A', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5, restSeconds: 120),
+      Exercise(name: 'Plank', weight: 0, sets: 3, reps: 30, restSeconds: 60, timed: true),
+    ]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.pump();
+
+    // Bench: 60 s + 3 warm-ups + 3 × 5 × 4.5 s + 2 × 120 s ≈ 9 Min; plank 30 s + 90 s + 120 s = 4 Min.
+    expect(find.textContaining('≈ 9 Min'), findsOneWidget);
+    expect(find.textContaining('≈ 4 Min'), findsOneWidget);
+    expect(find.textContaining('noch ≈ 13 Min · fertig gegen'), findsOneWidget);
+
+    await tester.tap(find.text('–/5', findRichText: true).first);
+    await tester.pump();
+    expect(s.exercises.first.doneAt.first, isNotNull);
+    expect(find.textContaining('noch ≈ 9 Min'), findsOneWidget, reason: 'two sets of bench left plus the plank');
+    await tester.tap(find.text('5/5', findRichText: true).first); // fewer reps keep the time
+    expect(s.exercises.first.doneAt.first, isNotNull);
+  });
+
+  testWidgets('timed set: a tap starts the countdown, at 0 the set is done and the rest starts', (tester) async {
+    prefs = await SharedPreferences.getInstance(); // the end signal reads its settings
+    final w = Workout(name: 'Carry', exercises: [
+      Exercise(name: 'Farmers Walk', weight: 24, sets: 2, reps: 1, restSeconds: 90, timed: true),
+    ]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    final log = s.exercises.single;
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.pump();
+    expect(find.textContaining('2×1 s'), findsOneWidget);
+    expect(find.text('24 kg', findRichText: true), findsNWidgets(2), reason: 'weight per set, as usual');
+
+    await tester.tap(find.text('–/1 s', findRichText: true).first);
+    await tester.pump();
+    expect(find.text('1/1 s', findRichText: true), findsOneWidget, reason: 'counting down');
+    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 1100)));
+    await tester.pump(const Duration(seconds: 1));
+    expect((log.reps.first, log.doneAt.first != null), (1, true));
+    expect(find.textContaining('PAUSE'), findsOneWidget);
+
+    // Stopped right away: nothing held, nothing logged.
+    await tester.tap(find.text('–/1 s', findRichText: true).first);
+    await tester.pump();
+    await tester.tap(find.text('1/1 s', findRichText: true).last);
+    await tester.pump();
+    expect(log.reps.last, isNull);
+  });
 }
+

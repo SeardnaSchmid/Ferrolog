@@ -33,4 +33,15 @@ void main() {
     expect(find.byType(InsightCard), findsNothing);
     expect(find.text('Aufgaben'), findsNothing);
   });
+
+  testWidgets('the running training shows what is left on the home screen', (tester) async {
+    final w = Workout(name: 'Push B', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5)]);
+    await store.saveWorkout(w);
+    await store.saveActive(Session.start(w));
+    await tester.pumpWidget(const MaterialApp(home: Home()));
+    await tester.pump();
+    expect(find.textContaining('noch ≈'), findsOneWidget);
+    await store.saveActive(null);
+  });
 }
+

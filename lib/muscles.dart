@@ -70,6 +70,69 @@ final Map<String, Muscles> _catalogue = {
     ('Face Pulls', [Muscle.shoulders], [Muscle.traps, Muscle.middleBack]),
     ('Butterfly', [Muscle.chest], [Muscle.shoulders]),
     ('Crunches', [Muscle.abdominals], <Muscle>[]),
+    ('Enges Bankdrücken', [Muscle.triceps, Muscle.chest], [Muscle.shoulders]),
+    ('Negativbankdrücken', [Muscle.chest], [Muscle.triceps, Muscle.shoulders]),
+    ('Kurzhantel-Schrägbankdrücken', [Muscle.chest, Muscle.shoulders], [Muscle.triceps]),
+    ('Kurzhantel-Fliegende', [Muscle.chest], [Muscle.shoulders]),
+    ('Kabelzug-Crossover', [Muscle.chest], [Muscle.shoulders]),
+    ('Brustpresse', [Muscle.chest], [Muscle.shoulders, Muscle.triceps]),
+    ('Liegestütze', [Muscle.chest], [Muscle.triceps, Muscle.shoulders, Muscle.abdominals]),
+    ('Überzüge', [Muscle.chest, Muscle.lats], [Muscle.triceps]),
+    ('Arnold Press', [Muscle.shoulders], [Muscle.triceps]),
+    ('Push Press', [Muscle.shoulders], [Muscle.triceps, Muscle.quadriceps, Muscle.glutes]),
+    ('Maschinen-Schulterdrücken', [Muscle.shoulders], [Muscle.triceps]),
+    ('Frontheben', [Muscle.shoulders], <Muscle>[]),
+    ('Reverse Butterfly', [Muscle.shoulders], [Muscle.middleBack, Muscle.traps]),
+    ('Aufrechtes Rudern', [Muscle.shoulders, Muscle.traps], [Muscle.biceps]),
+    ('Shrugs', [Muscle.traps], [Muscle.forearms]),
+    ('T-Bar-Rudern', [Muscle.middleBack, Muscle.lats], [Muscle.biceps, Muscle.lowerBack]),
+    ('Maschinenrudern', [Muscle.middleBack, Muscle.lats], [Muscle.biceps]),
+    ('Umgekehrtes Rudern', [Muscle.middleBack, Muscle.lats], [Muscle.biceps]),
+    ('Klimmzüge im Untergriff', [Muscle.lats, Muscle.biceps], [Muscle.middleBack]),
+    ('Latzug eng', [Muscle.lats], [Muscle.biceps, Muscle.middleBack]),
+    ('Überzüge am Kabel', [Muscle.lats], [Muscle.triceps]),
+    ('Rückenstrecker', [Muscle.lowerBack], [Muscle.glutes, Muscle.hamstrings]),
+    ('Good Mornings', [Muscle.hamstrings, Muscle.lowerBack], [Muscle.glutes]),
+    ('Rack Pulls', [Muscle.lowerBack, Muscle.traps], [Muscle.glutes, Muscle.hamstrings, Muscle.forearms]),
+    ('Frontkniebeuge', [Muscle.quadriceps], [Muscle.glutes, Muscle.abdominals]),
+    ('Goblet Squat', [Muscle.quadriceps, Muscle.glutes], [Muscle.abdominals]),
+    ('Hackenschmidt-Kniebeuge', [Muscle.quadriceps], [Muscle.glutes]),
+    ('Sumo-Kreuzheben', [Muscle.glutes, Muscle.adductors, Muscle.lowerBack], [Muscle.quadriceps, Muscle.hamstrings, Muscle.traps, Muscle.forearms]),
+    ('Trap-Bar-Kreuzheben', [Muscle.quadriceps, Muscle.glutes, Muscle.lowerBack], [Muscle.hamstrings, Muscle.traps, Muscle.forearms]),
+    ('Kreuzheben mit gestreckten Beinen', [Muscle.hamstrings], [Muscle.lowerBack, Muscle.glutes]),
+    ('Einbeiniges Kreuzheben', [Muscle.hamstrings, Muscle.glutes], [Muscle.lowerBack]),
+    ('Step-ups', [Muscle.quadriceps, Muscle.glutes], [Muscle.hamstrings]),
+    ('Ausfallschritte gehend', [Muscle.quadriceps, Muscle.glutes], [Muscle.hamstrings]),
+    ('Adduktorenmaschine', [Muscle.adductors], <Muscle>[]),
+    ('Abduktorenmaschine', [Muscle.abductors], [Muscle.glutes]),
+    ('Wadenheben sitzend', [Muscle.calves], <Muscle>[]),
+    ('SZ-Curls', [Muscle.biceps], [Muscle.forearms]),
+    ('Langhantelcurls', [Muscle.biceps], [Muscle.forearms]),
+    ('Konzentrationscurls', [Muscle.biceps], <Muscle>[]),
+    ('Scottcurls', [Muscle.biceps], <Muscle>[]),
+    ('Kabelcurls', [Muscle.biceps], [Muscle.forearms]),
+    ('Trizeps-Überkopfdrücken', [Muscle.triceps], <Muscle>[]),
+    ('Trizeps-Kickbacks', [Muscle.triceps], <Muscle>[]),
+    ('Bankdips', [Muscle.triceps], [Muscle.chest, Muscle.shoulders]),
+    ('Handgelenkcurls', [Muscle.forearms], <Muscle>[]),
+    ('Plank', [Muscle.abdominals], <Muscle>[]),
+    ('Seitstütz', [Muscle.abdominals], <Muscle>[]),
+    ('Beinheben hängend', [Muscle.abdominals], <Muscle>[]),
+    ('Beinheben liegend', [Muscle.abdominals], <Muscle>[]),
+    ('Sit-ups', [Muscle.abdominals], <Muscle>[]),
+    ('Russian Twists', [Muscle.abdominals], <Muscle>[]),
+    ('Kabel-Crunches', [Muscle.abdominals], <Muscle>[]),
+    ('Ab Wheel', [Muscle.abdominals], [Muscle.lats, Muscle.shoulders]),
+    ('Pallof Press', [Muscle.abdominals], <Muscle>[]),
+    ('Dead Bug', [Muscle.abdominals], <Muscle>[]),
+    ('Farmers Walk', [Muscle.forearms, Muscle.traps], [Muscle.abdominals, Muscle.quadriceps, Muscle.glutes, Muscle.lowerBack]),
+    ('Suitcase Carry', [Muscle.abdominals, Muscle.forearms], [Muscle.traps]),
+    ('Kettlebell Swings', [Muscle.glutes, Muscle.hamstrings], [Muscle.lowerBack, Muscle.shoulders, Muscle.abdominals]),
+    ('Turkish Get-up', [Muscle.shoulders, Muscle.abdominals], [Muscle.glutes, Muscle.triceps]),
+    ('Thruster', [Muscle.quadriceps, Muscle.shoulders], [Muscle.glutes, Muscle.triceps]),
+    ('Burpees', [Muscle.quadriceps, Muscle.chest], [Muscle.shoulders, Muscle.triceps, Muscle.abdominals]),
+    ('Umsetzen', [Muscle.glutes, Muscle.hamstrings, Muscle.traps], [Muscle.quadriceps, Muscle.shoulders, Muscle.lowerBack, Muscle.calves]),
+    ('Reißen', [Muscle.glutes, Muscle.hamstrings, Muscle.shoulders], [Muscle.quadriceps, Muscle.traps, Muscle.lowerBack, Muscle.triceps]),
   ])
     for (final n in [name, ...?exerciseAliases[name]]) searchKey(n): (_bits(p), _bits(s)),
 };
@@ -194,13 +257,14 @@ class Balance {
   String? get lagging => ratio < low ? bGroup : ratio > high ? aGroup : null;
 }
 
-// Lifts compared by strength, matched on the name; dumbbells (weight per hand), split and front squats
-// and inclines don't compare. Other exercises still count in the pairs by sets.
+// Lifts compared by strength, matched on the name; dumbbells (weight per hand), split and front squats,
+// inclines, declines and machines don't compare. Other exercises still count in the pairs by sets.
 bool _press(String k) => (k.contains('bankdrueck') || k.contains('benchpress')) && !_odd(k);
 bool _row(String k) => (k.contains('rudern') || k.endsWith('row')) && !_odd(k) && !k.contains('aufrecht') && !k.contains('upright');
 bool _squat(String k) => (k.contains('kniebeuge') || k.contains('squat')) && !_odd(k);
 bool _hinge(String k) => (k.contains('kreuzheb') || k.contains('deadlift')) && !k.contains('rumaen') && !k.contains('romanian');
-bool _odd(String k) => const ['kurzhantel', 'dumbbell', 'schraeg', 'incline', 'split', 'bulgarian', 'front', 'goblet']
+bool _odd(String k) => const ['kurzhantel', 'dumbbell', 'schraeg', 'incline', 'split', 'bulgarian', 'front', 'goblet',
+      'negativ', 'decline', 'hack', 'maschine', 'machine', 'kabel', 'cable', 'tbar']
     .any(k.contains);
 
 /// Pairs that drift apart easily, from [sessions] (newest first) over [weeks]. Guide values:

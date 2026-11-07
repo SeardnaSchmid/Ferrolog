@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'main.dart';
 import 'model.dart';
 import 'recap.dart';
+import 'timing.dart';
 import 'units.dart';
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
@@ -24,6 +25,12 @@ class _SessionPageState extends State<SessionPage> {
   DateTime? lastSetAt, pausedAt;
   ExerciseLog? touched; // highlighted: the exercise last logged or edited
 
+  /// Estimates from the trainings before this one; they don't change while training.
+  final pace = currentPace();
+
+  /// A timed set being held right now, counting down to its target seconds.
+  ({ExerciseLog log, int set, DateTime start})? hold;
+
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
   int restTarget = 0;
@@ -34,6 +41,12 @@ class _SessionPageState extends State<SessionPage> {
       ticker.cancel();
       if (mounted) Navigator.pop(context);
       return;
+    }
+    // Held long enough: the set is done, with the same signal as the end of a rest.
+    if (hold case final h? when DateTime.now().difference(h.start).inSeconds >= h.log.targets[h.set]) {
+      setState(endHold);
+      store.saveActive(s);
+      restAlert();
     }
     // Rest over: sound and/or vibration once, as configured in the settings.
     if (lastSetAt != null && pausedAt == null && !alerted && restLeft <= 0) {
@@ -92,8 +105,41 @@ class _SessionPageState extends State<SessionPage> {
             alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
       });
 
+  /// Ends the hold: the seconds held (the target once reached) are the set's result, then the rest runs.
+  void endHold() {
+    final h = hold!;
+    hold = null;
+    final target = h.log.targets[h.set];
+    final held = min(target, DateTime.now().difference(h.start).inSeconds);
+    h.log.reps[h.set] = held >= 1 ? held : null;
+    h.log.doneAt[h.set] = held >= 1 ? DateTime.now() : null;
+    if (held < 1) return;
+    lastSetAt = DateTime.now();
+    pausedAt = null;
+    alerted = false;
+    final plan = planOf(h.log);
+    restTarget = (held < target ? plan?.failRestSeconds : null) ?? plan?.restSeconds ?? 120;
+  }
+
   void tapSet(ExerciseLog log, int i) {
     reveal(log);
+    if (log.timed) {
+      // Timed set: start the countdown, tap again to stop early; a done set goes back to empty.
+      setState(() {
+        touched = log;
+        if (hold case final h? when h.log == log && h.set == i) {
+          endHold();
+        } else if (log.reps[i] != null) {
+          log.reps[i] = log.doneAt[i] = null;
+        } else {
+          if (hold != null) endHold();
+          hold = (log: log, set: i, start: DateTime.now());
+          lastSetAt = null; // the rest is over once the next hold starts
+        }
+      });
+      store.saveActive(s);
+      return;
+    }
     if (log.cardio) {
       // Cardio stopwatch: start, stop (the minutes are logged, a distance goal counts as reached),
       // tap again to undo. No rest timer.
@@ -101,8 +147,10 @@ class _SessionPageState extends State<SessionPage> {
         touched = log;
         if (log.reps[0] != null) {
           log.reps[0] = log.km = null;
+          log.doneAt[0] = null;
         } else if (log.startedAt case final start?) {
           log.reps[0] = max(1, (DateTime.now().difference(start).inSeconds / 60).round());
+          log.doneAt[0] = DateTime.now();
           log.km ??= log.targetKm;
           log.startedAt = null;
         } else {
@@ -117,6 +165,9 @@ class _SessionPageState extends State<SessionPage> {
       final r = log.reps[i], target = log.targets[i];
       // First tap: the goal (top of the range, if any), then one rep less per tap, then empty again.
       log.reps[i] = r == null ? log.maxReps ?? target : (r > 1 ? r - 1 : null);
+      // Logged at the first tap; fewer reps later keep the time, undoing the set drops it.
+      if (r == null) log.doneAt[i] = DateTime.now();
+      if (log.reps[i] == null) log.doneAt[i] = null;
       if (log.reps[i] case final done?) {
         lastSetAt = DateTime.now();
         pausedAt = null;
@@ -222,6 +273,7 @@ class _SessionPageState extends State<SessionPage> {
       log.reps[0] = m != null && m > 0 ? m : null;
       log.km = log.reps[0] == null ? null : parseDistance(distance.text);
       if (log.reps[0] != null) log.startedAt = null;
+      log.doneAt[0] = log.reps[0] == null ? null : log.doneAt[0] ?? DateTime.now();
     });
     store.saveActive(s);
   }
@@ -343,6 +395,7 @@ class _SessionPageState extends State<SessionPage> {
     final total = s.exercises.fold(0, (n, e) => n + e.reps.length);
     // Highlight the exercise last touched; before that, the first one with open sets.
     final current = touched ?? s.exercises.where((e) => e.setsDone < e.reps.length).firstOrNull;
+    final leftText = leftLabel(s, pace, DateTime.now());
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 104,
@@ -388,6 +441,13 @@ class _SessionPageState extends State<SessionPage> {
                 borderRadius: BorderRadius.circular(3),
                 backgroundColor: c.surface,
               ),
+              if (leftText != null) ...[
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(leftText, style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+                ),
+              ],
             ]),
           ),
           Expanded(
@@ -495,8 +555,12 @@ class _SessionPageState extends State<SessionPage> {
                       log.cardio
                           ? 'Cardio · Ziel ${cardioLabel(log.targetReps, log.targetKm)}'
                           : [
-                              setsLabel(log.targets, log.maxReps),
+                              setsLabel(log.targets, log.maxReps, seconds: log.timed),
                               if (planOf(log) case final p?) 'Pause ${clock(p.restSeconds)}',
+                              if (log.setsDone == log.reps.length ? measured(s, log) : null case final m?)
+                                takenLabel(m.total)
+                              else if (log.setsDone == 0)
+                                aboutLabel(pace.of(shapeOfLog(log, planOf(log)))),
                             ].join(' · '),
                       style: muted,
                     ),
@@ -523,6 +587,13 @@ class _SessionPageState extends State<SessionPage> {
                           reps: r,
                           target: log.targets[i],
                           targetMax: log.maxReps,
+                          repsUnit: log.timed ? ' s' : '',
+                          // Counting down while held.
+                          live: switch (hold) {
+                            final h? when h.log == log && h.set == i =>
+                              '${max(0, log.targets[i] - DateTime.now().difference(h.start).inSeconds)}',
+                            _ => null,
+                          },
                           // No weight: reps only, the weight can still be added by tapping.
                           weight: log.weights[i] == 0 ? '–' : weightNum(log.weights[i]),
                           weightUnit: log.weights[i] == 0 ? '' : null,

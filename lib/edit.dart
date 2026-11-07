@@ -274,6 +274,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       e
         ..name = name
         ..cardio = x.cardio
+        ..timed = x.timed
         ..km = x.km
         ..sets = x.sets
         ..reps = x.reps
@@ -317,6 +318,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..maxReps = null
         ..failRestSeconds = null
         ..weight = 0
+        ..timed = false
         ..reps = byDistance ? 0 : max(1, e.reps)
         ..km = byDistance ? e.km ?? 5 : null
         ..up = false
@@ -327,7 +329,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       ..sets = rs.length
       ..reps = rs.first
       ..setReps = rs.toSet().length == 1 ? null : List.of(rs)
-      ..maxReps = maxReps == null ? null : max(maxReps!, rs.reduce(max))
+      ..maxReps = maxReps == null || e.timed ? null : max(maxReps!, rs.reduce(max))
       ..weight = noWeight ? 0 : ws.reduce(max)
       ..setWeights = noWeight || ws.toSet().length == 1 ? null : List.of(ws);
     if (noWeight) {
@@ -359,8 +361,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             const SizedBox(height: 16),
             Row(children: [
               Expanded(
-                child: BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
-                    () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1))),
+                child: e.timed
+                    ? BigStepper('Sekunden', '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
+                        () => setSheet(() => r = min(600, r ~/ 5 * 5 + 5)))
+                    : BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
+                        () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1))),
               ),
               if (!noWeight) ...[
                 const SizedBox(width: 12),
@@ -591,6 +596,22 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             selected: {noWeight},
             onSelectionChanged: (v) => setState(() => noWeight = v.single),
           ),
+          const SizedBox(height: 8),
+          // Held or carried for a time (plank, farmer's walk): seconds instead of reps.
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, icon: Icon(Icons.repeat), label: Text('Wiederholungen')),
+              ButtonSegment(value: true, icon: Icon(Icons.timer_outlined), label: Text('Zeit')),
+            ],
+            selected: {e.timed},
+            onSelectionChanged: (v) => setState(() {
+              if (v.single == e.timed) return;
+              e.timed = v.single;
+              rs = List.filled(rs.length, e.timed ? 30 : 8);
+              if (e.timed) maxReps = null;
+            }),
+          ),
           const SizedBox(height: 18),
           Row(children: [
             const Expanded(child: Text('Sätze', style: TextStyle(fontWeight: FontWeight.w500))),
@@ -603,11 +624,17 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             return Wrap(spacing: 8, runSpacing: 8, children: [
               for (var i = 0; i < rs.length; i++)
                 _PlanTile(
-                    width: w, reps: rs[i], maxReps: maxReps, weight: noWeight ? null : ws[i], onTap: () => editSet(i)),
+                    width: w,
+                    reps: rs[i],
+                    maxReps: maxReps,
+                    seconds: e.timed,
+                    weight: noWeight ? null : ws[i],
+                    onTap: () => editSet(i)),
               if (rs.length < 12) SizedBox(width: w, child: DashedAddButton('Satz', addSet, height: noWeight ? 56 : 94)),
             ]);
           }),
           const SizedBox(height: 10),
+          if (!e.timed)
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Wiederholungs-Spanne'),
@@ -858,7 +885,7 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
     return Exercise.cardio(name: name, minutes: minutes, km: km);
   } else {
     final d = exerciseCatalogue[name];
-    e = Exercise(name: name);
+    e = Exercise(name: name, timed: timedExercises.contains(name));
     if (d != null) {
       e
         ..sets = d.$1
@@ -973,9 +1000,16 @@ class _PlanTile extends StatelessWidget {
   final double width;
   final int reps;
   final int? maxReps;
+  final bool seconds;
   final double? weight;
   final VoidCallback onTap;
-  const _PlanTile({required this.width, required this.reps, required this.maxReps, required this.weight, required this.onTap});
+  const _PlanTile(
+      {required this.width,
+      required this.reps,
+      required this.maxReps,
+      this.seconds = false,
+      required this.weight,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1033,7 @@ class _PlanTile extends StatelessWidget {
                   TextSpan(text: '$reps', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                   if (maxReps case final top? when top > reps)
                     TextSpan(text: '–$top', style: TextStyle(fontSize: 16, color: c.onSurfaceVariant)),
+                  if (seconds) TextSpan(text: ' s', style: TextStyle(fontSize: 16, color: c.onSurfaceVariant)),
                 ]), style: const TextStyle(fontFeatures: figures)),
               ),
               if (w != null) ...[

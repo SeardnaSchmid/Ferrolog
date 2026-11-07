@@ -11,7 +11,7 @@ Both serve `build/web`, so run `flutter build web` first. Browser storage is per
 
 The demo data lives only in [tool/demo_server.py](tool/demo_server.py), never in the app or a release build:
 
-- `demo_data()` generates 1.5 years of StrongLifts 5x5 up to a training this morning, so every period (30 days to all) has data and the insight card has a "today" fact. It includes accessories, an exercise added three weeks ago, cardio, holidays, sick weeks, missed reps, plateaus, deloads, moods, tags and body weight. Rows lag behind the bench press on purpose, so the balance check has something to flag.
+- `demo_data()` generates 1.5 years of StrongLifts 5x5 up to a training this morning, so every period (30 days to all) has data and the insight card has a "today" fact. It includes accessories, an exercise added three weeks ago, cardio, holidays, sick weeks, missed reps, plateaus, deloads, moods, tags and body weight. Rows lag behind the bench press on purpose, so the balance check has something to flag. The last two months have a timestamp per set (`doneAt`), older trainings don't, like real data from before timing was recorded.
 - The server injects a script into `index.html` that writes this data into `localStorage` (`flutter.ferrolog`, unit kg) on the first visit.
 - Open `http://localhost:8091/?reset` to reseed.
 - After editing the script, restart the `web-demo` server: it builds the data when a request comes in, but runs whatever code was loaded at start.

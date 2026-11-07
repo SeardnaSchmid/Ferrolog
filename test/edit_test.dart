@@ -118,4 +118,44 @@ void main() {
     final e = knownExercise('Bankdrücken'); // 50 kg, +2,5 kg
     expect((weightNum(e.weight), weightNum(e.increment)), ('110', '5'));
   });
+
+  testWidgets('timed exercises: seconds with or without weight', (tester) async {
+    tester.view.physicalSize = const Size(500, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Exercise? result;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => result =
+              await Navigator.push<Exercise>(context, MaterialPageRoute(builder: (_) => const ExerciseEditor(null))),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'farmer');
+    await tester.pump();
+    await tester.tap(find.text('Farmers Walk'));
+    await tester.pump();
+    expect(find.text('30 s', findRichText: true), findsNWidgets(3), reason: 'catalogue: 3 × 30 s');
+    expect(find.text('Wiederholungs-Spanne'), findsNothing);
+
+    // Seconds in steps of 5 for every set.
+    await tester.tap(find.text('30 s', findRichText: true).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.widgetWithText(BigStepper, 'Sekunden'), matching: find.byIcon(Icons.add)));
+    await tester.tap(find.text('Alle Sätze'));
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hinzufügen'));
+    await tester.pumpAndSettle();
+    expect((result?.timed, result?.reps, result?.weight), (true, 35, 24.0));
+
+    // Switching back to reps.
+    final e = result!..timed = false;
+    expect(Exercise.fromJson(e.toJson()).timed, isFalse);
+  });
 }
+

@@ -47,7 +47,7 @@ List<(DateTime, int, int)> weeklySummary(List<Session> sessions, DateTime now, {
 /// Estimated one-rep max (Epley) from all sets: the average reps at the working weight, skipped
 /// sets counting 0. Missed reps lower it, so it shows how a training went, not just the plan.
 double estimated1rm(ExerciseLog log) {
-  if (log.cardio || log.weight == 0 || log.reps.isEmpty) return 0;
+  if (log.cardio || log.timed || log.weight == 0 || log.reps.isEmpty) return 0;
   final avg = log.reps.fold(0, (n, r) => n + (r ?? 0)) / log.reps.length;
   return avg == 0 ? 0 : log.weight * (1 + avg / 30);
 }
@@ -123,6 +123,10 @@ class Exercise {
   bool cardio;
   double? km;
 
+  /// Held or carried for a time instead of repeated (plank, farmer's walk): [reps] are seconds, with or
+  /// without weight.
+  bool timed;
+
   Exercise({
     required this.name,
     this.weight = 20,
@@ -141,6 +145,7 @@ class Exercise {
     this.maxReps,
     this.cardio = false,
     this.km,
+    this.timed = false,
   });
 
   /// A cardio exercise with a distance goal ([km]) or else a duration goal ([minutes]).
@@ -155,7 +160,8 @@ class Exercise {
         failsToDeload = 3,
         fails = 0,
         restSeconds = 0,
-        cardio = true;
+        cardio = true,
+        timed = false;
 
   /// Next session's weights from what was lifted: up on success, down after enough misses in a row.
   void applyResult(ExerciseLog log) {
@@ -209,6 +215,7 @@ class Exercise {
         if (setReps != null) 'setReps': setReps,
         if (maxReps != null) 'maxReps': maxReps,
         if (cardio) 'type': 'cardio',
+        if (timed) 'type': 'timed',
         if (km != null) 'km': km,
       };
 
@@ -231,6 +238,7 @@ class Exercise {
         maxReps: j['maxReps'],
         cardio: j['type'] == 'cardio',
         km: (j['km'] as num?)?.toDouble(),
+        timed: j['type'] == 'timed',
       );
 }
 
@@ -279,8 +287,15 @@ class ExerciseLog {
   double? km;
   final double? targetKm;
 
+  /// Held or carried: [reps] and [targets] are seconds.
+  final bool timed;
+
   /// Cardio stopwatch: when it was started, while it runs.
   DateTime? startedAt;
+
+  /// When each set was logged, same length as [reps]; null = not done, or logged before this was
+  /// recorded. The base for how long an exercise takes, see timing.dart.
+  final List<DateTime?> doneAt;
 
   ExerciseLog({
     required this.name,
@@ -293,8 +308,11 @@ class ExerciseLog {
     this.cardio = false,
     this.km,
     this.targetKm,
+    this.timed = false,
     this.startedAt,
+    List<DateTime?>? doneAt,
   })  : weights = weights ?? List.filled(reps.length, weight),
+        doneAt = doneAt ?? List.filled(reps.length, null),
         targets = targets ?? List.filled(reps.length, targetReps);
 
   /// Target reps of the first set; for cardio the planned minutes.
@@ -307,7 +325,8 @@ class ExerciseLog {
       ? reps.first != null && (km ?? 0) >= targetKm!
       : [for (final (i, r) in reps.indexed) r != null && r >= targets[i]].every((ok) => ok);
   int get setsDone => reps.where((r) => r != null).length;
-  double get volume => [for (final (i, r) in reps.indexed) (r ?? 0) * weights[i]].fold(0, (a, b) => a + b);
+  /// Weight × reps; nothing for holds, whose seconds aren't reps.
+  double get volume => timed ? 0 : [for (final (i, r) in reps.indexed) (r ?? 0) * weights[i]].fold(0, (a, b) => a + b);
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -318,9 +337,11 @@ class ExerciseLog {
         if (maxReps != null) 'maxReps': maxReps,
         'reps': reps,
         if (cardio) 'type': 'cardio',
+        if (timed) 'type': 'timed',
         if (km != null) 'km': km,
         if (targetKm != null) 'targetKm': targetKm,
         if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+        if (doneAt.any((t) => t != null)) 'doneAt': [for (final t in doneAt) t?.toIso8601String()],
       };
 
   // Older data has only "weight"; it then applies to every set.
@@ -335,7 +356,9 @@ class ExerciseLog {
         cardio: j['type'] == 'cardio',
         km: (j['km'] as num?)?.toDouble(),
         targetKm: (j['targetKm'] as num?)?.toDouble(),
+        timed: j['type'] == 'timed',
         startedAt: j['startedAt'] == null ? null : DateTime.parse(j['startedAt']),
+        doneAt: j['doneAt'] == null ? null : [for (final t in j['doneAt']) t == null ? null : DateTime.parse(t)],
       );
 }
 
@@ -418,6 +441,7 @@ class Session {
               reps: List.filled(e.sets, null),
               cardio: e.cardio,
               targetKm: e.km,
+              timed: e.timed,
             ),
         ],
       );
@@ -504,6 +528,8 @@ class Store extends ChangeNotifier {
             'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
+            'type "timed" (held or carried, e.g. plank, farmer\'s walk): reps and targets are seconds, weight optional. '
+            'exercises[].doneAt = when each set was logged (null = not done or not recorded); date = start of the training. '
             'muscles = muscle groups the user set for an exercise (primary; secondary count half); other exercises '
             'use a built-in list.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
@@ -602,7 +628,7 @@ class Store extends ChangeNotifier {
 }
 
 /// Catalogue for the "add exercise" helper: name -> defaults (sets, reps, weight kg, increment kg, rest s).
-/// Bodyweight exercises start at 0 kg extra.
+/// Bodyweight exercises start at 0 kg extra; for [timedExercises] the reps are seconds.
 const exerciseCatalogue = <String, (int, int, double, double, int)>{
   'Kniebeuge': (3, 5, 60.0, 2.5, 180),
   'Kreuzheben': (1, 5, 80.0, 5.0, 240),
@@ -634,7 +660,73 @@ const exerciseCatalogue = <String, (int, int, double, double, int)>{
   'Face Pulls': (3, 15, 15.0, 2.5, 60),
   'Butterfly': (3, 12, 30.0, 5.0, 60),
   'Crunches': (3, 15, 0.0, 1.25, 60),
+  'Enges Bankdrücken': (3, 8, 40.0, 2.5, 120),
+  'Negativbankdrücken': (3, 8, 50.0, 2.5, 120),
+  'Kurzhantel-Schrägbankdrücken': (3, 10, 18.0, 2.0, 90),
+  'Kurzhantel-Fliegende': (3, 12, 10.0, 1.0, 60),
+  'Kabelzug-Crossover': (3, 12, 15.0, 2.5, 60),
+  'Brustpresse': (3, 10, 40.0, 5.0, 90),
+  'Liegestütze': (3, 15, 0.0, 1.25, 60),
+  'Überzüge': (3, 12, 16.0, 2.0, 60),
+  'Arnold Press': (3, 10, 12.0, 2.0, 90),
+  'Push Press': (3, 5, 40.0, 2.5, 150),
+  'Maschinen-Schulterdrücken': (3, 10, 30.0, 5.0, 90),
+  'Frontheben': (3, 12, 8.0, 1.0, 60),
+  'Reverse Butterfly': (3, 15, 20.0, 2.5, 60),
+  'Aufrechtes Rudern': (3, 10, 25.0, 2.5, 60),
+  'Shrugs': (3, 12, 60.0, 5.0, 60),
+  'T-Bar-Rudern': (3, 8, 40.0, 2.5, 120),
+  'Maschinenrudern': (3, 10, 40.0, 5.0, 90),
+  'Umgekehrtes Rudern': (3, 10, 0.0, 1.25, 90),
+  'Klimmzüge im Untergriff': (3, 8, 0.0, 1.25, 150),
+  'Latzug eng': (3, 10, 40.0, 5.0, 90),
+  'Überzüge am Kabel': (3, 12, 20.0, 2.5, 60),
+  'Rückenstrecker': (3, 12, 0.0, 2.5, 60),
+  'Good Mornings': (3, 8, 30.0, 2.5, 120),
+  'Rack Pulls': (3, 5, 100.0, 5.0, 180),
+  'Frontkniebeuge': (3, 5, 40.0, 2.5, 180),
+  'Goblet Squat': (3, 10, 16.0, 2.0, 90),
+  'Hackenschmidt-Kniebeuge': (3, 10, 40.0, 5.0, 120),
+  'Sumo-Kreuzheben': (1, 5, 80.0, 5.0, 240),
+  'Trap-Bar-Kreuzheben': (1, 5, 80.0, 5.0, 240),
+  'Kreuzheben mit gestreckten Beinen': (3, 8, 50.0, 2.5, 120),
+  'Einbeiniges Kreuzheben': (3, 10, 12.0, 2.0, 90),
+  'Step-ups': (3, 10, 12.0, 2.0, 90),
+  'Ausfallschritte gehend': (3, 12, 12.0, 2.0, 90),
+  'Adduktorenmaschine': (3, 12, 40.0, 5.0, 60),
+  'Abduktorenmaschine': (3, 12, 40.0, 5.0, 60),
+  'Wadenheben sitzend': (3, 15, 30.0, 5.0, 60),
+  'SZ-Curls': (3, 10, 20.0, 1.25, 60),
+  'Langhantelcurls': (3, 10, 25.0, 1.25, 60),
+  'Konzentrationscurls': (3, 12, 10.0, 1.0, 60),
+  'Scottcurls': (3, 10, 20.0, 1.25, 60),
+  'Kabelcurls': (3, 12, 15.0, 2.5, 60),
+  'Trizeps-Überkopfdrücken': (3, 12, 15.0, 1.25, 60),
+  'Trizeps-Kickbacks': (3, 12, 6.0, 1.0, 60),
+  'Bankdips': (3, 12, 0.0, 1.25, 60),
+  'Handgelenkcurls': (3, 15, 10.0, 1.0, 60),
+  'Plank': (3, 30, 0.0, 1.25, 60),
+  'Seitstütz': (3, 30, 0.0, 1.25, 60),
+  'Beinheben hängend': (3, 10, 0.0, 1.25, 60),
+  'Beinheben liegend': (3, 15, 0.0, 1.25, 60),
+  'Sit-ups': (3, 15, 0.0, 1.25, 60),
+  'Russian Twists': (3, 20, 5.0, 1.0, 60),
+  'Kabel-Crunches': (3, 12, 30.0, 2.5, 60),
+  'Ab Wheel': (3, 10, 0.0, 1.25, 60),
+  'Pallof Press': (3, 12, 10.0, 2.5, 60),
+  'Dead Bug': (3, 10, 0.0, 1.25, 60),
+  'Farmers Walk': (3, 30, 24.0, 2.0, 90),
+  'Suitcase Carry': (3, 30, 20.0, 2.0, 90),
+  'Kettlebell Swings': (3, 15, 16.0, 4.0, 90),
+  'Turkish Get-up': (3, 3, 12.0, 4.0, 90),
+  'Thruster': (3, 8, 30.0, 2.5, 120),
+  'Burpees': (3, 10, 0.0, 1.25, 60),
+  'Umsetzen': (3, 3, 40.0, 2.5, 150),
+  'Reißen': (3, 3, 30.0, 2.5, 150),
 };
+
+/// Held or carried for a time: their reps are seconds.
+const timedExercises = {'Plank', 'Seitstütz', 'Farmers Walk', 'Suitcase Carry'};
 
 /// Cardio catalogue: name -> default minutes and distance in km (null = no distance).
 /// Cardio defaults: (minutes, km); with km the goal is the distance.
@@ -661,7 +753,7 @@ const exerciseAliases = <String, List<String>>{
   'Langhantelrudern': ['Barbell Row', 'Bent Over Row', 'Pendlay Row'],
   'Kurzhantelrudern': ['Dumbbell Row', 'DB Row'],
   'Kabelrudern': ['Cable Row', 'Seated Row'],
-  'Klimmzüge': ['Pull-ups', 'Chin-ups', 'Pullups'],
+  'Klimmzüge': ['Pull-ups', 'Pullups', 'Pull Up'],
   'Latzug': ['Lat Pulldown', 'Pulldown'],
   'Dips': ['Dips'],
   'Beinpresse': ['Leg Press'],
@@ -671,6 +763,67 @@ const exerciseAliases = <String, List<String>>{
   'Beinbeuger': ['Leg Curl'],
   'Nordic Curls': ['Nordic Hamstring Curl', 'Nordics'],
   'Crunches': ['Crunch'],
+  'Enges Bankdrücken': ['Close Grip Bench Press', 'Close-Grip Bench'],
+  'Negativbankdrücken': ['Decline Bench Press', 'Decline Bench'],
+  'Kurzhantel-Schrägbankdrücken': ['Incline Dumbbell Press', 'Incline DB Press'],
+  'Kurzhantel-Fliegende': ['Dumbbell Fly', 'Dumbbell Flyes'],
+  'Kabelzug-Crossover': ['Cable Crossover', 'Cable Fly'],
+  'Brustpresse': ['Chest Press', 'Machine Chest Press'],
+  'Liegestütze': ['Push-ups', 'Pushups', 'Push Up'],
+  'Überzüge': ['Pullover', 'Dumbbell Pullover'],
+  'Arnold Press': ['Arnold-Drücken'],
+  'Maschinen-Schulterdrücken': ['Machine Shoulder Press'],
+  'Frontheben': ['Front Raise'],
+  'Reverse Butterfly': ['Reverse Fly', 'Rear Delt Fly', 'Vorgebeugtes Seitheben'],
+  'Aufrechtes Rudern': ['Upright Row'],
+  'Shrugs': ['Schulterheben', 'Shrug'],
+  'T-Bar-Rudern': ['T-Bar Row'],
+  'Maschinenrudern': ['Machine Row'],
+  'Umgekehrtes Rudern': ['Inverted Row', 'Australian Pull-up'],
+  'Klimmzüge im Untergriff': ['Chin-ups', 'Chinups', 'Chin Up'],
+  'Latzug eng': ['Close Grip Lat Pulldown', 'V-Bar Pulldown'],
+  'Überzüge am Kabel': ['Straight Arm Pulldown', 'Cable Pullover'],
+  'Rückenstrecker': ['Hyperextensions', 'Hyperextension', 'Back Extension'],
+  'Good Mornings': ['Good Morning'],
+  'Rack Pulls': ['Rack Pull'],
+  'Frontkniebeuge': ['Front Squat'],
+  'Goblet Squat': ['Kelchkniebeuge'],
+  'Hackenschmidt-Kniebeuge': ['Hack Squat'],
+  'Sumo-Kreuzheben': ['Sumo Deadlift'],
+  'Trap-Bar-Kreuzheben': ['Trap Bar Deadlift', 'Hex Bar Deadlift'],
+  'Kreuzheben mit gestreckten Beinen': ['Stiff Leg Deadlift', 'Stiff-Legged Deadlift'],
+  'Einbeiniges Kreuzheben': ['Single Leg Romanian Deadlift', 'Single-Leg RDL'],
+  'Step-ups': ['Aufsteiger', 'Step Up'],
+  'Ausfallschritte gehend': ['Walking Lunges'],
+  'Adduktorenmaschine': ['Hip Adduction', 'Adductor Machine'],
+  'Abduktorenmaschine': ['Hip Abduction', 'Abductor Machine'],
+  'Wadenheben sitzend': ['Seated Calf Raise'],
+  'SZ-Curls': ['EZ Bar Curl'],
+  'Langhantelcurls': ['Barbell Curl'],
+  'Konzentrationscurls': ['Concentration Curl'],
+  'Scottcurls': ['Preacher Curl'],
+  'Kabelcurls': ['Cable Curl'],
+  'Trizeps-Überkopfdrücken': ['Overhead Triceps Extension', 'Overhead Tricep Extension'],
+  'Trizeps-Kickbacks': ['Triceps Kickback', 'Kickbacks'],
+  'Bankdips': ['Bench Dips'],
+  'Handgelenkcurls': ['Wrist Curl'],
+  'Plank': ['Unterarmstütz', 'Planke'],
+  'Seitstütz': ['Side Plank'],
+  'Beinheben hängend': ['Hanging Leg Raise', 'Hängendes Beinheben'],
+  'Beinheben liegend': ['Lying Leg Raise', 'Leg Raises'],
+  'Sit-ups': ['Situps'],
+  'Russian Twists': ['Russian Twist'],
+  'Kabel-Crunches': ['Cable Crunch'],
+  'Ab Wheel': ['Bauchroller', 'Ab Rollout'],
+  'Dead Bug': ['Dead Bugs'],
+  'Farmers Walk': ["Farmer's Walk", 'Farmers Carry', "Farmer's Carry", 'Bauernlauf'],
+  'Suitcase Carry': ['Koffertragen'],
+  'Kettlebell Swings': ['Kettlebell Swing', 'KB Swing'],
+  'Turkish Get-up': ['Türkisches Aufstehen', 'TGU'],
+  'Thruster': ['Thrusters'],
+  'Burpees': ['Burpee'],
+  'Umsetzen': ['Power Clean', 'Clean'],
+  'Reißen': ['Snatch', 'Power Snatch'],
   'Hip Thrust': ['Hüftstoßen', 'Glute Bridge'],
   'Wadenheben': ['Calf Raise'],
   'Bizepscurls': ['Biceps Curl', 'Bicep Curl', 'Curls'],
@@ -713,10 +866,11 @@ List<String> searchExercises(String query, Iterable<String> names) {
   return (names.where((n) => score(n) < 2).toList()..sort((a, b) => score(a).compareTo(score(b)))).toList();
 }
 
-/// Planned sets and reps: "3×5", "3×5–8", "10/8/6".
-String setsLabel(List<int> reps, int? maxReps) {
+/// Planned sets and reps: "3×5", "3×5–8", "10/8/6"; with [seconds] "3×30 s".
+String setsLabel(List<int> reps, int? maxReps, {bool seconds = false}) {
   final range = maxReps == null ? '' : '–$maxReps';
-  return reps.toSet().length == 1 ? '${reps.length}×${reps.first}$range' : '${reps.join('/')}$range';
+  final unit = seconds ? ' s' : '';
+  return reps.toSet().length == 1 ? '${reps.length}×${reps.first}$range$unit' : '${reps.join('/')}$range$unit';
 }
 
 /// Key figures for the trainings of the last [days] days (null = all): trainings, trainings per week,

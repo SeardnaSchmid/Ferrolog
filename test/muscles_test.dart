@@ -5,6 +5,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('catalogue: every exercise has defaults and muscles, every name finds just one', () {
+    expect(exerciseCatalogue.length, greaterThan(90));
+    final seen = <String, String>{};
+    for (final name in [...exerciseCatalogue.keys, ...cardioCatalogue.keys]) {
+      if (exerciseCatalogue.containsKey(name)) expect(defaultMuscles(name), isNotNull, reason: name);
+      for (final n in [name, ...?exerciseAliases[name]]) {
+        expect(seen[searchKey(n)] ?? name, name, reason: '$n: $name and ${seen[searchKey(n)]}');
+        seen[searchKey(n)] = name;
+      }
+    }
+    expect(searchExercises('farmer', exerciseCatalogue.keys), ['Farmers Walk']);
+    expect(defaultMuscles("Farmer's Walk")!.$1, Muscle.forearms.bit | Muscle.traps.bit);
+  });
+
   test('muscles: own choice, catalogue, databases, word parts; secondary counts half', () async {
     SharedPreferences.setMockInitialValues({});
     store = await Store.open();

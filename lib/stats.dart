@@ -46,7 +46,7 @@ Widget periodPicker(int days, ValueChanged<int> onChanged) => SegmentedButton<in
 /// Strength exercises with weight, most trained first (ties by name): this order picks the colors.
 List<String> strengthExercises() => [
       for (final name in store.loggedExercises)
-        if (store.historyOf(name).lastOrNull?.$2 case final l? when !l.cardio && l.weight > 0) name,
+        if (store.historyOf(name).lastOrNull?.$2 case final l? when !l.cardio && !l.timed && l.weight > 0) name,
     ]..sort((a, b) => switch (store.historyOf(b).length.compareTo(store.historyOf(a).length)) {
         0 => a.compareTo(b),
         final c => c,
@@ -268,14 +268,14 @@ class _StatsPageState extends State<StatsPage> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name, style: const TextStyle(fontSize: 15)),
                   Text(
-                    logs.last.cardio || logs.last.weight == 0
+                    logs.last.cardio || logs.last.timed || logs.last.weight == 0
                         ? exerciseLine(logs)
                         : '${logs.length}× · 1RM ${weightLabel(roundedKg(logs.map(estimated1rm).reduce(max)))}',
                     style: small,
                   ),
                 ]),
               ),
-              if (!logs.last.cardio && logs.last.weight > 0) ...[
+              if (!logs.last.cardio && !logs.last.timed && logs.last.weight > 0) ...[
                 CustomPaint(
                   size: const Size(64, 26),
                   // Same color as in the chart above.
@@ -702,6 +702,10 @@ class _StatsPageState extends State<StatsPage> {
       final km = logs.fold(0.0, (k, l) => k + (l.km ?? 0));
       return '$n · ${cardioLabel(logs.fold<int>(0, (m, l) => m + (l.reps.first ?? 0)), km > 0 ? km : null)} gesamt';
     }
+    if (logs.last.timed) {
+      final best = logs.map((l) => l.weight).reduce(max);
+      return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze${best > 0 ? ' · bis ${weightLabel(best)}' : ''}';
+    }
     if (logs.last.weight == 0) return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze';
     return '$n · Gesamt ${volumeLabel(logs.fold(0.0, (v, l) => v + l.volume))}';
   }
@@ -795,7 +799,8 @@ enum _Measure { weight, e1rm, volume }
 class _ExerciseStatsState extends State<ExerciseStats> {
   late String name = widget.name;
   int days = statsDays;
-  _Measure measure = _Measure.e1rm;
+  // Holds have no 1RM: their weight is what counts.
+  late _Measure measure = store.historyOf(name).lastOrNull?.$2.timed ?? false ? _Measure.weight : _Measure.e1rm;
 
   @override
   Widget build(BuildContext context) {

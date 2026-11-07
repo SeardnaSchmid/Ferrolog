@@ -110,9 +110,30 @@ def demo_data():
             # Today's training was in the morning, the others in the evening.
             date = day.replace(hour=6 if day == end else 18, minute=random.choice([0, 10, 25, 40]))
             dur = 42 + 9 * len(names) + random.randint(-6, 8)
+            finished = date + dt.timedelta(minutes=dur)
+            # The last two months with a timestamp per set (older trainings predate that): setup and
+            # warm-ups before the first set (more for heavy barbell lifts), the rest running a bit over.
+            if (end - day).days <= 60:
+                clock = date
+                for e in exercises:
+                    if e.get('type') == 'cardio':
+                        clock += dt.timedelta(minutes=e['reps'][0] + random.uniform(1, 3))
+                        e['doneAt'] = [clock.isoformat()]
+                        continue
+                    heavy = e['weight'] > 30
+                    clock += dt.timedelta(seconds=random.uniform(60, 120) + (e['weight'] / 25) * random.uniform(50, 80)
+                                          if heavy else random.uniform(40, 100))
+                    rest = 180 if len(e['reps']) == 5 else 90
+                    done = []
+                    for i in range(len(e['reps'])):
+                        if i:
+                            clock += dt.timedelta(seconds=rest * random.uniform(1.0, 1.45) + e['targetReps'] * 4)
+                        done.append(clock.isoformat())
+                    e['doneAt'] = done
+                finished = clock + dt.timedelta(minutes=random.uniform(1, 3))
             s = {'id': f'demo{n}', 'workoutId': 'wA' if is_a else 'wB',
                  'workoutName': 'StrongLifts A' if is_a else 'StrongLifts B',
-                 'date': date.isoformat(), 'finishedAt': (date + dt.timedelta(minutes=dur)).isoformat(),
+                 'date': date.isoformat(), 'finishedAt': finished.isoformat(),
                  'exercises': exercises}
             if random.random() < .45:
                 s['bodyWeight'] = round(bw, 1)

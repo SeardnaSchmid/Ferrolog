@@ -4,19 +4,23 @@ import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'tasks.dart';
+import 'timing.dart';
 
 /// What [derivedStats] contains, for the AI reading the export.
 const derivedFormat = 'derived = statistics FerroLog computed from workouts and sessions at exportedAt; read-only, '
     'recomputed on every export and sync, weights in kg. periods: key figures for the last 30/90/365 days and all '
     '(perWeek = trainings per week, volume = kg × reps, volumeBefore = the same span before, recordLifts = lifts '
-    'heavier than ever before). exercises: per strength exercise e1rm = estimated one-rep max (Epley, from the '
+    'heavier than ever before). exercises: per strength exercise (timed = held for seconds, e1rm 0) e1rm = estimated one-rep max (Epley, from the '
     'average reps of all sets), e1rmNow = best of the latest 4 trainings, trend over 28 days (up = 1RM +2 % or '
     'more, stuck = reps missed in 2 of the last 3, else flat), setbacks90d = trainings with fewer reps at a weight '
     'managed before, next = planned weight for next time. setsPerMuscleWeek: done sets per muscle and week, '
     'helpers counting half (10–20 is a common guide for muscle growth). balance: opposing sides, b against a, '
     'by current 1RM (barbell lifts) or by sets per week, with the guide range (training practice, not a medical '
     'limit) and the side that lags, over the last 90 days (balance90d). tasks: hints the app currently shows the user (empty when switched off). facts: motivating facts shown '
-    'on the home screen. weeks: trainings per calendar week (Monday) against goalPerWeek.';
+    'on the home screen. minutesTypical / secondsSetToSet: median time an exercise took (setup and warm-ups '
+    'included, from the set logged before it to its last set) and from one of its sets to the next (rest plus the set), '
+    'from per-set timestamps (sessions[].exercises[].doneAt), latest 10 trainings. workoutMinutesEstimated: the app estimate '
+    'per workout. weeks: trainings per calendar week (Monday) against goalPerWeek.';
 
 /// Statistics for the export: the numbers behind the statistics page, balance, tasks and insights,
 /// so an AI doesn't have to recompute them (and get them wrong).
@@ -51,8 +55,15 @@ Map<String, dynamic> derivedStats(DateTime now) {
           final e1rm = [for (final (_, l) in h) estimated1rm(l)];
           final out = setbacks(h);
           final trend = trendOf(h, now);
+          final times = [
+            for (final s in sessions)
+              for (final l in s.exercises)
+                if (l.name == name) ?measured(s, l),
+          ].take(10).toList();
+          final gaps = [for (final m in times) ...m.gaps.map((g) => g.inSeconds.toDouble())];
           return {
             'name': name,
+            if (h.last.$2.timed) 'timed': true,
             'trainings': h.length,
             'first': day(h.first.$1),
             'last': day(h.last.$1),
@@ -64,6 +75,8 @@ Map<String, dynamic> derivedStats(DateTime now) {
             if (trend != null) 'trendChangePct': r1(trend.$2),
             'setbacks90d': [for (final i in out) if (now.difference(h[i].$1).inDays <= 90) i].length,
             'next': ?plannedNext[name],
+            if (times.isNotEmpty) 'minutesTypical': r1(median([for (final m in times) m.total.inSeconds / 60])),
+            if (gaps.isNotEmpty) 'secondsSetToSet': median(gaps).round(),
           };
         }(),
   ];
@@ -73,6 +86,7 @@ Map<String, dynamic> derivedStats(DateTime now) {
     return {for (final e in setsPerSingleMuscle(recent).entries) e.key.label: r1(e.value / (days / 7))};
   }
 
+  final pace = currentPace();
   final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 90) s];
   final weeks = periodStats(sessions, now, days: 90).weeks;
   return {
@@ -95,6 +109,7 @@ Map<String, dynamic> derivedStats(DateTime now) {
     'tasks': [if (prefs.getBool('home.tasks') ?? true) for (final t in openTasks()) {'title': t.title, 'why': t.why}],
     'facts': [for (final (_, text) in homeFacts(sessions, store.workouts, now, perWeek: weeklyGoal.value)) text],
     'goalPerWeek': weeklyGoal.value,
+    'workoutMinutesEstimated': {for (final w in store.workouts) w.name: (pace.ofWorkout(w).inSeconds / 60).round()},
     'weeks': [for (final (monday, n, cardio) in weeklySummary(sessions, now, weeks: 12)) {'week': day(monday), 'trainings': n, if (cardio > 0) 'cardioMinutes': cardio}],
   };
 }

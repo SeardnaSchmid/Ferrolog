@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'edit.dart';
 import 'main.dart';
 import 'model.dart';
+import 'timing.dart';
 import 'units.dart';
 
 /// After a training (and from the history): the same card as in the history with next time's
@@ -86,7 +87,8 @@ class _RecapPageState extends State<RecapPage> {
     Widget? detail(String name) {
       final record = records.contains(name);
       final next = nextOf[name];
-      if (!record && next == null) return null;
+      final time = timeTaken(s, name, perSet: true);
+      if (!record && next == null && time == null) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
       if (next case (final l, final kg)) {
         final (icon, color) = kg > l.weight
@@ -105,7 +107,11 @@ class _RecapPageState extends State<RecapPage> {
           ),
         ]);
       }
-      return Text.rich(TextSpan(children: parts), style: small);
+      // The time on a line of its own, so it never breaks in the middle.
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (parts.isNotEmpty) Text.rich(TextSpan(children: parts), style: small),
+        if (time != null) Text(time, style: small),
+      ]);
     }
 
     // One strip of key figures.
@@ -193,6 +199,7 @@ class _RecapPageState extends State<RecapPage> {
             rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
             detail: detail,
             perSet: true,
+            timed: {for (final l in s.exercises) if (l.timed) l.name},
             actions: const [],
           ),
           if (figures.isNotEmpty) ...[

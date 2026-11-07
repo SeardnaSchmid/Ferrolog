@@ -18,6 +18,7 @@ import 'settings.dart';
 import 'stats.dart';
 import 'sync.dart';
 import 'tasks.dart';
+import 'timing.dart';
 import 'units.dart';
 
 late final Store store;
@@ -313,6 +314,30 @@ class Elapsed extends StatelessWidget {
       );
 }
 
+/// What's left of a running training, "noch ≈ 25 Min · fertig gegen 19:40", refreshed every few
+/// seconds; nothing once every set is done.
+class Remaining extends StatefulWidget {
+  final Session session;
+  final TextStyle? style;
+  const Remaining(this.session, {super.key, this.style});
+
+  @override
+  State<Remaining> createState() => _RemainingState();
+}
+
+class _RemainingState extends State<Remaining> {
+  final pace = currentPace(); // from the trainings before this one
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder(
+        stream: Stream.periodic(const Duration(seconds: 10)),
+        builder: (context, _) => switch (leftLabel(widget.session, pace, DateTime.now())) {
+          final text? => Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: widget.style),
+          null => const SizedBox(),
+        },
+      );
+}
+
 /// Dashed "+ Workout" button at the end of the workout list.
 class AddWorkoutButton extends StatelessWidget {
   const AddWorkoutButton({super.key});
@@ -428,6 +453,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 13, color: c.onPrimaryContainer),
                   ),
+                  Remaining(s, style: TextStyle(fontSize: 13, color: c.onPrimaryContainer.withValues(alpha: .8))),
                 ]),
               ),
               FilledButton(onPressed: resume, child: const Text('Fortsetzen')),
@@ -440,6 +466,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
         key: const ValueKey('expanded'),
         title: s.workoutName,
         live: s,
+        timed: {for (final l in s.exercises) if (l.timed) l.name},
         rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
         onTap: () => setState(() => expanded = false), // tap anywhere to collapse
         actions: [
@@ -610,7 +637,11 @@ class WorkoutCard extends StatelessWidget {
     final last = store.lastSessionOf(workout);
     return OverviewCard(
       title: workout.name,
-      subtitle: last == null ? null : 'zuletzt ${ago(last.date)}',
+      timed: {for (final e in workout.exercises) if (e.timed) e.name},
+      subtitle: [
+        if (last != null) 'zuletzt ${ago(last.date)}',
+        if (workout.exercises.isNotEmpty) aboutLabel(currentPace().ofWorkout(workout)),
+      ].join(' · '),
       rows: [
         for (final e in workout.exercises)
           // Weight went up when last time every set hit the target (the store already added the increment).
@@ -671,6 +702,9 @@ class OverviewCard extends StatelessWidget {
 
   /// A done training: every set as a small tile, reps over weight, below the exercise's name.
   final bool perSet;
+
+  /// Exercises held for a time: their sets show seconds ("30s").
+  final Set<String> timed;
   const OverviewCard({
     super.key,
     required this.title,
@@ -682,6 +716,7 @@ class OverviewCard extends StatelessWidget {
     this.footer,
     this.detail,
     this.perSet = false,
+    this.timed = const {},
   });
 
   @override
@@ -722,7 +757,12 @@ class OverviewCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                   backgroundColor: c.surface,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Remaining(live, style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+                ),
+                const SizedBox(height: 4),
               ],
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -754,7 +794,8 @@ class OverviewCard extends StatelessWidget {
                         ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: box.maxWidth * .7),
                           child: Wrap(alignment: WrapAlignment.end, spacing: 3, runSpacing: 3, children: [
-                            for (final (i, r) in reps.indexed) MiniSetTile(r, targets[i], weights[i]),
+                            for (final (i, r) in reps.indexed)
+                              MiniSetTile(r, targets[i], weights[i], unit: timed.contains(name) ? 's' : ''),
                           ]),
                         ),
                       ]);
@@ -796,7 +837,8 @@ class OverviewCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  RepPills([for (final j in sets) reps[j]], [for (final j in sets) targets[j]]),
+                                  RepPills([for (final j in sets) reps[j]], [for (final j in sets) targets[j]],
+                                      unit: timed.contains(name) ? 's' : ''),
                                 ],
                               ),
                             ),
@@ -873,7 +915,8 @@ class MiniSetTile extends StatelessWidget {
   final int? reps;
   final int target;
   final double weight;
-  const MiniSetTile(this.reps, this.target, this.weight, {super.key});
+  final String unit; // after the reps, "s" for seconds
+  const MiniSetTile(this.reps, this.target, this.weight, {super.key, this.unit = ''});
 
   static const double width = 40;
 
@@ -895,7 +938,7 @@ class MiniSetTile extends StatelessWidget {
             height: 30,
             color: bg,
             alignment: Alignment.center,
-            child: Text(r?.toString() ?? '–',
+            child: Text(r == null ? '–' : '$r$unit',
                 style: TextStyle(fontSize: 15, fontWeight: r == null ? FontWeight.w400 : FontWeight.w600, color: fg)),
           ),
           if (weight > 0) ...[
@@ -918,7 +961,8 @@ class MiniSetTile extends StatelessWidget {
 class RepPills extends StatelessWidget {
   final List<int?> reps;
   final List<int> targets;
-  const RepPills(this.reps, this.targets, {super.key});
+  final String unit; // after each number, "s" for seconds
+  const RepPills(this.reps, this.targets, {super.key, this.unit = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -938,7 +982,7 @@ class RepPills extends StatelessWidget {
               alignment: Alignment.center,
               color: r == null ? c.surface : (r >= target ? c.primary : c.tertiaryContainer),
               child: Text(
-                '${r ?? target}',
+                '${r ?? target}$unit',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: r == null ? FontWeight.w400 : FontWeight.w600,
@@ -966,6 +1010,9 @@ class SetTile extends StatelessWidget {
   /// After the target ("/30 Min") and after the bottom value (default: the weight unit).
   final String repsUnit;
   final String? weightUnit;
+
+  /// A timed set being held: the seconds left, shown big instead of the reps.
+  final String? live;
   final VoidCallback? onTapReps, onTapWeight;
   const SetTile({
     super.key,
@@ -975,6 +1022,7 @@ class SetTile extends StatelessWidget {
     required this.weight,
     this.repsUnit = '',
     this.weightUnit,
+    this.live,
     this.selected = false,
     this.onTapReps,
     this.onTapWeight,
@@ -984,15 +1032,19 @@ class SetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final r = reps;
-    final (bg, fg) = r == null
-        ? (c.surfaceContainerHigh, c.outline)
-        : r >= target
-            ? (c.primary, c.onPrimary)
-            : (c.tertiaryContainer, c.onTertiaryContainer);
+    final (bg, fg) = live != null
+        ? (c.primaryContainer, c.onPrimaryContainer)
+        : r == null
+            ? (c.surfaceContainerHigh, c.outline)
+            : r >= target
+                ? (c.primary, c.onPrimary)
+                : (c.tertiaryContainer, c.onTertiaryContainer);
     final radius = BorderRadius.circular(14);
     final top = Text.rich(
             TextSpan(children: [
-              TextSpan(text: r?.toString() ?? '–', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+              TextSpan(
+                  text: live ?? r?.toString() ?? '–',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
               TextSpan(
                 text: '/$target${targetMax != null && targetMax! > target ? '–$targetMax' : ''}$repsUnit',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: fg.withValues(alpha: .7)),
@@ -1315,6 +1367,11 @@ class _HistoryListState extends State<HistoryList> {
             subtitle: dayLabel(s.date),
             rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
             perSet: true,
+            timed: {for (final l in s.exercises) if (l.timed) l.name},
+            detail: (name) => switch (timeTaken(s, name)) {
+              final t? => Text(t, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+              null => null,
+            },
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RecapPage(s))),
             footer: [
               if (s.mood case final m?) const ['😣', '😐', '😄'][m - 1],
