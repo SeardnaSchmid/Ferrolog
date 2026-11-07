@@ -22,6 +22,9 @@ late final SharedPreferences prefs;
 /// Trainings per week the streak asks for; set in the settings.
 final weeklyGoal = ValueNotifier(3);
 
+/// Selected bottom tab; finishing a training switches back to the workouts.
+final homeTab = ValueNotifier(0);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   store = await Store.open();
@@ -106,7 +109,8 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  int tab = 0;
+  int get tab => homeTab.value;
+  set tab(int i) => homeTab.value = i;
 
   /// Back in the app after a long break: a training left running ends on its own.
   late final lifecycle = AppLifecycleListener(onResume: store.autoFinish);
@@ -127,14 +131,14 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       // Settings (unit, weekly goal) change what every tab shows.
-      listenable: Listenable.merge([store, unit, weeklyGoal]),
+      listenable: Listenable.merge([store, unit, weeklyGoal, homeTab]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: const Logo(),
           actions: [
             Streak(
               weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
-              onTap: () => setState(() => tab = 2), // history highlights the streak weeks
+              onTap: () => tab = 2, // history highlights the streak weeks
             ),
           ],
         ),
@@ -147,7 +151,7 @@ class _HomeState extends State<Home> {
             if (store.active case final active? when tab != 0) ActiveBar(active),
             NavigationBar(
               selectedIndex: tab,
-              onDestinationSelected: (i) => setState(() => tab = i),
+              onDestinationSelected: (i) => tab = i,
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
                 NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
@@ -600,6 +604,12 @@ class OverviewCard extends StatelessWidget {
 
   /// Small text left of the actions, e.g. mood, body weight and note of a past training.
   final String? footer;
+
+  /// Extra line under an exercise's row, e.g. its weight next time on the recap.
+  final Widget? Function(String name)? detail;
+
+  /// A done training: every set as a small tile, reps over weight, below the exercise's name.
+  final bool perSet;
   const OverviewCard({
     super.key,
     required this.title,
@@ -609,6 +619,8 @@ class OverviewCard extends StatelessWidget {
     this.live,
     this.onTap,
     this.footer,
+    this.detail,
+    this.perSet = false,
   });
 
   @override
@@ -666,7 +678,28 @@ class OverviewCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(border: Border(bottom: line)),
-                  child: Row(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (perSet && !cardio)
+                    // Name (and detail) left, wrapping if long; sets always right, in two rows when there are many.
+                    LayoutBuilder(builder: (context, box) {
+                      return Row(children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(name, style: const TextStyle(fontSize: 16)),
+                            if (detail?.call(name) case final d?) ...[const SizedBox(height: 2), d],
+                          ]),
+                        ),
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: box.maxWidth * .7),
+                          child: Wrap(alignment: WrapAlignment.end, spacing: 3, runSpacing: 3, children: [
+                            for (final (i, r) in reps.indexed) MiniSetTile(r, targets[i], weights[i]),
+                          ]),
+                        ),
+                      ]);
+                    })
+                  else
+                  Row(
                     children: [
                       Expanded(
                         child: Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
@@ -710,7 +743,10 @@ class OverviewCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (!perSet || cardio) ?detail?.call(name),
+                  ]),
                 ),
+              if (footer != null || actions.isNotEmpty) ...[
               const SizedBox(height: 6),
               Row(children: [
                 Expanded(
@@ -721,6 +757,7 @@ class OverviewCard extends StatelessWidget {
                 ),
                 ...actions,
               ]),
+              ],
             ],
           ),
         ),
@@ -768,6 +805,52 @@ List<(double, List<int>)> groupByWeight(List<double> weights) {
     groups.last.$2.add(i);
   }
   return groups;
+}
+
+/// A set on a done training's card: reps on top, colored like a [RepPills] pill, weight below.
+class MiniSetTile extends StatelessWidget {
+  final int? reps;
+  final int target;
+  final double weight;
+  const MiniSetTile(this.reps, this.target, this.weight, {super.key});
+
+  static const double width = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final r = reps;
+    final (bg, fg) = r == null
+        ? (c.surface, c.onSurfaceVariant)
+        : r >= target
+            ? (c.primary, c.onPrimary)
+            : (c.tertiaryContainer, c.onTertiaryContainer);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(9),
+      child: SizedBox(
+        width: width,
+        child: Column(children: [
+          Container(
+            height: 30,
+            color: bg,
+            alignment: Alignment.center,
+            child: Text(r?.toString() ?? '–',
+                style: TextStyle(fontSize: 15, fontWeight: r == null ? FontWeight.w400 : FontWeight.w600, color: fg)),
+          ),
+          if (weight > 0) ...[
+            const SizedBox(height: 1),
+            Container(
+              height: 18,
+              color: c.surfaceContainerHigh,
+              alignment: Alignment.center,
+              child: Text(weightNum(weight),
+                  style: TextStyle(fontSize: 11, color: c.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()])),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
 }
 
 /// Sets as a joined row of pills: open sets show the target, logged ones their reps.
@@ -1170,10 +1253,12 @@ class _HistoryListState extends State<HistoryList> {
             title: s.workoutName,
             subtitle: dayLabel(s.date),
             rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
+            perSet: true,
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RecapPage(s))),
             footer: [
               if (s.mood case final m?) const ['😣', '😐', '😄'][m - 1],
               if (s.bodyWeight case final kg?) weightLabel(kg),
+              for (final t in s.tags) '${noteTags[t] ?? ''} $t'.trim(),
               if (s.note case final n?) '„$n“',
             ].join(' · '),
             actions: [

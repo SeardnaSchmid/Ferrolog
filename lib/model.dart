@@ -315,6 +315,26 @@ class ExerciseLog {
       );
 }
 
+/// Circumstances to tap after a training, with their emoji: body, energy, food, surroundings.
+/// Stored by label, so keep existing labels when changing the list.
+const noteTags = {
+  'Schlecht geschlafen': '😴',
+  'Gut erholt': '🛌',
+  'Muskelkater': '🦵',
+  'Schmerzen': '🤕',
+  'Krank': '🤒',
+  'Stress': '😓',
+  'Unmotiviert': '🥱',
+  'Voller Energie': '⚡',
+  'Wenig gegessen': '🍽️',
+  'Alkohol': '🍺',
+  'Koffein': '☕',
+  'Wenig Zeit': '⏱️',
+  'Studio voll': '👥',
+  'Unterwegs': '🧳',
+  'Technik-Fokus': '🎯',
+};
+
 class Session {
   final String id;
   final String workoutId;
@@ -336,6 +356,9 @@ class Session {
   /// How the training felt: 1 schlecht, 2 okay, 3 gut.
   int? mood;
 
+  /// Circumstances picked after it instead of typing, e.g. "Schlecht geschlafen"; see [noteTags].
+  List<String> tags;
+
   Session({
     String? id,
     required this.workoutId,
@@ -347,7 +370,9 @@ class Session {
     this.bodyWeight,
     this.note,
     this.mood,
+    List<String>? tags,
   })  : id = id ?? newId(),
+        tags = tags ?? [],
         date = date ?? DateTime.now();
 
   int get setsDone => exercises.fold(0, (n, e) => n + e.setsDone);
@@ -383,6 +408,7 @@ class Session {
         if (bodyWeight != null) 'bodyWeight': bodyWeight,
         if (note != null) 'note': note,
         if (mood != null) 'mood': mood,
+        if (tags.isNotEmpty) 'tags': tags,
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 
@@ -396,6 +422,7 @@ class Session {
         bodyWeight: (j['bodyWeight'] as num?)?.toDouble(),
         note: j['note'],
         mood: j['mood'],
+        tags: j['tags'] == null ? null : List<String>.from(j['tags']),
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
@@ -450,7 +477,7 @@ class Store extends ChangeNotifier {
             'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true. sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
-            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note and mood (1 bad, 2 okay, 3 good) as entered after it; exercises[].weights '
+            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
             'muscles = muscle groups the user set for an exercise (primary; secondary count half); other exercises '

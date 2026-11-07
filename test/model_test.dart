@@ -255,7 +255,7 @@ void main() {
     expect(facts.map((f) => f.$2).join(), isNot(contains('Rudern')));
   });
 
-  test('session recap: sets, volume vs last time, records; body weight and note survive JSON', () async {
+  test('session recap: sets, volume vs last time, records; body weight, note and tags survive JSON', () async {
     SharedPreferences.setMockInitialValues({});
     final store = await Store.open();
     final w = Workout(name: 'A', exercises: [
@@ -288,11 +288,13 @@ void main() {
     second
       ..bodyWeight = 82.4
       ..note = 'Gut geschlafen'
-      ..mood = 3;
+      ..mood = 3
+      ..tags = ['Alkohol', 'Stress'];
     await store.updateSession(second);
     final reopened = await Store.open();
     expect(reopened.sessions.first.bodyWeight, 82.4);
     expect(reopened.sessions.first.note, 'Gut geschlafen');
     expect(reopened.sessions.first.mood, 3);
+    expect(reopened.sessions.first.tags, ['Alkohol', 'Stress']);
   });
 }

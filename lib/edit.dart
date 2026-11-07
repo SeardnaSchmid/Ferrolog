@@ -909,7 +909,11 @@ class BigStepper extends StatelessWidget {
   /// Makes the value typeable: whole numbers, or with [decimal] a comma/point too.
   final void Function(String)? onTyped;
   final bool decimal;
-  const BigStepper(this.label, this.value, this.onMinus, this.onPlus, {super.key, this.onTyped, this.decimal = false});
+
+  /// Shown greyed while [value] is empty, e.g. the last body weight.
+  final String? hint;
+  const BigStepper(this.label, this.value, this.onMinus, this.onPlus,
+      {super.key, this.onTyped, this.decimal = false, this.hint});
 
   @override
   Widget build(BuildContext context) {
@@ -937,7 +941,8 @@ class BigStepper extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16), bottom: Radius.circular(4)),
         ),
         child: switch (onTyped) {
-          null => Text(value, style: style),
+          null => Text(value.isEmpty ? hint ?? '' : value,
+              style: value.isEmpty ? style.copyWith(color: c.onSurfaceVariant.withValues(alpha: .45)) : style),
           final typed => TextFormField(
               key: ValueKey(value),
               initialValue: value,
@@ -945,7 +950,8 @@ class BigStepper extends StatelessWidget {
               keyboardType: TextInputType.numberWithOptions(decimal: decimal),
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(decimal ? r'[0-9.,]' : r'[0-9]'))],
               style: style,
-              decoration: const InputDecoration.collapsed(hintText: ''),
+              decoration: InputDecoration.collapsed(
+                  hintText: hint ?? '', hintStyle: style.copyWith(color: c.onSurfaceVariant.withValues(alpha: .45))),
               onChanged: typed,
             ),
         },

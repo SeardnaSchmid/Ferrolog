@@ -139,6 +139,7 @@ class _SessionPageState extends State<SessionPage> {
       // Stop the "ended elsewhere → close" check first, it would close the recap pushed below.
       ticker.cancel();
       await store.finishSession(s);
+      homeTab.value = 0; // "Fertig" on the recap lands on the workouts
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => RecapPage(s)));
       return;
     }
