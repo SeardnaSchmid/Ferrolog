@@ -511,15 +511,29 @@ class Store extends ChangeNotifier {
         if (muscles.isNotEmpty) 'muscles': muscles,
       };
 
-  String exportJson() => const JsonEncoder.withIndent('  ').convert(toJson());
+  /// Added to the export only (not to what's stored): statistics and the like, computed fresh each time.
+  /// A failure there must not stop the export or sync of the data itself.
+  Map<String, dynamic> Function()? exportExtras;
 
-  /// Called with the export JSON after every saved change (used for GitHub sync).
-  void Function(String json)? onSaved;
+  String exportJson() {
+    final j = toJson();
+    if (exportExtras case final extras?) {
+      try {
+        j.addAll(extras());
+      } catch (e) {
+        j['derivedError'] = '$e';
+      }
+    }
+    return const JsonEncoder.withIndent('  ').convert(j);
+  }
+
+  /// Called after every saved change (used for GitHub sync, which then builds the export).
+  void Function()? onSaved;
 
   Future<void> _save() async {
     notifyListeners();
     await _prefs.setString(_key, jsonEncode(toJson()));
-    onSaved?.call(exportJson());
+    onSaved?.call();
   }
 
   Future<void> saveWorkout(Workout w) {
@@ -609,6 +623,7 @@ const exerciseCatalogue = <String, (int, int, double, double, int)>{
   'Bulgarian Split Squat': (3, 10, 16.0, 2.0, 90),
   'Beinstrecker': (3, 12, 30.0, 5.0, 60),
   'Beinbeuger': (3, 12, 30.0, 5.0, 60),
+  'Nordic Curls': (3, 5, 0.0, 1.25, 120),
   'Hip Thrust': (3, 10, 60.0, 5.0, 120),
   'Wadenheben': (3, 15, 40.0, 5.0, 60),
   'Bizepscurls': (3, 10, 20.0, 1.0, 60),
@@ -618,6 +633,7 @@ const exerciseCatalogue = <String, (int, int, double, double, int)>{
   'Seitheben': (3, 15, 8.0, 1.0, 60),
   'Face Pulls': (3, 15, 15.0, 2.5, 60),
   'Butterfly': (3, 12, 30.0, 5.0, 60),
+  'Crunches': (3, 15, 0.0, 1.25, 60),
 };
 
 /// Cardio catalogue: name -> default minutes and distance in km (null = no distance).
@@ -653,6 +669,8 @@ const exerciseAliases = <String, List<String>>{
   'Bulgarian Split Squat': ['Bulgarische Kniebeuge', 'Split Squat'],
   'Beinstrecker': ['Leg Extension'],
   'Beinbeuger': ['Leg Curl'],
+  'Nordic Curls': ['Nordic Hamstring Curl', 'Nordics'],
+  'Crunches': ['Crunch'],
   'Hip Thrust': ['Hüftstoßen', 'Glute Bridge'],
   'Wadenheben': ['Calf Raise'],
   'Bizepscurls': ['Biceps Curl', 'Bicep Curl', 'Curls'],

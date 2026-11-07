@@ -59,6 +59,7 @@ final Map<String, Muscles> _catalogue = {
     ('Bulgarian Split Squat', [Muscle.quadriceps, Muscle.glutes], [Muscle.hamstrings, Muscle.adductors]),
     ('Beinstrecker', [Muscle.quadriceps], <Muscle>[]),
     ('Beinbeuger', [Muscle.hamstrings], [Muscle.calves]),
+    ('Nordic Curls', [Muscle.hamstrings], <Muscle>[]),
     ('Hip Thrust', [Muscle.glutes], [Muscle.hamstrings]),
     ('Wadenheben', [Muscle.calves], <Muscle>[]),
     ('Bizepscurls', [Muscle.biceps], [Muscle.forearms]),
@@ -68,6 +69,7 @@ final Map<String, Muscles> _catalogue = {
     ('Seitheben', [Muscle.shoulders], [Muscle.traps]),
     ('Face Pulls', [Muscle.shoulders], [Muscle.traps, Muscle.middleBack]),
     ('Butterfly', [Muscle.chest], [Muscle.shoulders]),
+    ('Crunches', [Muscle.abdominals], <Muscle>[]),
   ])
     for (final n in [name, ...?exerciseAliases[name]]) searchKey(n): (_bits(p), _bits(s)),
 };

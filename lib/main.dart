@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -8,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'body_shapes.dart';
+import 'derived.dart';
 import 'edit.dart';
 import 'model.dart';
 import 'recap.dart';
@@ -15,6 +17,7 @@ import 'session.dart';
 import 'settings.dart';
 import 'stats.dart';
 import 'sync.dart';
+import 'tasks.dart';
 import 'units.dart';
 
 late final Store store;
@@ -35,15 +38,26 @@ Future<void> main() async {
   weeklyGoal.value = prefs.getInt('streak.perWeek') ?? 3;
   unit.value = unitFromSetting(prefs.getString('unit'), WidgetsBinding.instance.platformDispatcher.locale.countryCode);
   sync = GitHubSync(prefs);
-  store.onSaved = sync.push;
+  // Only build the export (with its statistics) when there's somewhere to send it.
+  store.onSaved = () {
+    if (sync.configured) sync.push(store.exportJson());
+  };
+  store.exportExtras = () => {'prompt': analysisPrompt, 'derived': derivedStats(DateTime.now())};
   await store.autoFinish();
   runApp(const Ferrolog());
 }
 
-const analysisPrompt = 'Hier sind meine Trainingsdaten aus FerroLog (JSON, Format steht im Feld "format"). '
-    'Analysiere bitte meinen Fortschritt: Welche Übungen laufen gut, wo stagniere ich (Plateaus, '
-    'verpasste Wiederholungen), wie sieht Trainingsfrequenz und Volumen aus? '
-    'Gib mir konkrete Vorschläge für die nächsten Wochen.';
+const analysisPrompt = 'Hier sind meine Trainingsdaten aus FerroLog als JSON. Das Feld "format" beschreibt die '
+    'Rohdaten (Pläne und Trainings), "derived" die Statistiken, die FerroLog daraus berechnet hat (Beschreibung in '
+    '"derived.about"). Nimm die Statistiken als Grundlage und prüfe sie bei Bedarf an den Rohdaten.\n\n'
+    'Bitte:\n'
+    '1. Kurzer Überblick: Frequenz, Volumen, welche Übungen steigen, welche stagnieren oder Rückschritte haben.\n'
+    '2. Auffälligkeiten: Plateaus, Ungleichgewichte (balance90d), vernachlässigte Muskeln, Zusammenhänge mit '
+    'Stimmung, Notizen und Umständen (tags), etwa Schlaf oder Stress.\n'
+    '3. Konkrete Änderungen an meinen Workouts für die nächsten 4 Wochen: pro Workout Übung, Sätze, '
+    'Wiederholungen und Gewicht, jeweils mit einem Satz Begründung.\n'
+    'Die Richtwerte in den Daten stammen aus der Trainingspraxis, keine medizinischen Grenzen. '
+    'Antworte auf Deutsch und knapp.';
 
 /// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
 Future<void> export() async {
@@ -195,7 +209,11 @@ class WorkoutList extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         // Keyed by the latest training, so a new one starts the card at its freshest fact.
-        if (active == null) ...[InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)), const SizedBox(height: 4)],
+        if (active == null) ...[
+          InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)),
+          const SizedBox(height: 4),
+          const TasksCard(),
+        ],
         if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),
         const SizedBox(height: 8),
@@ -456,6 +474,29 @@ class InsightCard extends StatefulWidget {
 
 class _InsightCardState extends State<InsightCard> {
   int page = 0;
+  final pages = PageController();
+  Timer? timer;
+  DateTime touched = DateTime(0); // last swipe by hand: the rotation waits a while after it
+
+  /// Every 5 seconds the next fact, round and round; not right after a swipe.
+  @override
+  void initState() {
+    super.initState();
+    timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!pages.hasClients || DateTime.now().difference(touched) < const Duration(seconds: 10)) return;
+      final count = homeFacts(store.sessions, store.workouts, DateTime.now(), perWeek: weeklyGoal.value).length;
+      if (count < 2) return;
+      final next = (page + 1) % count;
+      next == 0 ? pages.jumpToPage(0) : pages.animateToPage(next, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
+    });
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    pages.dispose();
+    super.dispose();
+  }
 
   static const icons = {
     Fact.record: Icons.local_fire_department,
@@ -490,24 +531,31 @@ class _InsightCardState extends State<InsightCard> {
         child: Column(children: [
           SizedBox(
             height: 38, // two lines of text
-            child: PageView(
-              // Mouse drags too, so it swipes in the browser as well.
-              scrollBehavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
-              onPageChanged: (i) => setState(() => page = i),
-              children: [
-                for (final (kind, text) in facts)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(children: [
-                      Icon(icons[kind], size: 20, color: kind == Fact.record ? c.tertiary : c.primary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(text,
-                            maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.25)),
-                      ),
-                    ]),
-                  ),
-              ],
+            child: NotificationListener<ScrollStartNotification>(
+              onNotification: (n) {
+                if (n.dragDetails != null) touched = DateTime.now();
+                return false;
+              },
+              child: PageView(
+                controller: pages,
+                // Mouse drags too, so it swipes in the browser as well.
+                scrollBehavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+                onPageChanged: (i) => setState(() => page = i),
+                children: [
+                  for (final (kind, text) in facts)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(children: [
+                        Icon(icons[kind], size: 20, color: kind == Fact.record ? c.tertiary : c.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(text,
+                              maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.25)),
+                        ),
+                      ]),
+                    ),
+                ],
+              ),
             ),
           ),
           if (facts.length > 1) ...[
