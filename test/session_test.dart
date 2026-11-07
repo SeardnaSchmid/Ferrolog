@@ -7,6 +7,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('rest timer zones: orange from 30 s before the end to 30 s over, then red', () {
+    expect([for (final left in [120, 31, 30, 1, 0, -29, -30, -90]) restZone(left, 120).name],
+        ['rest', 'rest', 'soon', 'soon', 'soon', 'soon', 'late', 'late']);
+    expect([for (final left in [45, 30, 15]) restZone(left, 60).name], ['rest', 'soon', 'soon']);
+    expect([for (final left in [30, 16, 15]) restZone(left, 30).name], ['rest', 'rest', 'soon'], reason: 'short rest: last half');
+  });
+
   testWidgets('weight sheet applies to this set, open sets or all sets', (tester) async {
     SharedPreferences.setMockInitialValues({});
     unit.value = WeightUnit.kg; // the test locale is en-US, which would default to lb

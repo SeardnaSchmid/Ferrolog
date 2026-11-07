@@ -15,10 +15,26 @@ class Day {
   /// Workout name when picked, e.g. "Starting Strength A".
   final String workoutName;
   final List<(String, int, int)> exercises;
-  const Day(this.name, this.workoutName, this.exercises);
+
+  /// Rep ranges: exercise → top of the range (the reps above are the bottom).
+  final Map<String, int> upTo;
+  const Day(this.name, this.workoutName, this.exercises, {this.upTo = const {}});
 }
 
 const programs = [
+  // Every training the same, so one, two or three trainings a week still train everything.
+  Program('Full Body Kraft', [
+    Day('Full Body', 'Full Body', [
+      ('Kniebeuge', 3, 5),
+      ('Bankdrücken', 3, 5),
+      ('Kreuzheben', 1, 3),
+      ('Schulterdrücken', 2, 5),
+      ('Langhantelrudern', 3, 6),
+      ('Klimmzüge', 3, 5),
+      ('Face Pulls', 2, 12),
+      ('Farmers Walk', 3, 30), // 20–30 m, about 30 s
+    ], upTo: {'Kreuzheben': 5, 'Langhantelrudern': 8, 'Klimmzüge': 8, 'Face Pulls': 15}),
+  ], note: 'Jedes Training gleich, 1–3× pro Woche, 48–72 h Erholung dazwischen. 8–12 Wochen dabei bleiben.'),
   Program('Starting Strength', [
     Day('A', 'Starting Strength A', [('Kniebeuge', 3, 5), ('Bankdrücken', 3, 5), ('Kreuzheben', 1, 5)]),
     Day('B', 'Starting Strength B', [('Kniebeuge', 3, 5), ('Schulterdrücken', 3, 5), ('Kreuzheben', 1, 5)]),

@@ -390,6 +390,12 @@ class _SessionPageState extends State<SessionPage> {
     final c = Theme.of(context).colorScheme;
     final left = lastSetAt == null ? null : restLeft;
     final over = left != null && left <= 0;
+    final zone = left == null ? RestZone.rest : restZone(left, restTarget);
+    final (zoneBg, zoneFg, zoneBar) = switch (zone) {
+      RestZone.rest => (c.primaryContainer, c.onPrimaryContainer, c.primary),
+      RestZone.soon => (c.tertiaryContainer, c.onTertiaryContainer, c.tertiary),
+      RestZone.late => (c.errorContainer, c.onErrorContainer, c.error),
+    };
     final muted = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     final done = s.exercises.fold(0, (n, e) => n + e.setsDone);
     final total = s.exercises.fold(0, (n, e) => n + e.reps.length);
@@ -467,12 +473,13 @@ class _SessionPageState extends State<SessionPage> {
       bottomNavigationBar: left == null
           ? null
           : SafeArea(
-              // Rest timer: big centered countdown, blue while resting, orange once the rest is over.
+              // Rest timer: big centered countdown, blue while resting, orange from 30 s before the end
+              // (alarm at 0) to 30 s over, then red.
               child: Container(
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
                 padding: const EdgeInsets.fromLTRB(8, 10, 8, 14),
                 decoration: BoxDecoration(
-                  color: over ? c.tertiaryContainer : c.primaryContainer,
+                  color: zoneBg,
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -495,15 +502,15 @@ class _SessionPageState extends State<SessionPage> {
                               fontSize: 52,
                               height: 1.1,
                               fontWeight: FontWeight.w700,
-                              color: over ? c.onTertiaryContainer : c.onPrimaryContainer,
+                              color: zoneFg,
                               fontFeatures: const [FontFeature.tabularFigures()])),
                       Text(
-                        '${pausedAt != null ? 'PAUSIERT' : over ? 'PAUSE VORBEI' : 'PAUSE'} · ${clock(restTarget)}',
+                        '${pausedAt != null ? 'PAUSIERT' : zone == RestZone.late ? 'PAUSE ÜBERZOGEN' : over ? 'PAUSE VORBEI' : zone == RestZone.soon ? 'GLEICH WEITER' : 'PAUSE'} · ${clock(restTarget)}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1,
-                          color: (over ? c.onTertiaryContainer : c.onPrimaryContainer).withValues(alpha: .75),
+                          color: zoneFg.withValues(alpha: .75),
                         ),
                       ),
                     ]),
@@ -525,7 +532,7 @@ class _SessionPageState extends State<SessionPage> {
                       value: restTarget == 0 ? 1 : (1 - left / restTarget).clamp(0, 1),
                       minHeight: 8,
                       borderRadius: BorderRadius.circular(4),
-                      color: over ? c.tertiary : c.primary,
+                      color: zoneBar,
                       backgroundColor: c.surface.withValues(alpha: .6),
                     ),
                   ),
@@ -669,6 +676,17 @@ class _SessionPageState extends State<SessionPage> {
 
   static String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
+
+/// Rest timer colors: resting, about to go or just over, too long.
+enum RestZone { rest, soon, late }
+
+/// The zone with [left] seconds of rest left of [target]: orange from 30 s before the end (half the
+/// rest when it's shorter than a minute) to 30 s over, red after that.
+RestZone restZone(int left, int target) => left <= -30
+    ? RestZone.late
+    : left <= min(30, target ~/ 2)
+        ? RestZone.soon
+        : RestZone.rest;
 
 /// Which sets a weight change in the sheet applies to.
 enum WeightScope { set, open, all }

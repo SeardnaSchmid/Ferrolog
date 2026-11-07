@@ -46,7 +46,7 @@ class _EditWorkoutState extends State<EditWorkout> {
       custom = d == null;
       w.exercises = [
         for (final (name, sets, reps) in d?.exercises ?? const <(String, int, int)>[])
-          knownExercise(name, sets: sets, reps: reps),
+          knownExercise(name, sets: sets, reps: reps)..maxReps = d!.upTo[name],
       ];
       changedByHand = false;
       final next = d?.workoutName;
@@ -892,7 +892,8 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
         ..reps = d.$2
         ..weight = d.$3
         ..increment = d.$4
-        ..restSeconds = d.$5;
+        ..restSeconds = d.$5
+        ..failRestSeconds = heavyLifts.contains(name) ? 120 : null;
       if (unit.value == WeightUnit.lb) {
         // Catalogue values are kg; in lb start on round plates (50 kg → 110 lb, +2,5 kg → +5 lb).
         e

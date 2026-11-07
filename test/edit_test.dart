@@ -56,7 +56,7 @@ void main() {
     expect(result?.decrement, 2.5);
     expect(result?.setWeights, [47.5, 50, 50, 50], reason: 'catalogue weight 50 kg, first set −2,5, one set added');
     expect(result?.weight, 50);
-    expect(result?.restSeconds, 180, reason: 'catalogue rest');
+    expect((result?.restSeconds, result?.failRestSeconds), (90, 120), reason: 'catalogue rest, longer after a miss');
   });
 
   test('search matches German and English, ignoring case, dashes and umlauts', () {
@@ -157,5 +157,27 @@ void main() {
     final e = result!..timed = false;
     expect(Exercise.fromJson(e.toJson()).timed, isFalse);
   });
-}
 
+  testWidgets('Full Body Kraft: one day with rep ranges and a timed carry', (tester) async {
+    tester.view.physicalSize = const Size(600, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: EditWorkout(Workout(name: ''))));
+    await tester.tap(find.text('Full Body Kraft'));
+    await tester.pump();
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    final saved = store.workouts.last;
+    expect(saved.name, 'Full Body');
+    expect(saved.exercises.map((e) => '${e.name} ${setsLabel(e.repsPerSet, e.maxReps, seconds: e.timed)}'), [
+      'Kniebeuge 3×5',
+      'Bankdrücken 3×5',
+      'Kreuzheben 1×3–5',
+      'Schulterdrücken 2×5',
+      'Langhantelrudern 3×6–8',
+      'Klimmzüge 3×5–8',
+      'Face Pulls 2×12–15',
+      'Farmers Walk 3×30 s',
+    ]);
+  });
+}
