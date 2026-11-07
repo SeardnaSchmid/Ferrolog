@@ -240,6 +240,21 @@ void main() {
     expect(facts[Fact.tonnage], 'Insgesamt 7,9 t bewegt, noch 2,1 t bis 10 t');
   });
 
+  test('home facts: an exercise skipped in every training does not crash', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final a = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5),
+      Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5),
+    ]);
+    await store.saveWorkout(a);
+    final s = Session.start(a);
+    s.exercises[0].reps.setAll(0, [5, 5]); // Rudern skipped
+    await store.finishSession(s);
+    final facts = homeFacts(store.sessions, store.workouts, DateTime.now());
+    expect(facts.map((f) => f.$2).join(), isNot(contains('Rudern')));
+  });
+
   test('session recap: sets, volume vs last time, records; body weight and note survive JSON', () async {
     SharedPreferences.setMockInitialValues({});
     final store = await Store.open();

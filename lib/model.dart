@@ -712,7 +712,7 @@ List<(Fact, String)> homeFacts(List<Session> sessions, List<Workout> workouts, D
   // Before and after: the biggest relative gain within 90 days, only if there is one.
   final window = [for (final s in sessions) if (now.difference(s.date).inDays <= 90) s];
   (String, double, double, DateTime)? gain;
-  for (final name in {for (final s in window) for (final e in s.exercises) if (!e.cardio && e.weight > 0) e.name}) {
+  for (final name in {for (final s in window) for (final e in s.exercises) if (!e.cardio && e.weight > 0 && e.setsDone > 0) e.name}) {
     final firstSession = window.lastWhere((s) => logsOf(name, [s]).isNotEmpty);
     final from = logsOf(name, [firstSession]).first.weight, to = logsOf(name, window).first.weight;
     if (to > from && (gain == null || to / from > gain.$3 / gain.$2)) gain = (name, from, to, firstSession.date);
