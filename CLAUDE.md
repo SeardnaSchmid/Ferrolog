@@ -1,0 +1,18 @@
+# FerroLog
+
+## Web previews (`.claude/launch.json`)
+
+Both serve `build/web`, so run `flutter build web` first. Browser storage is per port, so the two never share data.
+
+- **`web`** (port 8090): plain preview with the user's own test data. Don't click through it for testing, it may hold a running training.
+- **`web-demo`** (port 8091): a representative demo user for checking statistics and the UI with realistic data. Use this one for testing.
+
+## Demo data
+
+The demo data lives only in [tool/demo_server.py](tool/demo_server.py), never in the app or a release build:
+
+- `demo_data()` generates 1.5 years of StrongLifts 5x5 up to a training this morning, so every period (30 days to all) has data and the insight card has a "today" fact. It includes accessories, an exercise added three weeks ago, cardio, holidays, sick weeks, missed reps, plateaus, deloads, moods, tags and body weight. Rows lag behind the bench press on purpose, so the balance check has something to flag.
+- The server injects a script into `index.html` that writes this data into `localStorage` (`flutter.ferrolog`, unit kg) on the first visit.
+- Open `http://localhost:8091/?reset` to reseed.
+- After editing the script, restart the `web-demo` server: it builds the data when a request comes in, but runs whatever code was loaded at start.
+- After a new web build, unregister the service worker and clear its caches in the browser, otherwise the old build shows.

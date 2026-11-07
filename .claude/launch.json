@@ -1,1 +1,1 @@
-{"version":"0.0.1","configurations":[{"name":"web","runtimeExecutable":"python","runtimeArgs":["-m","http.server","8090","-d","build/web"],"port":8090}]}
+{"version":"0.0.1","configurations":[{"name":"web","runtimeExecutable":"python","runtimeArgs":["-m","http.server","8090","-d","build/web"],"port":8090},{"name":"web-demo","runtimeExecutable":"python","runtimeArgs":["tool/demo_server.py","8091"],"port":8091}]}

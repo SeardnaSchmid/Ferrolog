@@ -169,9 +169,14 @@ class _SyncSettingsState extends State<SyncSettings> {
             subtitle: Text('Alle Daten als JSON, mit fertigem Analyse-Prompt'),
             onTap: export,
           ),
-          // CC-BY-SA asks for the source to be named.
-          Text('Muskeln der Übungen: wger.de (CC-BY-SA), free-exercise-db',
-              style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          // CC-BY-SA asks for the source to be named, MIT for its notice to ship (on the licence page).
+          InkWell(
+            onTap: () => showLicensePage(context: context, applicationName: 'FerroLog'),
+            child: Text(
+                'Muskeln der Übungen: wger.de (CC-BY-SA), free-exercise-db · '
+                'Körperkarte: react-native-body-highlighter (MIT) · Lizenzen',
+                style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ),
           const Divider(height: 32),
           Text('GitHub-Sync', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 8),

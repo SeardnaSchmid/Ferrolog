@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'body_shapes.dart';
 import 'edit.dart';
 import 'model.dart';
 import 'recap.dart';
@@ -27,6 +29,7 @@ final homeTab = ValueNotifier(0);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() => Stream.value(const LicenseEntryWithLineBreaks(['react-native-body-highlighter'], bodyShapesLicense)));
   store = await Store.open();
   prefs = await SharedPreferences.getInstance();
   weeklyGoal.value = prefs.getInt('streak.perWeek') ?? 3;
@@ -138,12 +141,12 @@ class _HomeState extends State<Home> {
           actions: [
             Streak(
               weekStreak(store.sessions.map((s) => s.date), DateTime.now(), perWeek: weeklyGoal.value),
-              onTap: () => tab = 1, // history highlights the streak weeks
+              onTap: () => tab = 2, // history highlights the streak weeks
             ),
           ],
         ),
         // Not const: const widgets are skipped on rebuild, so store changes wouldn't show.
-        body: [WorkoutList(), HistoryList(), StatsPage(), SyncSettings()][tab],
+        body: [WorkoutList(), StatsPage(), HistoryList(), SyncSettings()][tab],
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -154,8 +157,8 @@ class _HomeState extends State<Home> {
               onDestinationSelected: (i) => tab = i,
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
                 NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
+                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
                 NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Einstellungen'),
               ],
             ),
@@ -191,7 +194,8 @@ class WorkoutList extends StatelessWidget {
           ActiveTrainingCard(active, key: ValueKey(active.id)),
           const SizedBox(height: 12),
         ],
-        if (active == null) ...[const InsightCard(), const SizedBox(height: 4)],
+        // Keyed by the latest training, so a new one starts the card at its freshest fact.
+        if (active == null) ...[InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)), const SizedBox(height: 4)],
         if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),
         const SizedBox(height: 8),
@@ -455,6 +459,12 @@ class _InsightCardState extends State<InsightCard> {
 
   static const icons = {
     Fact.record: Icons.local_fire_department,
+    Fact.today: Icons.today_outlined,
+    Fact.next: Icons.arrow_upward,
+    Fact.fresh: Icons.fiber_new_outlined,
+    Fact.journey: Icons.route_outlined,
+    Fact.bodyWeight: Icons.accessibility_new,
+    Fact.month: Icons.calendar_month_outlined,
     Fact.streak: Icons.check_circle_outline,
     Fact.gain: Icons.trending_up,
     Fact.close: Icons.flag_outlined,

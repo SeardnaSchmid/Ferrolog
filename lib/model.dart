@@ -44,14 +44,38 @@ List<(DateTime, int, int)> weeklySummary(List<Session> sessions, DateTime now, {
   ];
 }
 
-/// Change of the working weight over the last [days]: from the last session before that window
-/// (or the first one in it) to the latest. Null with fewer than two sessions.
-(double, DateTime)? weightChange(List<(DateTime, ExerciseLog)> history, DateTime now, {int days = 30}) {
+/// Estimated one-rep max (Epley) from all sets: the average reps at the working weight, skipped
+/// sets counting 0. Missed reps lower it, so it shows how a training went, not just the plan.
+double estimated1rm(ExerciseLog log) {
+  if (log.cardio || log.weight == 0 || log.reps.isEmpty) return 0;
+  final avg = log.reps.fold(0, (n, r) => n + (r ?? 0)) / log.reps.length;
+  return avg == 0 ? 0 : log.weight * (1 + avg / 30);
+}
+
+/// Trainings of [history] (oldest first, by index) that went backwards: reps missed although the
+/// weight wasn't new, i.e. a lower 1RM than last time at the same or a heavier weight, or a weight
+/// managed before. Deloads and restarts after a break are lighter and succeed, so they don't count.
+Set<int> setbacks(List<(DateTime, ExerciseLog)> history) => {
+      for (var i = 1; i < history.length; i++)
+        if (history[i].$2 case final l when !l.cardio && l.weight > 0 && !l.succeeded)
+          if ((l.weight >= history[i - 1].$2.weight && estimated1rm(l) < estimated1rm(history[i - 1].$2) * .97) ||
+              history.take(i).any((h) => h.$2.succeeded && h.$2.weight >= l.weight))
+            i,
+    };
+
+enum Trend { up, flat, stuck }
+
+/// How an exercise is going, with the 1RM change in percent over the last [days]: up when the 1RM rose
+/// by more than 2 % (catching up after a deload counts, misses or not), else stuck when at least two of
+/// the last three trainings missed reps, else flat.
+/// Null with fewer than two trainings.
+(Trend, double)? trendOf(List<(DateTime, ExerciseLog)> history, DateTime now, {int days = 28}) {
   if (history.length < 2) return null;
   final cutoff = now.subtract(Duration(days: days));
-  final before = history.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => history.first);
-  if (identical(before, history.last)) return null;
-  return (history.last.$2.weight - before.$2.weight, before.$1);
+  final before = estimated1rm(history.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => history.first).$2);
+  final change = before == 0 ? 0.0 : (estimated1rm(history.last.$2) / before - 1) * 100;
+  final misses = history.reversed.take(3).where((h) => !h.$2.succeeded).length;
+  return (change > 2 ? Trend.up : misses >= 2 ? Trend.stuck : Trend.flat, change);
 }
 
 int weekStreak(Iterable<DateTime> dates, DateTime now, {int perWeek = 1}) =>
@@ -677,37 +701,66 @@ String setsLabel(List<int> reps, int? maxReps) {
   return reps.toSet().length == 1 ? '${reps.length}×${reps.first}$range' : '${reps.join('/')}$range';
 }
 
-/// Key figures for the trainings of the last [days] days (null = all): (trainings, trainings per week,
-/// sets per week, total volume, heaviest training's volume, average duration, heaviest weight as
-/// (exercise, kg)). Weeks count from the first training if that's later, so a new user isn't averaged down.
-({int trainings, double perWeek, double setsPerWeek, double volume, double maxVolume, Duration? avgDuration,
-    (String, double)? top}) periodStats(List<Session> sessions, DateTime now, {int? days}) {
+/// Key figures for the trainings of the last [days] days (null = all): trainings, trainings per week,
+/// weeks covered, total volume and that of the period before (null for all, or nothing then), average
+/// duration and records: of the [lifts] trained with weight in the period, how many got heavier than
+/// ever before ([recordLifts], not counting their first training), and the latest such record. Weeks count
+/// from the first training if that's later, so a new user isn't averaged down.
+PeriodStats periodStats(List<Session> sessions, DateTime now, {int? days}) {
   final from = days == null ? null : now.subtract(Duration(days: days));
   final inPeriod = [for (final s in sessions) if (from == null || s.date.isAfter(from)) s];
   final first = inPeriod.map((s) => s.date).fold<DateTime?>(null, (a, d) => a == null || d.isBefore(a) ? d : a);
   final weeks = first == null ? 1.0 : max(1.0, now.difference(first).inHours / (24 * 7));
-  final logs = inPeriod.expand((s) => s.exercises).where((e) => !e.cardio);
   final durations = inPeriod.map((s) => s.duration).nonNulls.where((d) => d > Duration.zero).toList();
-  (String, double)? top;
-  for (final l in logs) {
-    if (l.setsDone > 0 && l.weight > (top?.$2 ?? 0)) top = (l.name, l.weight);
+  double volumeOf(Iterable<Session> ss) => ss.fold(0.0, (v, s) => v + s.exercises.fold(0.0, (v, e) => v + e.volume));
+  final before = from == null
+      ? const <Session>[]
+      : [for (final s in sessions) if (!s.date.isAfter(from) && s.date.isAfter(from.subtract(Duration(days: days!)))) s];
+  final best = <String, double>{};
+  final lifts = <String>{}, recordLifts = <String>{};
+  (String, double, DateTime)? lastRecord;
+  for (final s in sessions.reversed) {
+    final inside = from == null || s.date.isAfter(from);
+    for (final e in s.exercises) {
+      if (e.cardio || e.weight == 0 || e.setsDone == 0) continue;
+      if (inside) lifts.add(e.name);
+      final b = best[e.name];
+      if (b != null && e.weight > b && inside) {
+        recordLifts.add(e.name);
+        lastRecord = (e.name, e.weight, s.date);
+      }
+      if (b == null || e.weight > b) best[e.name] = e.weight;
+    }
   }
-  double volumeOf(Session s) => s.exercises.fold(0.0, (v, e) => v + e.volume);
   return (
     trainings: inPeriod.length,
     perWeek: inPeriod.length / weeks,
-    setsPerWeek: logs.fold(0, (n, e) => n + e.setsDone) / weeks,
-    volume: inPeriod.fold(0.0, (v, s) => v + volumeOf(s)),
-    maxVolume: inPeriod.fold(0.0, (v, s) => max(v, volumeOf(s))),
+    weeks: weeks,
+    volume: volumeOf(inPeriod),
+    volumeBefore: before.isEmpty ? null : volumeOf(before),
     avgDuration: durations.isEmpty
         ? null
         : Duration(seconds: durations.fold(0, (n, d) => n + d.inSeconds) ~/ durations.length),
-    top: top,
+    lifts: lifts.length,
+    recordLifts: recordLifts.length,
+    lastRecord: lastRecord,
   );
 }
 
+typedef PeriodStats = ({
+  int trainings,
+  double perWeek,
+  double weeks,
+  double volume,
+  double? volumeBefore,
+  Duration? avgDuration,
+  int lifts,
+  int recordLifts,
+  (String, double, DateTime)? lastRecord,
+});
+
 /// Kinds of facts on the home card; the UI picks an icon per kind.
-enum Fact { record, streak, gain, close, milestone, week, stall, pause, tonnage }
+enum Fact { record, today, next, fresh, streak, gain, journey, bodyWeight, close, milestone, month, week, stall, pause, tonnage }
 
 /// Little motivating facts for the home card, freshest first (sessions newest first). Only what's
 /// true right now, worded positively; no "do this" prompts.
@@ -734,6 +787,47 @@ List<(Fact, String)> homeFacts(List<Session> sessions, List<Workout> workouts, D
     if (run >= 3 && run > (streak?.$2 ?? 0)) streak = (l.name, run);
   }
   if (record case (final name, final kg)?) facts.add((Fact.record, '$name: neues Höchstgewicht, ${weightLabel(kg)}'));
+
+  // Right after a training (same day): how it went, against the last time of the same workout.
+  if (last.date.year == now.year && last.date.month == now.month && last.date.day == now.day) {
+    final r = sessionRecap(last, sessions);
+    final delta = switch (r.volumeBefore) {
+      final b? when b > 0 && r.volume > 0 => ((r.volume / b - 1) * 100).round(),
+      _ => null,
+    };
+    final moved = r.volume > 0
+        ? '${volumeLabel(r.volume)} bewegt${delta == null ? '' : ' (${delta >= 0 ? '+' : ''}$delta % zum letzten Mal)'}'
+        : null;
+    final all = r.succeeded == last.exercises.length;
+    facts.add((
+      Fact.today,
+      all ? 'Heute alles geschafft${moved == null ? '' : ', $moved'}' : 'Heute ${moved ?? 'trainiert'}',
+    ));
+  }
+
+  // What the last training earned: heavier weights next time.
+  if (workouts.where((w) => w.id == last.workoutId).firstOrNull case final plan?) {
+    final up = [
+      for (final l in last.exercises)
+        if (plan.exercises.where((e) => e.name == l.name && !e.cardio && !e.noWeight).firstOrNull case final e?
+            when l.setsDone > 0 && e.weight > l.weight)
+          '${e.name} ${weightLabel(e.weight)}',
+    ];
+    if (up.isNotEmpty) facts.add((Fact.next, 'Nächstes Mal schwerer: ${up.join(', ')}'));
+  }
+
+  // Recently added exercises and how they're coming along.
+  for (final name in {for (final s in sessions) for (final e in s.exercises) if (!e.cardio && e.setsDone > 0) e.name}) {
+    final logs = logsOf(name, sessions); // newest first
+    final firstDay = sessions.lastWhere((s) => logsOf(name, [s]).isNotEmpty).date;
+    if (now.difference(firstDay).inDays > 42 || logs.length < 2 || sessions.last.date == firstDay) continue;
+    final up = logs.first.weight - logs.last.weight;
+    facts.add((
+      Fact.fresh,
+      'Neu dabei seit ${firstDay.day}.${firstDay.month}.: $name, '
+          '${up > 0 ? 'schon +${weightLabel(up)}' : '${logs.length} Trainings bisher'}',
+    ));
+  }
   if (streak case (final name, final n)?) facts.add((Fact.streak, '$name: $n× in Folge alle Sätze geschafft'));
 
   // Before and after: the biggest relative gain within 90 days, only if there is one.
@@ -744,8 +838,45 @@ List<(Fact, String)> homeFacts(List<Session> sessions, List<Workout> workouts, D
     final from = logsOf(name, [firstSession]).first.weight, to = logsOf(name, window).first.weight;
     if (to > from && (gain == null || to / from > gain.$3 / gain.$2)) gain = (name, from, to, firstSession.date);
   }
-  if (gain case (final name, final from, final to, final since)?) {
+  // A new exercise's gain is already told above.
+  if (gain case (final name, final from, final to, final since)? when !facts.any((f) => f.$1 == Fact.fresh && f.$2.contains(': $name,'))) {
     facts.add((Fact.gain, '$name: ${weightNum(from)} → ${weightLabel(to)} seit ${since.day}.${since.month}.'));
+  }
+
+  // The whole way so far, once it's longer than the 90 days above: the lift that grew most.
+  final start = sessions.last.date;
+  if (now.difference(start).inDays > 120) {
+    (String, double, double)? best;
+    for (final name in {for (final e in last.exercises) if (!e.cardio && e.weight > 0) e.name}) {
+      final logs = logsOf(name, sessions);
+      if (logs.length < 2) continue;
+      final (from, to) = (logs.last.weight, logs.first.weight);
+      if (from > 0 && to > from && (best == null || to - from > best.$3 - best.$2)) best = (name, from, to);
+    }
+    if (best case (final name, final from, final to)?) {
+      facts.add((
+        Fact.journey,
+        'Seit dem Start am ${start.day}.${start.month}.${start.year}: $name ${weightNum(from)} → ${weightLabel(to)} '
+            '(+${((to / from - 1) * 100).round()} %)',
+      ));
+    }
+  }
+
+  // Strength against body weight: the big lifts at their heaviest, the best multiple.
+  if (sessions.map((s) => s.bodyWeight).nonNulls.firstOrNull case final bw? when bw > 0) {
+    (String, double)? top;
+    for (final name in {for (final s in sessions) for (final e in s.exercises) if (e.weight > 0) e.name}) {
+      final k = searchKey(name);
+      if (!const ['kniebeuge', 'squat', 'bankdrueck', 'benchpress', 'kreuzheb', 'deadlift'].any(k.contains) ||
+          const ['kurzhantel', 'dumbbell'].any(k.contains)) {
+        continue;
+      }
+      final heaviest = logsOf(name, sessions).map((e) => e.weight).fold(0.0, max);
+      if (heaviest / bw > (top?.$2 ?? 0)) top = (name, heaviest / bw);
+    }
+    if (top case (final name, final x)? when x >= .5) {
+      facts.add((Fact.bodyWeight, '$name: ${x.toStringAsFixed(2).replaceAll('.', ',')}× dein Körpergewicht'));
+    }
   }
 
   // Planned exercises that missed last time: 1–2 reps short, or stuck for a while.
@@ -766,6 +897,16 @@ List<(Fact, String)> homeFacts(List<Session> sessions, List<Workout> workouts, D
 
   const marks = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
   if (marks.contains(sessions.length)) facts.add((Fact.milestone, '${sessions.length}. Training geschafft 🎉'));
+
+  // A month with more trainings than any before (once there is a month to compare with).
+  final perMonth = <int, int>{};
+  for (final s in sessions) {
+    perMonth.update(s.date.year * 12 + s.date.month, (n) => n + 1, ifAbsent: () => 1);
+  }
+  final thisMonth = perMonth.remove(now.year * 12 + now.month) ?? 0;
+  if (perMonth.isNotEmpty && thisMonth > perMonth.values.reduce(max)) {
+    facts.add((Fact.month, 'Rekordmonat: schon $thisMonth Trainings, so viele wie noch nie'));
+  }
 
   final thisWeek = sessions.where((s) => !s.date.isBefore(mondayOf(now))).length;
   final weeks = weekStreak(sessions.map((s) => s.date), now, perWeek: perWeek);

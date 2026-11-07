@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'body_map.dart';
 import 'main.dart';
@@ -8,14 +9,51 @@ import 'model.dart';
 import 'muscles.dart';
 import 'units.dart';
 
-/// Epley estimate of the one-rep max from the best set.
-double estimated1rm(ExerciseLog log) {
-  final best = log.reps.whereType<int>().fold(0, max);
-  return best == 0 ? 0 : log.weight * (1 + best / 30);
-}
+/// Series colors, fixed order (a colorblind-safe categorical palette); an exercise keeps its color
+/// however the period changes. Past six exercises the chart folds the rest away.
+const _seriesLight = [Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100), Color(0xFFE87BA4), Color(0xFF008300)];
+const _seriesDark = [Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), Color(0xFFD55181), Color(0xFF008300)];
 
-/// Overview: progress of one exercise and trainings per week right at the top, then totals and
-/// the list of exercises.
+/// Dash pattern per series, so lines differ by more than color.
+const _dashes = <List<double>>[[], [6, 3], [2, 2], [8, 3, 2, 3], [1, 3], [10, 4]];
+
+/// The muscles listed under the body map; the small ones show on the map only.
+const _mainMuscles = [
+  Muscle.chest, Muscle.shoulders, Muscle.triceps, Muscle.biceps, Muscle.lats, Muscle.middleBack,
+  Muscle.lowerBack, Muscle.abdominals, Muscle.quadriceps, Muscle.hamstrings, Muscle.glutes, Muscle.calves,
+];
+
+/// Period picked on the statistics (days, 0 = all), shared by the overview and the exercise page.
+int get statsDays => prefs.getInt('stats.days') ?? 90;
+
+DateTime? periodStart(int days) => days == 0 ? null : DateTime.now().subtract(Duration(days: days));
+
+Widget periodPicker(int days, ValueChanged<int> onChanged) => SegmentedButton<int>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: 30, label: Text('30 Tage')),
+        ButtonSegment(value: 90, label: Text('90 Tage')),
+        ButtonSegment(value: 365, label: Text('1 Jahr')),
+        ButtonSegment(value: 0, label: Text('Gesamt')),
+      ],
+      selected: {days},
+      onSelectionChanged: (v) {
+        prefs.setInt('stats.days', v.single);
+        onChanged(v.single);
+      },
+    );
+
+/// Strength exercises with weight, most trained first (ties by name): this order picks the colors.
+List<String> strengthExercises() => [
+      for (final name in store.loggedExercises)
+        if (store.historyOf(name).lastOrNull?.$2 case final l? when !l.cardio && l.weight > 0) name,
+    ]..sort((a, b) => switch (store.historyOf(b).length.compareTo(store.historyOf(a).length)) {
+        0 => a.compareTo(b),
+        final c => c,
+      });
+
+/// Overview, top to bottom: period, strength of every exercise in one chart, the exercises with their
+/// trend, key figures with trainings per week, muscles, cardio.
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
 
@@ -24,31 +62,249 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
-  /// Period for the key figures and the exercise list, in days; 0 = all. Remembered.
-  int days = prefs.getInt('stats.days') ?? 90;
+  int days = statsDays;
+
+  /// What the strength chart shows. Remembered.
+  _ChartMode mode = _ChartMode.values.asNameMap()[prefs.getString('stats.chart')] ?? _ChartMode.percent;
+
+  /// Exercises switched off in the chart's legend.
+  final hidden = <String>{};
 
   @override
   Widget build(BuildContext context) {
     final sessions = store.sessions;
     if (sessions.isEmpty) return const Center(child: Text('Statistiken gibt’s nach dem ersten Training.'));
     final now = DateTime.now();
+    final from = periodStart(days);
+    final inPeriod = [for (final s in sessions) if (from == null || s.date.isAfter(from)) s];
     final p = periodStats(sessions, now, days: days == 0 ? null : days);
-    final from = days == 0 ? null : now.subtract(Duration(days: days));
-    final text = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
+    final small = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
 
-    // Strength exercises with weight, most trained first; the chart shows the last one picked, else the top one.
-    final strength = [
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        periodPicker(days, (d) => setState(() => days = d)),
+        const SizedBox(height: 8),
+        if (inPeriod.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Kein Training in diesem Zeitraum.', textAlign: TextAlign.center, style: small),
+          )
+        else ...[
+          ?progressSection(from, c, small),
+          exercisesSection(from, now, c, small),
+          const SizedBox(height: 8),
+          figures(p, c, small),
+          weeksSection(sessions, now, p.weeks, c, small),
+          ?balanceSection(inPeriod, p.weeks, c, small),
+          musclesSection(inPeriod, p.weeks, c, small),
+          ?cardioSection(sessions, now, p.weeks, c),
+        ],
+      ],
+    );
+  }
+
+  Widget section(String title, String? trailing, List<Widget> children, {VoidCallback? onTap, VoidCallback? onInfo}) {
+    final c = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Expanded(
+                child: Row(children: [
+                  Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                  if (onInfo != null)
+                    IconButton(
+                      icon: Icon(Icons.info_outline, size: 18, color: c.onSurfaceVariant),
+                      tooltip: 'Hintergrund',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: onInfo,
+                    ),
+                ]),
+              ),
+              if (trailing != null) Text(trailing, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+            ]),
+            const SizedBox(height: 10),
+            ...children,
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Every strength exercise in one chart: the 1RM's change since the start of the period (the baseline)
+  /// in percent (comparable across light and heavy lifts) or kg, or the working weight; setbacks as
+  /// triangles. The legend names each exercise's change. Tap: details.
+  Widget? progressSection(DateTime? from, ColorScheme c, TextStyle small) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final names = strengthExercises();
+    final series = <ChartSeries>[];
+    final deltas = <String, (double, double)>{}; // 1RM change since the baseline: (kg, %)
+    for (final (i, name) in names.take(6).indexed) {
+      final history = store.historyOf(name);
+      final out = setbacks(history);
+      final points = [
+        for (final (j, (date, log)) in history.indexed)
+          if (from == null || date.isAfter(from)) (date, estimated1rm(log), log.weight, out.contains(j)),
+      ];
+      if (points.isEmpty) continue;
+      final base = points.first.$2;
+      deltas[name] = (shown(points.last.$2) - shown(base), base == 0 ? 0.0 : (points.last.$2 / base - 1) * 100);
+      series.add(ChartSeries(
+        name,
+        (dark ? _seriesDark : _seriesLight)[i],
+        _dashes[i],
+        [
+          for (final (d, e1, kg, _) in points)
+            (
+              d,
+              switch (mode) {
+                _ChartMode.percent => base == 0 ? 0.0 : (e1 / base - 1) * 100,
+                _ChartMode.deltaKg => shown(e1) - shown(base),
+                _ChartMode.weight => shown(kg),
+              }
+            ),
+        ],
+        {for (final (j, pt) in points.indexed) if (pt.$4) j},
+        hidden: hidden.contains(name),
+      ));
+    }
+    if (series.isEmpty) return null;
+    final first = series.map((s) => s.points.first.$1).reduce((a, b) => a.isBefore(b) ? a : b);
+    return section('Kraftentwicklung', null, onTap: () => openExercise(series.first.name), [
+      SegmentedButton<_ChartMode>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: [
+          const ButtonSegment(value: _ChartMode.percent, label: Text('Δ %')),
+          ButtonSegment(value: _ChartMode.deltaKg, label: Text('Δ $unitLabel')),
+          ButtonSegment(value: _ChartMode.weight, label: Text(unitLabel)),
+        ],
+        selected: {mode},
+        onSelectionChanged: (v) {
+          prefs.setString('stats.chart', v.single.name);
+          setState(() => mode = v.single);
+        },
+      ),
+      const SizedBox(height: 10),
+      Wrap(spacing: 14, runSpacing: 6, children: [
+        for (final s in series)
+          InkWell(
+            onTap: () => setState(() => hidden.contains(s.name) ? hidden.remove(s.name) : hidden.add(s.name)),
+            child: Opacity(
+              opacity: s.hidden ? .35 : 1,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                CustomPaint(size: const Size(18, 8), painter: _LegendLine(s.color, s.dash)),
+                const SizedBox(width: 5),
+                Text.rich(TextSpan(children: [
+                  TextSpan(text: s.name),
+                  if (deltas[s.name] case (final kg, final pct))
+                    TextSpan(
+                      text: '  ${signed(kg)} $unitLabel · ${signed(pct.roundToDouble())} %',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: kg < 0 ? c.tertiary : c.onSurface),
+                    ),
+                ]), style: small),
+              ]),
+            ),
+          ),
+      ]),
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 220,
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: ProgressChart(
+            series,
+            from ?? first,
+            DateTime.now(),
+            unit: switch (mode) { _ChartMode.percent => '%', _ChartMode.deltaKg => unitLabel, _ChartMode.weight => '' },
+            signed: mode != _ChartMode.weight,
+            grid: c.outlineVariant.withValues(alpha: .5),
+            label: c.onSurfaceVariant,
+            surface: c.surfaceContainerLow,
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        switch (mode) {
+          _ChartMode.weight => 'Arbeitsgewicht, wie es die Progression vorgibt; Zacken nach unten sind Deloads. ▲ = Rückschritt.',
+          _ => 'Veränderung des geschätzten 1RM (aus allen Sätzen) seit dem ersten Training im Zeitraum, der Baseline. '
+              '▲ = Rückschritt: weniger geschafft als zuletzt oder als schon einmal bei diesem Gewicht.',
+        },
+        style: TextStyle(fontSize: 11, color: c.onSurfaceVariant),
+      ),
+    ]);
+  }
+
+  void openExercise(String name) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(name))).then((_) => setState(() => days = statsDays));
+
+  /// Exercises trained in the period, most often first; with weight: 1RM line, best 1RM and the trend
+  /// of the last four weeks.
+  Widget exercisesSection(DateTime? from, DateTime now, ColorScheme c, TextStyle small) {
+    final rows = [
       for (final name in store.loggedExercises)
-        if (store.historyOf(name).lastOrNull?.$2 case final l? when !l.cardio && l.weight > 0) name,
-    ]..sort((a, b) => store.historyOf(b).length.compareTo(store.historyOf(a).length));
-    final saved = prefs.getString('stats.exercise');
-    final picked = strength.contains(saved) ? saved! : strength.firstOrNull;
-    final weeks = weeklySummary(sessions, DateTime.now());
-    final goal = weeklyGoal.value;
+        (name, store.historyOf(name), [for (final (d, l) in store.historyOf(name)) if (from == null || d.isAfter(from)) l]),
+    ].where((e) => e.$3.isNotEmpty).toList()
+      ..sort((a, b) => b.$3.length.compareTo(a.$3.length));
+    final colored = strengthExercises();
+    final palette = Theme.of(context).brightness == Brightness.dark ? _seriesDark : _seriesLight;
+    return section('Übungen', 'Status: letzte 4 Wochen', [
+      for (final (name, history, logs) in rows)
+        InkWell(
+          onTap: () => openExercise(name),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontSize: 15)),
+                  Text(
+                    logs.last.cardio || logs.last.weight == 0
+                        ? exerciseLine(logs)
+                        : '${logs.length}× · 1RM ${weightLabel(roundedKg(logs.map(estimated1rm).reduce(max)))}',
+                    style: small,
+                  ),
+                ]),
+              ),
+              if (!logs.last.cardio && logs.last.weight > 0) ...[
+                CustomPaint(
+                  size: const Size(64, 26),
+                  // Same color as in the chart above.
+                  painter: Sparkline([for (final l in logs.skip(max(0, logs.length - 12))) estimated1rm(l)],
+                      switch (colored.indexOf(name)) { final i when i >= 0 && i < 6 => palette[i], _ => c.primary }),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 118,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(fit: BoxFit.scaleDown, child: TrendChip(trendOf(history, now))),
+                  ),
+                ),
+              ] else
+                Icon(Icons.chevron_right, color: c.onSurfaceVariant),
+            ]),
+          ),
+        ),
+    ]);
+  }
 
+  /// Four tiles: trainings per week against the goal, average duration, volume against the period
+  /// before, records (how many lifts set one, and the latest; a count of records would only grow with
+  /// linear progression).
+  Widget figures(PeriodStats p,
+      ColorScheme c, TextStyle small) {
     String num1(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
-    Widget tile(IconData icon, String label, String value) => Expanded(
+    Widget tile(IconData icon, String label, String value, String? sub, [Color? subColor]) => Expanded(
           child: Card(
             margin: const EdgeInsets.all(4),
             child: Padding(
@@ -57,166 +313,385 @@ class _StatsPageState extends State<StatsPage> {
                 Row(children: [
                   Icon(icon, size: 16, color: c.onSurfaceVariant),
                   const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(label,
-                        overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
-                  ),
+                  Expanded(child: Text(label, overflow: TextOverflow.ellipsis, style: small)),
                 ]),
                 const SizedBox(height: 4),
-                Text(value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                Text(sub ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: small.copyWith(color: subColor)),
               ]),
             ),
           ),
         );
+    final delta = switch (p.volumeBefore) {
+      final b? when b > 0 => ((p.volume / b - 1) * 100).round(),
+      _ => null,
+    };
+    return Column(children: [
+      Row(children: [
+        tile(Icons.calendar_view_week, 'Pro Woche', num1(p.perWeek), 'Ziel ${weeklyGoal.value} · ${p.trainings} Trainings',
+            p.perWeek >= weeklyGoal.value ? c.primary : null),
+        tile(Icons.timer_outlined, 'Ø Dauer', switch (p.avgDuration) { final d? => durationLabel(d), null => '–' }, null),
+      ]),
+      Row(children: [
+        tile(Icons.stacked_bar_chart, 'Volumen', volumeLabel(p.volume),
+            delta == null ? null : '${delta >= 0 ? '+' : '−'}${delta.abs()} % zum Zeitraum davor', delta != null && delta < 0 ? c.tertiary : c.primary),
+        tile(Icons.emoji_events_outlined, 'Übungen mit Rekord', p.lifts == 0 ? '–' : '${p.recordLifts} von ${p.lifts}',
+            switch (p.lastRecord) { (final name, _, final d)? => '${ago(d)[0].toUpperCase()}${ago(d).substring(1)}: $name', null => 'kein neues Höchstgewicht' }),
+      ]),
+    ]);
+  }
 
-    Widget section(String title, String? trailing, List<Widget> children) => Card(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
-                if (trailing != null) Text(trailing, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
-              ]),
-              const SizedBox(height: 10),
-              ...children,
-            ]),
+  /// Trainings per calendar week of the period (at most half a year of bars) against the goal.
+  Widget weeksSection(List<Session> sessions, DateTime now, double periodWeeks, ColorScheme c, TextStyle small) {
+    final weeks = weeklySummary(sessions, now, weeks: periodWeeks.ceil().clamp(4, 26));
+    final goal = weeklyGoal.value;
+    return section('Trainings pro Woche', 'Ziel $goal×', [
+      SizedBox(
+        height: 150,
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: BarChart(
+            [for (final w in weeks) w.$2.toDouble()],
+            [for (final w in weeks) weekLabel(w.$1)],
+            goal: goal.toDouble(),
+            hit: c.primary,
+            miss: c.outlineVariant,
+            label: c.onSurfaceVariant,
           ),
-        );
-
-    String weekLabel(DateTime monday) => '${monday.day}.${monday.month}.';
-
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        if (picked != null) progressSection(picked, strength, section, c),
-        const SizedBox(height: 8),
-        // Key figures and exercises for the chosen period.
-        SegmentedButton<int>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 30, label: Text('30 Tage')),
-            ButtonSegment(value: 90, label: Text('90 Tage')),
-            ButtonSegment(value: 365, label: Text('1 Jahr')),
-            ButtonSegment(value: 0, label: Text('Gesamt')),
-          ],
-          selected: {days},
-          onSelectionChanged: (v) {
-            setState(() => days = v.single);
-            prefs.setInt('stats.days', v.single);
-          },
         ),
-        const SizedBox(height: 6),
-        Row(children: [
-          tile(Icons.event_available, 'Trainings', '${p.trainings}'),
-          tile(Icons.calendar_view_week, 'Ø pro Woche', num1(p.perWeek)),
-        ]),
-        Row(children: [
-          tile(Icons.repeat, 'Sätze pro Woche', num1(p.setsPerWeek)),
-          tile(Icons.timer_outlined, 'Ø Dauer', switch (p.avgDuration) { final d? => durationLabel(d), null => '–' }),
-        ]),
-        Row(children: [
-          tile(Icons.stacked_bar_chart, 'Volumen', volumeLabel(p.volume)),
-          tile(Icons.local_fire_department_outlined, 'Schwerstes Training', volumeLabel(p.maxVolume)),
-        ]),
-        if (p.top case (final name, final kg))
-          Row(children: [tile(Icons.emoji_events_outlined, 'Höchstes Gewicht', '$name · ${weightLabel(kg)}')]),
-        const SizedBox(height: 8),
-        musclesSection([for (final s in sessions) if (from == null || s.date.isAfter(from)) s], section, c),
-        section('Trainings pro Woche', 'Ziel $goal×', [
-          SizedBox(
-            height: 150,
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: BarChart(
-                [for (final w in weeks) w.$2.toDouble()],
-                [for (final w in weeks) weekLabel(w.$1)],
-                goal: goal.toDouble(),
-                hit: c.primary,
-                miss: c.outlineVariant,
-                label: c.onSurfaceVariant,
+      ),
+      const SizedBox(height: 6),
+      Text('${weeks.where((w) => w.$2 >= goal).length} von ${weeks.length} Wochen mit Ziel erreicht', style: small),
+    ]);
+  }
+
+  /// Opposing sides against each other: by strength (current 1RM of the barbell lifts) and by sets per
+  /// week. Each pair as two bars, side b with its guide range as a band, so the gap is visible at a
+  /// glance; when a side falls behind, what to add.
+  Widget? balanceSection(List<Session> sessions, double weeks, ColorScheme c, TextStyle small) {
+    final pairs = balances(sessions, weeks: weeks);
+    if (pairs.isEmpty) return null;
+    // Rounded down, so 59.6 % under a 60 % guide doesn't read as 60 %.
+    String pct(double v) => '${(v * 100).floor()} %';
+    String sets(double v) => v.toStringAsFixed(v < 10 ? 1 : 0).replaceAll('.', ',');
+    String tip(Balance b) => switch ((b.pair, b.lagging == b.bGroup)) {
+          (Pair.chestBack, true) => 'Mehr Rudern: ein Satz mehr oder Rudern vor dem Bankdrücken.',
+          (Pair.chestBack, false) => 'Das Bankdrücken hängt hinterher: dort den Schwerpunkt setzen.',
+          (Pair.squatHinge, true) => 'Hintere Kette stärken: Kreuzheben, Rumänisches Kreuzheben, Hip Thrust.',
+          (Pair.squatHinge, false) => 'Die Kniebeuge hängt hinterher: Technik prüfen, Beinpresse ergänzen.',
+          (Pair.quadsHamstrings, _) =>
+            'Beinbeuger-Curls oder Nordic Curls ergänzen: Sie trainieren die Beinbeuger am Knie, das Kreuzheben kaum.',
+          (Pair.pushPullFlat, _) => 'Mehr Rudern (Langhantel, Kurzhantel, Kabel), bis auf jeden Drück-Satz ein Zug-Satz kommt.',
+          (Pair.pushPullOverhead, _) => 'Mehr von oben ziehen: Klimmzüge oder Latzug, so viele Sätze wie Schulterdrücken.',
+        };
+
+    Widget pair(Balance b) {
+      final range = b.high.isFinite ? '${pct(b.low)}–${pct(b.high)}' : 'ab ${pct(b.low)}';
+      String value(double v) => b.strength ? weightLabel(roundedKg(v)) : sets(v);
+      // One scale for both bars, wide enough for the values and the start of the guide range.
+      final top = [b.aValue, b.bValue, b.aValue * (b.high.isFinite ? b.high : b.low * 1.25)].reduce(max) * 1.05;
+      Widget bar(String label, double v, bool behind, {bool band = false}) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              SizedBox(width: 112, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: small)),
+              Expanded(
+                child: LayoutBuilder(builder: (context, box) {
+                  double x(double v) => box.maxWidth * (v / top).clamp(0, 1);
+                  final from = b.aValue * b.low, to = b.high.isFinite ? b.aValue * b.high : top;
+                  return SizedBox(
+                    height: 14,
+                    child: Stack(children: [
+                      Positioned.fill(
+                        child: DecoratedBox(
+                            decoration: BoxDecoration(color: c.surfaceContainerHighest, borderRadius: BorderRadius.circular(4))),
+                      ),
+                      if (band)
+                        Positioned(
+                          left: x(from),
+                          width: x(to) - x(from),
+                          top: 0,
+                          bottom: 0,
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(color: c.primary.withValues(alpha: .45), borderRadius: BorderRadius.circular(4))),
+                        ),
+                      Positioned(
+                        left: 0,
+                        width: x(v),
+                        top: 3,
+                        bottom: 3,
+                        child: DecoratedBox(
+                            decoration: BoxDecoration(
+                                color: behind ? c.tertiary : c.primary, borderRadius: BorderRadius.circular(3))),
+                      ),
+                    ]),
+                  );
+                }),
               ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${weeks.where((w) => w.$2 >= goal).length} von ${weeks.length} Wochen mit Ziel erreicht',
-            style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
-          ),
+              SizedBox(width: 58, child: Text(value(v), textAlign: TextAlign.end, style: small)),
+            ]),
+          );
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(b.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+          _BalanceChip(b.lagging),
         ]),
-        if (weeks.any((w) => w.$3 > 0))
-          section('Cardio pro Woche', 'Minuten', [
-            SizedBox(
-              height: 130,
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: BarChart(
-                  [for (final w in weeks) w.$3.toDouble()],
-                  [for (final w in weeks) weekLabel(w.$1)],
-                  hit: c.tertiary,
-                  miss: c.tertiary,
-                  label: c.onSurfaceVariant,
+        const SizedBox(height: 6),
+        bar(b.a, b.aValue, b.lagging == b.aGroup),
+        bar(b.b, b.bValue, b.lagging == b.bGroup, band: true),
+        const SizedBox(height: 2),
+        Text('${b.b} bei ${b.ratio.isFinite ? pct(b.ratio) : '–'} · Richtwert $range', style: small),
+        if (b.lagging != null) ...[
+          const SizedBox(height: 4),
+          Text(tip(b), style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
+        ],
+      ]);
+    }
+
+    Widget group(String title, List<Balance> list) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: small.copyWith(fontWeight: FontWeight.w600, letterSpacing: .3)),
+          for (final b in list) ...[const SizedBox(height: 10), pair(b)],
+        ]);
+
+    final strength = [for (final b in pairs) if (b.strength) b];
+    final volume = [for (final b in pairs) if (!b.strength) b];
+    final off = pairs.where((b) => b.lagging != null).length;
+    return section('Balance', off == 0 ? 'alles im Richtwert' : off == 1 ? '1 Hinweis' : '$off Hinweise', onInfo: showBalanceInfo, [
+      if (strength.isNotEmpty) group('KRAFT · AKTUELLER 1RM', strength),
+      if (strength.isNotEmpty && volume.isNotEmpty) const Divider(height: 28),
+      if (volume.isNotEmpty) group('TRAININGSMENGE · SÄTZE PRO WOCHE', volume),
+      const SizedBox(height: 14),
+      Text(
+        'Band: Richtwert aus der Trainingspraxis, keine medizinische Grenze. Der Kraftvergleich braucht '
+        'Langhantel-Übungen, die Sätze zählen jede Übung, Hilfsmuskeln halb.',
+        style: small,
+      ),
+    ]);
+  }
+
+  /// What research says about the pairs and their guide values, behind the (i) of the balance card.
+  void showBalanceInfo() {
+    final c = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    Widget heading(String s) => Padding(
+          padding: const EdgeInsets.only(top: 18, bottom: 6),
+          child: Text(s, style: text.titleSmall?.copyWith(color: c.primary)),
+        );
+    Widget point(String s) => Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('•  '),
+            Expanded(child: Text(s, style: text.bodyMedium)),
+          ]),
+        );
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .7,
+        maxChildSize: .92,
+        builder: (context, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+          children: [
+            Text('Balance: was dahintersteckt', style: text.titleLarge),
+            const SizedBox(height: 8),
+            Text(
+              'Die Zielbereiche sind Richtwerte aus der Trainingspraxis, keine medizinischen Grenzen. '
+              'Für die meisten Paare gibt es keine direkten Studien.',
+              style: text.bodyMedium,
+            ),
+            heading('Was belegt ist'),
+            point('Mehr Sätze pro Woche bringen mehr Muskelaufbau, das ist gut belegt [1]. Eine neuere Auswertung von 67 '
+                'Studien sagt das Wachstum am besten voraus, wenn Sätze für Hilfsmuskeln halb zählen [2], so wie FerroLog '
+                'zählt. Die Vergleiche nach Sätzen stehen deshalb auf sichererem Boden als die nach Kraft.'),
+            point('Nordic Curls halbieren in Studien mit über 8 000 Sportlern die Zahl der Zerrungen am hinteren '
+                'Oberschenkel [3]. Deshalb der Tipp bei den Beinbeugern.'),
+            point('Freizeit-Kraftsportler mit Schulter-Engpass (Impingement) hatten schwächere Außenrotatoren und untere '
+                'Trapezmuskeln [4]. Wer die Außenrotatoren trainierte, zeigte seltener Anzeichen dafür [5]. Das passt zu '
+                '„genug ziehen“, belegt aber keine Ursache.'),
+            heading('Was unsicher ist'),
+            point('Beinbeuger zu Quadrizeps ist das am besten untersuchte Kraftverhältnis. Im Profifußball hatten Spieler '
+                'mit Ungleichgewicht fast dreimal so oft Zerrungen, ausgeglichen sank das Risiko wieder [6]. Eine '
+                'Übersicht über 18 Studien findet aber nur sehr schwache Belege, dass das Verhältnis allein Verletzungen '
+                'vorhersagt [7]. Die stärksten Risikofaktoren sind Alter und frühere Zerrungen [8].'),
+            point('Aus einzelnen Messwerten lassen sich Verletzungen beim Einzelnen kaum vorhersagen [9]. Die Balance zeigt '
+                'deshalb Trainingshinweise, keine Warnungen.'),
+            heading('Woher die Richtwerte kommen'),
+            point('Rudern 75–120 % vom Bankdrücken: Bei schwedischen Spitzen-Werfern lag das Bankdrücken 15–22 % über dem '
+                'liegenden Rudern [10], Rudern also bei gut 80 %. Für Freizeitsportler gibt es keine Studie.'),
+            point('Kreuzheben 100–140 % der Kniebeuge: Bei rund 800 000 Wettkampf-Starts im Kraftdreikampf liegt das '
+                'Kreuzheben im Mittel bei etwa 115–120 % der Kniebeuge [11]. Das beschreibt, was üblich ist, und sagt '
+                'nichts über Verletzungen.'),
+            point('Mindestens so viele Zug- wie Drück-Sätze, waagerecht und über Kopf getrennt: gängige Empfehlung aus der '
+                'Praxis, nicht durch Studien geprüft.'),
+            point('Beinbeuger ab 60 % der Quadrizeps-Sätze: angelehnt an den üblichen Kraft-Richtwert von etwa 0,6 am Knie. '
+                'Das Kreuzheben trainiert vor allem Gesäß und unteren Rücken, die Beinbeuger arbeiten dort eher haltend.'),
+            heading('Wie FerroLog rechnet'),
+            point('Kraft: der beste geschätzte 1RM aus den letzten vier Trainings einer Übung. Nur Langhantel-Übungen, '
+                'denn bei Kurzhanteln gilt das Gewicht pro Hand.'),
+            point('Sätze: jede Übung im Zeitraum, pro Woche gerechnet. Hilfsmuskeln zählen halb.'),
+            point('Nicht dabei: links ↔ rechts (die App speichert keine Seiten), Bizeps ↔ Trizeps und Bauch ↔ unterer '
+                'Rücken (selten ein Problem, dünne Datenlage).'),
+            heading('Quellen'),
+            for (final (i, (label, url)) in _balanceSources.indexed)
+              InkWell(
+                onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text('[${i + 1}] $label',
+                      style: text.bodySmall?.copyWith(color: c.primary, decoration: TextDecoration.underline)),
                 ),
               ),
-            ),
-          ]),
-        Padding(padding: const EdgeInsets.fromLTRB(8, 12, 8, 4), child: Text('Übungen', style: text.titleMedium)),
-        // Exercises trained in the period, most often first: total lifted and best estimated 1RM there.
-        for (final (name, logs) in [
-          for (final name in store.loggedExercises)
-            (name, [for (final (d, l) in store.historyOf(name)) if (from == null || d.isAfter(from)) l]),
-        ].where((e) => e.$2.isNotEmpty).toList()
-          ..sort((a, b) => b.$2.length.compareTo(a.$2.length)))
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-            child: ListTile(
-              title: Text(name),
-              subtitle: Text(exerciseLine(logs)),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (!logs.last.cardio && logs.last.weight > 0)
-                  Text('1RM ${weightLabel(toKg((shown(logs.map(estimated1rm).reduce(max)) * 2).round() / 2))}', // an estimate: ±0,5
-                      style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                const Icon(Icons.chevron_right),
-              ]),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(name))),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
-  /// Body map of the period (darker = more sets) and sets per body region, most first.
-  Widget musclesSection(
-      List<Session> sessions, Widget Function(String, String?, List<Widget>) section, ColorScheme c) {
-    final perMuscle = setsPerSingleMuscle(sessions);
-    final top = perMuscle.values.fold(0.0, max);
-    if (top == 0) return const SizedBox();
-    final regions = setsPerMuscle(sessions).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    String sets(double v) => '${v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1).replaceAll('.', ',')} Sätze';
-    return section('Muskeln', 'Hilfsmuskeln zählen halb', [
-      Center(child: BodyMap.heat({for (final e in perMuscle.entries) e.key: e.value / top}, height: 190)),
-      const SizedBox(height: 14),
-      for (final MapEntry(key: g, value: v) in regions)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            SizedBox(width: 80, child: Text(g.label, style: const TextStyle(fontSize: 14))),
-            Expanded(
-              child: LinearProgressIndicator(
-                value: regions.first.value == 0 ? 0 : v / regions.first.value,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
-                backgroundColor: c.surfaceContainerHighest,
+  /// Sets per muscle and week: the body map in fixed steps (so it shows too little, not just the most),
+  /// then each main muscle against 10–20 sets. Tap a muscle for the exercises behind it.
+  Widget musclesSection(List<Session> sessions, double weeks, ColorScheme c, TextStyle small) {
+    final perWeek = {for (final e in setsPerSingleMuscle(sessions).entries) e.key: e.value / weeks};
+    if (perWeek.values.every((v) => v == 0)) return const SizedBox();
+    final never = [for (final m in _mainMuscles) if (perWeek[m] == 0) m.label];
+    const maxSets = 25.0;
+    String n(double v) => v == 0 ? '–' : v.toStringAsFixed(v < 10 ? 1 : 0).replaceAll('.', ',');
+    Widget swatch(double level, String text) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: Color.lerp(c.onSurface.withValues(alpha: .16), c.primary, level),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(text, style: small),
+        ]);
+    return section('Muskeln', 'Sätze pro Woche', [
+      Center(
+        child: BodyMap.heat(
+          {for (final e in perWeek.entries) e.key: muscleLevel(e.value)},
+          height: 220,
+          onTap: (m) => showMuscle(m, perWeek[m] ?? 0, sessions),
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text('Tippe auf einen Muskel für seine Übungen', textAlign: TextAlign.center, style: small),
+      const SizedBox(height: 10),
+      Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
+        swatch(.35, 'unter 5'),
+        swatch(.6, '5–10'),
+        swatch(.82, '10–20'),
+        swatch(1, 'über 20'),
+      ]),
+      if (never.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        Text('Nicht trainiert: ${never.join(', ')}', style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
+      ],
+      const SizedBox(height: 12),
+      for (final m in _mainMuscles)
+        InkWell(
+          onTap: () => showMuscle(m, perWeek[m]!, sessions),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              SizedBox(width: 118, child: Text(m.label, style: const TextStyle(fontSize: 14))),
+              Expanded(
+                child: LayoutBuilder(builder: (context, box) {
+                  double x(double v) => box.maxWidth * min(v, maxSets) / maxSets;
+                  final v = perWeek[m]!;
+                  return SizedBox(
+                    height: 12,
+                    child: Stack(children: [
+                      Positioned.fill(
+                        child: DecoratedBox(
+                            decoration: BoxDecoration(color: c.surfaceContainerHighest, borderRadius: BorderRadius.circular(4))),
+                      ),
+                      // Target band.
+                      Positioned(
+                        left: x(10),
+                        width: x(20) - x(10),
+                        top: 0,
+                        bottom: 0,
+                        child: DecoratedBox(
+                            decoration: BoxDecoration(color: c.primary.withValues(alpha: .35), borderRadius: BorderRadius.circular(2))),
+                      ),
+                      Positioned(
+                        left: 0,
+                        width: x(v),
+                        top: 3,
+                        bottom: 3,
+                        child: DecoratedBox(
+                            decoration: BoxDecoration(color: v < 10 ? c.tertiary : c.primary, borderRadius: BorderRadius.circular(3))),
+                      ),
+                    ]),
+                  );
+                }),
               ),
-            ),
-            SizedBox(
-              width: 76,
-              child: Text(sets(v), textAlign: TextAlign.end, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-            ),
+              SizedBox(width: 44, child: Text(n(perWeek[m]!), textAlign: TextAlign.end, style: small)),
+            ]),
+          ),
+        ),
+      const SizedBox(height: 8),
+      Text(
+        'Band: 10–20 Sätze pro Woche, ein Richtwert für Muskelaufbau. Kraftprogramme wie 5×5 lassen bewusst '
+        'Muskeln aus. Hilfsmuskeln zählen halb.',
+        style: TextStyle(fontSize: 11, color: c.onSurfaceVariant),
+      ),
+    ]);
+  }
+
+  void showMuscle(Muscle m, double perWeek, List<Session> sessions) {
+    final c = Theme.of(context).colorScheme;
+    final exercises = exercisesFor(m, sessions);
+    String n(double v) => v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1).replaceAll('.', ',');
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(m.label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+            Text('${n(perWeek)} Sätze pro Woche', style: TextStyle(color: c.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            if (exercises.isEmpty)
+              const Text('Keine Übung im Zeitraum trainiert diesen Muskel.')
+            else
+              for (final (name, sets) in exercises)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Expanded(child: Text(name)),
+                    Text('${n(sets)} Sätze', style: TextStyle(color: c.onSurfaceVariant)),
+                  ]),
+                ),
           ]),
         ),
+      ),
+    );
+  }
+
+  Widget? cardioSection(List<Session> sessions, DateTime now, double periodWeeks, ColorScheme c) {
+    final weeks = weeklySummary(sessions, now, weeks: periodWeeks.ceil().clamp(4, 26));
+    if (!weeks.any((w) => w.$3 > 0)) return null;
+    return section('Cardio pro Woche', 'Minuten', [
+      SizedBox(
+        height: 130,
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: BarChart(
+            [for (final w in weeks) w.$3.toDouble()],
+            [for (final w in weeks) weekLabel(w.$1)],
+            hit: c.tertiary,
+            miss: c.tertiary,
+            label: c.onSurfaceVariant,
+          ),
+        ),
+      ),
     ]);
   }
 
@@ -230,112 +705,387 @@ class _StatsPageState extends State<StatsPage> {
     if (logs.last.weight == 0) return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze';
     return '$n · Gesamt ${volumeLabel(logs.fold(0.0, (v, l) => v + l.volume))}';
   }
+}
 
-  /// Weight line and estimated 1RM for one exercise, with chips to switch and the change in 30 days.
-  Widget progressSection(String name, List<String> names, Widget Function(String, String?, List<Widget>) section,
-      ColorScheme c) {
-    final history = store.historyOf(name);
-    final change = weightChange(history, DateTime.now());
-    final headline = switch (change) {
-      (final d, _) when d > 0 => '+${weightLabel(d)} in 30 Tagen',
-      (final d, _) when d < 0 => '−${weightLabel(-d)} in 30 Tagen',
-      (_, _) => 'gleich in 30 Tagen',
-      null => '${history.length}× trainiert',
+enum _ChartMode { percent, deltaKg, weight }
+
+/// "+4,5", "−2", "0" with one decimal at most.
+String signed(double v) {
+  final n = (v.abs() * 10).round() / 10;
+  final text = n == n.roundToDouble() ? n.toStringAsFixed(0) : n.toStringAsFixed(1).replaceAll('.', ',');
+  return n == 0 ? '0' : '${v > 0 ? '+' : '−'}$text';
+}
+
+String weekLabel(DateTime monday) => '${monday.day}.${monday.month}.';
+
+/// An estimate shown to the half unit (±0,5).
+double roundedKg(double kg) => toKg((shown(kg) * 2).round() / 2);
+
+/// Body map shade for sets per week: 0, under 5, 5–10, 10–20, over 20.
+double muscleLevel(double perWeek) => switch (perWeek) {
+      0 => 0,
+      < 5 => .35,
+      < 10 => .6,
+      <= 20 => .82,
+      _ => 1,
     };
-    return section(name, null, [
-      Text('${weightLabel(history.last.$2.weight)} · $headline',
-          style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: (change?.$1 ?? 0) > 0 ? c.primary : c.onSurfaceVariant)),
-      const SizedBox(height: 10),
-      SizedBox(
-        height: 170,
-        child: InkWell(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(name))),
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: LineChart(
-              [for (final h in history) shown(h.$2.weight)],
-              [for (final h in history) shown(estimated1rm(h.$2))],
-              c.primary,
-              c.outlineVariant,
-              c.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 4),
-      Text('Linie: Gewicht · gestrichelt: geschätztes 1RM', style: TextStyle(fontSize: 11, color: c.onSurfaceVariant)),
-      if (names.length > 1) ...[
-        const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final n in names.take(8))
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(
-                  showCheckmark: false,
-                  label: Text(n),
-                  selected: n == name,
-                  onSelected: (_) {
-                    prefs.setString('stats.exercise', n);
-                    setState(() {});
-                  },
-                ),
-              ),
-          ]),
-        ),
-      ],
-    ]);
+
+/// "steigt +4 %", "stabil +1 %", "hängt fest −2 %" for the last four weeks.
+/// "ausgewogen", or which side falls behind.
+class _BalanceChip extends StatelessWidget {
+  final String? lagging;
+  const _BalanceChip(this.lagging);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final ok = lagging == null;
+    final (bg, fg) = ok ? (c.primaryContainer, c.onPrimaryContainer) : (c.tertiaryContainer, c.onTertiaryContainer);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(ok ? Icons.check : Icons.warning_amber_rounded, size: 13, color: fg),
+        const SizedBox(width: 3),
+        Text(ok ? 'ausgewogen' : '$lagging hängt hinterher', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+      ]),
+    );
   }
 }
 
-class ExerciseStats extends StatelessWidget {
+class TrendChip extends StatelessWidget {
+  final (Trend, double)? trend;
+  const TrendChip(this.trend, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = trend;
+    if (t == null) return Text('neu', style: TextStyle(fontSize: 12, color: c.onSurfaceVariant));
+    final (label, bg, fg) = switch (t.$1) {
+      Trend.up => ('steigt', c.primaryContainer, c.onPrimaryContainer),
+      Trend.flat => ('stabil', c.surfaceContainerHighest, c.onSurfaceVariant),
+      Trend.stuck => ('hängt fest', c.tertiaryContainer, c.onTertiaryContainer),
+    };
+    final pct = t.$2.round();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (t.$1 == Trend.stuck) ...[Icon(Icons.warning_amber_rounded, size: 13, color: fg), const SizedBox(width: 3)],
+        Text('$label ${pct >= 0 ? '+' : '−'}${pct.abs()} %',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+      ]),
+    );
+  }
+}
+
+/// One exercise: switch exercise, period and measure (weight, 1RM, volume), its chart with setbacks
+/// and every training of the period.
+class ExerciseStats extends StatefulWidget {
   final String name;
   const ExerciseStats(this.name, {super.key});
 
   @override
+  State<ExerciseStats> createState() => _ExerciseStatsState();
+}
+
+enum _Measure { weight, e1rm, volume }
+
+class _ExerciseStatsState extends State<ExerciseStats> {
+  late String name = widget.name;
+  int days = statsDays;
+  _Measure measure = _Measure.e1rm;
+
+  @override
   Widget build(BuildContext context) {
     final history = store.historyOf(name);
-    final scheme = Theme.of(context).colorScheme;
-    final best = history.map((h) => estimated1rm(h.$2)).fold(0.0, max);
     if (history.lastOrNull?.$2.cardio ?? false) return _cardioStats(context, name, history);
+    final c = Theme.of(context).colorScheme;
+    final small = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
+    final from = periodStart(days);
+    final out = setbacks(history);
+    final shownHistory = [for (final (i, h) in history.indexed) if (from == null || h.$1.isAfter(from)) (i, h)];
+    double value(ExerciseLog l) => switch (measure) {
+          _Measure.weight => shown(l.weight),
+          _Measure.e1rm => shown(estimated1rm(l)),
+          _Measure.volume => shown(l.volume),
+        };
+    final names = strengthExercises();
+    final colorIndex = max(0, names.indexOf(name)) % 6;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final trend = trendOf(history, DateTime.now());
+    final best = history.isEmpty ? 0.0 : history.map((h) => estimated1rm(h.$2)).reduce(max);
     return Scaffold(
       appBar: AppBar(title: Text(name)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Gewicht (Linie) und geschätztes 1RM (gestrichelt)', style: Theme.of(context).textTheme.bodySmall),
+          if (names.length > 1)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final n in names)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      label: Text(n),
+                      selected: n == name,
+                      onSelected: (_) => setState(() => name = n),
+                    ),
+                  ),
+              ]),
+            ),
+          const SizedBox(height: 12),
+          periodPicker(days, (d) => setState(() => days = d)),
           const SizedBox(height: 8),
-          SizedBox(
-            height: 220,
-            child: CustomPaint(
-              painter: LineChart(
-                [for (final h in history) shown(h.$2.weight)],
-                [for (final h in history) shown(estimated1rm(h.$2))],
-                scheme.primary,
-                scheme.outlineVariant,
-                scheme.onSurfaceVariant,
+          SegmentedButton<_Measure>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: _Measure.weight, label: Text('Gewicht')),
+              ButtonSegment(value: _Measure.e1rm, label: Text('1RM')),
+              ButtonSegment(value: _Measure.volume, label: Text('Volumen')),
+            ],
+            selected: {measure},
+            onSelectionChanged: (v) => setState(() => measure = v.single),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: Text('Bestes 1RM ${weightLabel(roundedKg(best))}', style: const TextStyle(fontWeight: FontWeight.w600))),
+            if (!(history.lastOrNull?.$2.weight == 0)) TrendChip(trend),
+          ]),
+          const SizedBox(height: 12),
+          if (shownHistory.isEmpty)
+            Text('Kein Training in diesem Zeitraum.', style: small)
+          else
+            SizedBox(
+              height: 220,
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: ProgressChart(
+                  [
+                    ChartSeries(
+                      name,
+                      (dark ? _seriesDark : _seriesLight)[colorIndex],
+                      const [],
+                      [for (final (_, (d, l)) in shownHistory) (d, value(l))],
+                      {for (final (j, (i, _)) in shownHistory.indexed) if (out.contains(i)) j},
+                      dots: true,
+                    ),
+                  ],
+                  from ?? shownHistory.first.$2.$1,
+                  DateTime.now(),
+                  grid: c.outlineVariant.withValues(alpha: .5),
+                  label: c.onSurfaceVariant,
+                  surface: c.surface,
+                ),
               ),
             ),
+          const SizedBox(height: 6),
+          Text(
+            switch (measure) {
+              _Measure.weight => 'Arbeitsgewicht ($unitLabel). ▲ = Rückschritt.',
+              _Measure.e1rm => 'Geschätztes 1RM aus allen Sätzen ($unitLabel). ▲ = Rückschritt.',
+              _Measure.volume => 'Volumen: Gewicht × Wiederholungen ($unitLabel). ▲ = Rückschritt.',
+            },
+            style: TextStyle(fontSize: 11, color: c.onSurfaceVariant),
           ),
-          const SizedBox(height: 8),
-          Text('Bestes geschätztes 1RM: ${weightLabel(best)}'),
           const Divider(height: 32),
-          for (final (date, log) in history.reversed)
+          for (final (i, (date, log)) in shownHistory.reversed)
             ListTile(
               dense: true,
-              title: Text('${weightLabel(log.weight)} × ${log.reps.map((r) => r ?? '–').join('/')}'),
+              contentPadding: EdgeInsets.zero,
+              title: Text('${log.weight > 0 ? '${weightLabel(log.weight)} × ' : ''}${log.reps.map((r) => r ?? '–').join('/')}'),
               subtitle: Text(dateLabel(date)),
-              trailing: Icon(log.succeeded ? Icons.check_circle : Icons.remove_circle_outline,
-                  color: log.succeeded ? scheme.primary : scheme.outline),
+              trailing: out.contains(i)
+                  ? Icon(Icons.change_history, color: c.tertiary)
+                  : Icon(log.succeeded ? Icons.check_circle : Icons.remove_circle_outline,
+                      color: log.succeeded ? c.primary : c.outline),
             ),
         ],
       ),
     );
   }
+}
+
+/// One line of a [ProgressChart]: (date, value) oldest first; [setbacks] are point indexes drawn as
+/// triangles.
+class ChartSeries {
+  final String name;
+  final Color color;
+  final List<double> dash;
+  final List<(DateTime, double)> points;
+  final Set<int> setbacks;
+  final bool hidden, dots;
+  const ChartSeries(this.name, this.color, this.dash, this.points, this.setbacks, {this.hidden = false, this.dots = false});
+}
+
+/// Lines over real time (gaps like a holiday stay visible) on one y-axis with a few round ticks.
+class ProgressChart extends CustomPainter {
+  final List<ChartSeries> series;
+  final DateTime from, to;
+
+  /// After the tick labels, e.g. "%".
+  final String unit;
+
+  /// Changes around a baseline: ticks with a sign and a stronger zero line.
+  final bool signed;
+  final Color grid, label, surface;
+  ProgressChart(this.series, this.from, this.to,
+      {this.unit = '', this.signed = false, required this.grid, required this.label, required this.surface});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final visible = series.where((s) => !s.hidden && s.points.isNotEmpty).toList();
+    final values = [for (final s in visible) for (final p in s.points) p.$2, if (signed) 0.0];
+    if (values.isEmpty) return;
+    var lo = values.reduce(min), hi = values.reduce(max);
+    if (hi - lo < 1) (lo, hi) = (lo - 1, hi + 1);
+    // Round step giving about four ticks.
+    final raw = (hi - lo) / 4;
+    final mag = pow(10, (log(raw) / ln10).floor()).toDouble();
+    final step = [1, 2, 2.5, 5, 10].map((m) => m * mag).firstWhere((s) => s >= raw);
+    lo = (lo / step).floor() * step;
+    hi = (hi / step).ceil() * step;
+
+    TextPainter text(String s) => TextPainter(
+          text: TextSpan(text: s, style: TextStyle(color: label, fontSize: 10)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+    String tick(double v) {
+      final n = v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1).replaceAll('.', ',');
+      return '${signed && v > 0 ? '+' : ''}$n${unit.isEmpty ? '' : ' $unit'}';
+    }
+
+    final left = [for (var v = lo; v <= hi + step / 2; v += step) text(tick(v)).width].reduce(max) + 6;
+    const bottom = 16.0, top = 6.0;
+    final w = size.width - left - 4, h = size.height - bottom - top;
+    final span = max(1, to.difference(from).inHours);
+    double x(DateTime d) => left + w * (d.difference(from).inHours / span).clamp(0, 1);
+    double y(double v) => top + h * (1 - (v - lo) / (hi - lo));
+
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var v = lo; v <= hi + step / 2; v += step) {
+      canvas.drawLine(Offset(left, y(v)), Offset(size.width, y(v)),
+          signed && v.abs() < step / 2 ? (Paint()..color = label.withValues(alpha: .6)) : gridPaint);
+      final tp = text(tick(v));
+      tp.paint(canvas, Offset(left - 6 - tp.width, y(v) - tp.height / 2));
+    }
+    // Four dates along the bottom.
+    for (var i = 0; i <= 3; i++) {
+      final d = from.add(Duration(hours: (span * i / 3).round()));
+      final tp = text('${d.day}.${d.month}.');
+      final cx = (x(d) - tp.width / 2).clamp(left, size.width - tp.width);
+      tp.paint(canvas, Offset(cx, size.height - tp.height));
+    }
+
+    for (final s in visible) {
+      final pts = [for (final p in s.points) Offset(x(p.$1), y(p.$2))];
+      final line = Paint()
+        ..color = s.color
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round;
+      final path = Path()..addPolygon(pts, false);
+      if (s.dash.isEmpty) {
+        canvas.drawPath(path, line);
+      } else {
+        for (final metric in path.computeMetrics()) {
+          var d = 0.0, k = 0;
+          while (d < metric.length) {
+            final len = s.dash[k % s.dash.length];
+            if (k.isEven) canvas.drawPath(metric.extractPath(d, d + len), line);
+            d += len;
+            k++;
+          }
+        }
+      }
+      final fill = Paint()..color = s.color;
+      if (s.dots || pts.length == 1) {
+        for (final p in pts) {
+          canvas.drawCircle(p, 3, fill);
+        }
+      }
+      // Setbacks: a triangle with a ring of the background, so it stands out on crossing lines.
+      for (final i in s.setbacks) {
+        if (i >= pts.length) continue;
+        final p = pts[i];
+        final tri = Path()
+          ..moveTo(p.dx, p.dy - 6)
+          ..lineTo(p.dx + 5.5, p.dy + 4)
+          ..lineTo(p.dx - 5.5, p.dy + 4)
+          ..close();
+        canvas.drawPath(
+            tri,
+            Paint()
+              ..color = surface
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3);
+        canvas.drawPath(tri, fill);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(ProgressChart old) => true;
+}
+
+/// The short line in the chart legend, dashed like its series.
+class _LegendLine extends CustomPainter {
+  final Color color;
+  final List<double> dash;
+  const _LegendLine(this.color, this.dash);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2;
+    final y = size.height / 2;
+    if (dash.isEmpty) return canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    var x = 0.0, k = 0;
+    while (x < size.width) {
+      final len = dash[k % dash.length];
+      if (k.isEven) canvas.drawLine(Offset(x, y), Offset(min(x + len, size.width), y), paint);
+      x += len;
+      k++;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LegendLine old) => old.color != color;
+}
+
+/// Tiny line of the last values, scaled to its own range.
+class Sparkline extends CustomPainter {
+  final List<double> values;
+  final Color color;
+  const Sparkline(this.values, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final lo = values.reduce(min), hi = values.reduce(max);
+    final range = hi - lo == 0 ? 1 : hi - lo;
+    final pts = [
+      for (final (i, v) in values.indexed)
+        Offset(size.width * i / (values.length - 1), 2 + (size.height - 4) * (1 - (v - lo) / range)),
+    ];
+    canvas.drawPath(
+      Path()..addPolygon(pts, false),
+      Paint()
+        ..color = color
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(Sparkline old) => old.values != values || old.color != color;
 }
 
 /// Bars for e.g. trainings per week: [hit] color when the value reaches [goal] (or always without
@@ -365,6 +1115,8 @@ class BarChart extends CustomPainter {
       tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
     }
 
+    // Labels on every bar while they fit, else on every n-th (and the last).
+    final every = max(1, (36 / slot).ceil());
     for (final (i, v) in values.indexed) {
       final x = slot * i + slot / 2;
       final reached = goal == null || v >= goal!;
@@ -374,10 +1126,9 @@ class BarChart extends CustomPainter {
               topLeft: const Radius.circular(5), topRight: const Radius.circular(5)),
           Paint()..color = reached ? hit : miss,
         );
-        text(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1), Offset(x, y(v) - 8), bold: true);
+        if (slot >= 14) text(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1), Offset(x, y(v) - 8), bold: true);
       }
-      // Every other label when it gets tight.
-      if (values.length <= 6 || i.isEven || i == values.length - 1) text(labels[i], Offset(x, size.height - bottom / 2));
+      if ((values.length - 1 - i) % every == 0) text(labels[i], Offset(x, size.height - bottom / 2));
     }
     if (goal case final g?) {
       final paint = Paint()
@@ -394,62 +1145,7 @@ class BarChart extends CustomPainter {
   bool shouldRepaint(BarChart old) => true;
 }
 
-/// Minimal two-series line chart sharing one y-axis; x is session index.
-class LineChart extends CustomPainter {
-  final List<double> main, secondary;
-  final Color mainColor, secondaryColor, labelColor;
-  LineChart(this.main, this.secondary, this.mainColor, this.secondaryColor, this.labelColor);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final all = [...main, ...secondary].where((v) => v > 0);
-    if (all.isEmpty) return;
-    var lo = all.reduce(min), hi = all.reduce(max);
-    if (hi - lo < 1) (lo, hi) = (lo - 5, hi + 5);
-    const left = 40.0;
-    final w = size.width - left, h = size.height - 8;
-    Offset at(int i, double v) =>
-        Offset(left + (main.length == 1 ? w / 2 : w * i / (main.length - 1)), 4 + h * (1 - (v - lo) / (hi - lo)));
-
-    for (final v in [lo, hi]) {
-      final tp = TextPainter(
-        text: TextSpan(text: v.toStringAsFixed(0), style: TextStyle(color: labelColor, fontSize: 11)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(0, at(0, v).dy - tp.height / 2));
-    }
-
-    void series(List<double> values, Color color, bool dashed) {
-      final paint = Paint()
-        ..color = color
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke;
-      for (var i = 1; i < values.length; i++) {
-        final a = at(i - 1, values[i - 1]), b = at(i, values[i]);
-        if (!dashed) {
-          canvas.drawLine(a, b, paint);
-          continue;
-        }
-        final steps = ((b - a).distance / 6).floor();
-        for (var k = 0; k < steps; k += 2) {
-          canvas.drawLine(Offset.lerp(a, b, k / steps)!, Offset.lerp(a, b, (k + 1) / steps)!, paint);
-        }
-      }
-      for (final (i, v) in values.indexed) {
-        canvas.drawCircle(at(i, v), dashed ? 2 : 4, paint..style = PaintingStyle.fill);
-      }
-    }
-
-    series(secondary, secondaryColor, true);
-    series(main, mainColor, false);
-  }
-
-  @override
-  bool shouldRepaint(LineChart old) => true;
-
-}
-
-/// Cardio: minutes per session as the line, distance (if logged) dashed on the same axis.
+/// Cardio: minutes per session as the line, over time.
 Widget _cardioStats(BuildContext context, String name, List<(DateTime, ExerciseLog)> history) {
   final scheme = Theme.of(context).colorScheme;
   final minutes = history.fold(0, (n, h) => n + (h.$2.reps.first ?? 0));
@@ -463,12 +1159,16 @@ Widget _cardioStats(BuildContext context, String name, List<(DateTime, ExerciseL
         SizedBox(
           height: 220,
           child: CustomPaint(
-            painter: LineChart(
-              [for (final h in history) (h.$2.reps.first ?? 0).toDouble()],
-              const [],
-              scheme.primary,
-              scheme.outlineVariant,
-              scheme.onSurfaceVariant,
+            painter: ProgressChart(
+              [
+                ChartSeries(name, scheme.tertiary, const [], [for (final h in history) (h.$1, (h.$2.reps.first ?? 0).toDouble())], const {},
+                    dots: true),
+              ],
+              history.first.$1,
+              DateTime.now(),
+              grid: scheme.outlineVariant.withValues(alpha: .5),
+              label: scheme.onSurfaceVariant,
+              surface: scheme.surface,
             ),
           ),
         ),
@@ -487,3 +1187,18 @@ Widget _cardioStats(BuildContext context, String name, List<(DateTime, ExerciseL
     ),
   );
 }
+
+/// Studies behind the balance card's info sheet, numbered as cited there.
+const _balanceSources = [
+  ('Schoenfeld et al. 2017, J Sports Sci: Trainingsvolumen und Muskelaufbau', 'https://pubmed.ncbi.nlm.nih.gov/27433992/'),
+  ('Pelland et al. 2024, SportRxiv (Preprint): Dosis-Wirkung von Volumen und Frequenz', 'https://doi.org/10.51224/SRXIV.460'),
+  ('van Dyk et al. 2019, Br J Sports Med: Nordic Curls halbieren Zerrungen', 'https://doi.org/10.1136/bjsports-2018-100045'),
+  ('Kolber et al. 2017, J Strength Cond Res: Schulter bei Kraftsportlern mit Impingement', 'https://doi.org/10.1519/JSC.0000000000001554'),
+  ('Kolber et al. 2014, J Strength Cond Res: Impingement im Freizeit-Krafttraining', 'https://pubmed.ncbi.nlm.nih.gov/24077379/'),
+  ('Croisier et al. 2008, Am J Sports Med: Kraft-Ungleichgewicht und Zerrungen im Profifußball', 'https://pubmed.ncbi.nlm.nih.gov/18448578/'),
+  ('Kellis et al. 2023, J Sport Health Sci: Sagt das H:Q-Verhältnis Verletzungen voraus?', 'https://doi.org/10.1016/j.jshs.2022.01.002'),
+  ('Green et al. 2020, Br J Sports Med: Risikofaktoren für Zerrungen am hinteren Oberschenkel', 'https://pubmed.ncbi.nlm.nih.gov/32299793/'),
+  ('Bahr 2016, Br J Sports Med: Warum Screening-Tests Verletzungen nicht vorhersagen', 'https://pubmed.ncbi.nlm.nih.gov/27095747/'),
+  ('Sports 2024: Drücken zu Ziehen bei schwedischen Werfern', 'https://pubmed.ncbi.nlm.nih.gov/39195577/'),
+  ('van den Hoek et al. 2024, J Sci Med Sport: Normwerte aus 809 986 Wettkampf-Starts', 'https://pubmed.ncbi.nlm.nih.gov/39060209/'),
+];

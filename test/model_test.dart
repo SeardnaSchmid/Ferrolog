@@ -96,7 +96,7 @@ void main() {
     expect((run.reps, run.km, run.weight), (0, 5.0, 0.0));
   });
 
-  test('weekly summary and 30-day weight change', () {
+  test('weekly summary', () {
     final now = DateTime(2026, 11, 4); // Wednesday
     Session at(DateTime d, {int? cardioMinutes}) => Session(
       workoutId: 'w',
@@ -115,15 +115,35 @@ void main() {
     );
     expect(weeks.map((w) => (w.$1.day, w.$2, w.$3)), [(19, 0, 0), (26, 1, 0), (2, 2, 25)]);
 
-    ExerciseLog squat(double kg) => ExerciseLog(name: 'Kniebeuge', weight: kg, targetReps: 5, reps: [5]);
+  });
+
+  test('1RM from all sets, setbacks, trend', () {
+    ExerciseLog squat(double kg, List<int?> reps) => ExerciseLog(name: 'Kniebeuge', weight: kg, targetReps: 5, reps: reps);
+    expect(estimated1rm(squat(90, [5, 5, 5])), 105);
+    expect(estimated1rm(squat(90, [5, 5, 2])), 90 * (1 + 4 / 30), reason: 'missed reps lower it');
+    expect(estimated1rm(squat(90, [null, null, null])), 0);
+
+    final now = DateTime(2026, 11, 4);
     final history = [
-      (DateTime(2026, 9, 20), squat(75)),
-      (DateTime(2026, 10, 1), squat(77.5)),
-      (DateTime(2026, 10, 20), squat(80)),
-      (DateTime(2026, 11, 3), squat(82.5)),
+      (DateTime(2026, 9, 1), squat(80, [5, 5, 5])),
+      (DateTime(2026, 9, 3), squat(82.5, [5, 5, 4])), // new weight missed: normal, no setback
+      (DateTime(2026, 9, 5), squat(82.5, [3, 3, 3])), // same weight, clearly worse: setback
+      (DateTime(2026, 9, 20), squat(75, [5, 5, 5])), // deload after a break: no setback
+      (DateTime(2026, 10, 1), squat(80, [5, 5, 4])), // missed a weight managed before: setback
+      (DateTime(2026, 10, 20), squat(80, [5, 5, 5])),
+      (DateTime(2026, 11, 3), squat(82.5, [5, 5, 5])),
     ];
-    expect(weightChange(history, now)?.$1, 5, reason: '77,5 on Oct 1 (last before the window) → 82,5');
-    expect(weightChange([history.last], now), isNull);
+    expect(setbacks(history), {2, 4});
+
+    final (trend, change) = trendOf(history, now)!;
+    expect(trend, Trend.up);
+    expect(change, closeTo((96.25 / (80 * (1 + 14 / 3 / 30)) - 1) * 100, .01), reason: 'Oct 1 (last before the window) → now');
+    expect(trendOf([(DateTime(2026, 10, 1), squat(80, [5, 5, 5])), (DateTime(2026, 11, 3), squat(80, [5, 5, 5]))], now)!.$1,
+        Trend.flat);
+    expect(trendOf(history.take(3).toList(), DateTime(2026, 9, 6))!.$1, Trend.stuck, reason: 'two of the last three missed');
+    expect(trendOf([...history.take(2), (DateTime(2026, 9, 5), squat(85, [5, 5, 4]))], DateTime(2026, 9, 6))!.$1, Trend.up,
+        reason: 'two misses, but the 1RM still rose');
+    expect(trendOf([history.last], now), isNull);
   });
 
   test('switching increase/decrease off keeps the step; old files with 0 read as off', () {
@@ -161,7 +181,7 @@ void main() {
     expect(setsLabel([5, 5, 5], 8), '3×5–8');
   });
 
-  test('period stats: per week from the first training, heaviest, average duration', () {
+  test('period stats: per week from the first training, volume against the period before, records, duration', () {
     final now = DateTime(2026, 11, 3, 20);
     Session at(int daysAgo, double kg, {int minutes = 0}) {
       final d = now.subtract(Duration(days: daysAgo));
@@ -176,15 +196,18 @@ void main() {
       );
     }
 
-    final sessions = [at(1, 100, minutes: 50), at(8, 90, minutes: 70), at(14, 80), at(200, 60)];
+    final sessions = [at(1, 100, minutes: 50), at(8, 90, minutes: 70), at(14, 80), at(120, 70), at(200, 60)];
     final p = periodStats(sessions, now, days: 90);
     expect(p.trainings, 3);
     expect(p.perWeek, closeTo(3 / 2, .01), reason: '3 trainings, first one 2 weeks ago');
-    expect(p.setsPerWeek, closeTo(6 / 2, .01));
-    expect(p.maxVolume, 1000);
+    expect(p.volume, 2700);
+    expect(p.volumeBefore, 700, reason: 'the 90 days before: only the training 120 days ago');
+    expect((p.lifts, p.recordLifts), (1, 1), reason: '80, 90, 100 each beat everything before');
+    expect(p.lastRecord, ('Kniebeuge', 100.0, now.subtract(const Duration(days: 1))));
     expect(p.avgDuration, const Duration(minutes: 60), reason: 'only trainings with an end time');
-    expect(p.top, ('Kniebeuge', 100.0));
-    expect(periodStats(sessions, now).trainings, 4);
+    final all = periodStats(sessions, now);
+    expect((all.trainings, all.volumeBefore, all.recordLifts), (5, null, 1));
+    expect(periodStats([at(1, 90), at(8, 100)], now, days: 90).lastRecord, isNull, reason: 'lighter than before');
   });
 
   test('a training left running ends at its last activity after 30 minutes', () async {
@@ -238,6 +261,13 @@ void main() {
     expect(facts[Fact.week], 'Woche geschafft ✓ · 2 Wochen in Folge');
     expect(facts.containsKey(Fact.pause), isFalse);
     expect(facts[Fact.tonnage], 'Insgesamt 7,9 t bewegt, noch 2,1 t bis 10 t');
+    expect(facts.containsKey(Fact.today), isFalse, reason: 'last training was yesterday');
+    expect(facts[Fact.next], 'Nächstes Mal schwerer: Kniebeuge 112,5 kg', reason: 'Rudern missed, stays');
+    expect(facts.containsKey(Fact.fresh), isFalse, reason: 'trained since the first day');
+    expect(facts.containsKey(Fact.journey), isFalse, reason: 'shorter than 120 days');
+    final sameDay = homeFacts(store.sessions, store.workouts, DateTime(2026, 11, 3, 20));
+    expect(sameDay.take(2).map((f) => f.$1), [Fact.record, Fact.today], reason: 'freshest first');
+    expect(sameDay[1].$2, 'Heute 1,6 t bewegt (-1 % zum letzten Mal)');
   });
 
   test('home facts: an exercise skipped in every training does not crash', () async {
