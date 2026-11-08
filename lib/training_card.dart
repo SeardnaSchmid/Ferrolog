@@ -66,7 +66,7 @@ const _icons = {
 const _labels = {
   FindingType.weekGoal: 'WOCHENZIEL',
   FindingType.skipped: 'AUSGELASSEN · LETZTE 4 WOCHEN',
-  FindingType.balance: 'BALANCE · LETZTE 4 WOCHEN',
+  FindingType.balance: 'BALANCE · LETZTE 30 TAGE',
   FindingType.plateau: 'PLATEAU',
 };
 
@@ -74,8 +74,9 @@ const _labels = {
 void openSource(BuildContext context, StatsTarget t) {
   switch (t.view) {
     case StatsView.exercise:
-      Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(t.exercise!)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ExerciseStats(t.exercise!, marked: t.dates)));
     case StatsView.balance || StatsView.weeks:
+      statsFocus.value = t;
       homeTab.value = 1;
     case StatsView.history:
       homeTab.value = 2;

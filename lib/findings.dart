@@ -90,7 +90,9 @@ List<Finding> findings(List<Session> sessions, List<Workout> workouts, DateTime 
   if (lastAdvice == null || now.difference(lastAdvice) >= advicePause) {
     final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 28) s];
     final baseline = sessions.length >= baselineTrainings && now.difference(sessions.last.date).inDays >= 14;
-    final balance = baseline ? _balance(recent, workouts) : <Finding>[];
+    // The balance over the same 30 days and weeks as the statistics shows, so the numbers match there.
+    final month = [for (final s in sessions) if (s.date.isAfter(now.subtract(const Duration(days: 30)))) s];
+    final balance = baseline ? _balance(month, workouts, periodStats(sessions, now, days: 30).weeks) : <Finding>[];
     final skipped = _skipped(recent, workouts, balance);
     // A skip that explains a balance gap stands for it: the cause is what can be changed.
     final explained = {for (final f in skipped) if (f.source.view == StatsView.balance) f.source.pair};
@@ -202,15 +204,15 @@ const _remedies = <String, (List<String>, String)>{
   'Latissimus': (['Klimmzüge', 'Latzug'], 'Latzug'),
 };
 
-/// Opposing pairs off their guide range over [recent] (four weeks), with a tip by cause that never
+/// Opposing pairs off their guide range over [recent] (30 days, [weeks] long), with a tip by cause that never
 /// adds work:
 /// - by strength (1RM): keep raising the side behind, it catches up;
 /// - by sets, planned but sets left out: plan it earlier;
 /// - by sets and planned that way, with an accessory on the side ahead: one set less there;
 /// - else the main lifts stay as planned and the side behind is named.
-List<Finding> _balance(List<Session> recent, List<Workout> workouts) {
+List<Finding> _balance(List<Session> recent, List<Workout> workouts, double weeks) {
   final result = <Finding>[];
-  for (final b in balances(recent, weeks: 4)) {
+  for (final b in balances(recent, weeks: weeks)) {
     final lagging = b.lagging;
     if (lagging == null || !_remedies.containsKey(lagging)) continue;
     final behindB = lagging == b.bGroup;
@@ -222,7 +224,7 @@ List<Finding> _balance(List<Session> recent, List<Workout> workouts) {
     final evidence = '${(b.ratio * 100).floor()} % · $an ${_num(b.aValue)} : $bn ${_num(b.bValue)}$unit';
     final why = b.strength
         ? 'Richtwert $range. Verglichen wird das aktuelle 1RM.'
-        : '${b.a} gegen ${b.b}, Richtwert $range. Gezählt werden die gemachten Sätze der letzten 4 Wochen.';
+        : '${b.a} gegen ${b.b}, Richtwert $range. Gezählt werden die gemachten Sätze der letzten 30 Tage.';
     final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
     Finding make(String advice, {Workout? w, String? exercise, Fix? fix}) => Finding(
         'balance:${b.pair.name}', FindingType.balance, '$lagging kommt zu kurz', evidence,

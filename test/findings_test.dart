@@ -2,6 +2,7 @@ import 'package:ferrolog/findings.dart';
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/muscles.dart';
+import 'package:ferrolog/stats.dart';
 import 'package:ferrolog/sync.dart';
 import 'package:ferrolog/training_card.dart';
 import 'package:ferrolog/units.dart';
@@ -97,7 +98,7 @@ void main() {
     ]);
     final f = findings(eight(push), [push], now).single;
     expect((f.type, f.title, f.fix, f.exercise), (FindingType.balance, 'Oberer Rücken kommt zu kurz', Fix.dropSet, 'Dips'));
-    expect(f.evidence, '50 % · Brust 12 : Oberer Rücken 6 Sätze/Woche');
+    expect(f.evidence, '50 % · Brust 22,4 : Oberer Rücken 11,2 Sätze/Woche', reason: 'per week as on the statistics: since the first training, 15 days ago');
     expect(f.advice, 'Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.');
 
     final weak = Workout(name: 'S', exercises: [
@@ -224,7 +225,7 @@ void main() {
 
     await tester.tap(find.text('Oberer Rücken kommt zu kurz'));
     await tester.pumpAndSettle();
-    expect(find.text('BALANCE · LETZTE 4 WOCHEN'), findsOneWidget);
+    expect(find.text('BALANCE · LETZTE 30 TAGE'), findsOneWidget);
     expect(find.text('Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.'), findsOneWidget);
     await tester.tap(find.text('1 Satz weniger Dips'));
     await tester.pumpAndSettle();
@@ -244,5 +245,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Oberer Rücken kommt zu kurz'), findsNothing);
     expect(snoozedFindings.keys, contains('balance:pushPullFlat'));
+  });
+
+  testWidgets('into the statistics: the balance card outlined with its pair; the exercise names the trainings left out', (tester) async {
+    final push = Workout(name: 'P', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
+    ]);
+    final shift = DateTime.now().difference(now);
+    final s = [
+      for (final x in eight(push, (s, i) {
+        if (i < 2) s.exercises[1].reps.fillRange(0, 3, null);
+      }))
+        Session.fromJson({...x.toJson(), 'date': x.date.add(shift).toIso8601String()}),
+    ];
+    store.sessions
+      ..clear()
+      ..addAll(s);
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    statsFocus.value = statsAt(StatsView.balance, pair: Pair.pushPullFlat);
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: StatsPage())));
+    await tester.pumpAndSettle();
+    expect(statsFocus.value, isNull, reason: 'used once');
+    final card = tester.widget<Card>(find.ancestor(of: find.text('Balance'), matching: find.byType(Card)).first);
+    expect((card.shape as RoundedRectangleBorder).side.width, 2, reason: 'outlined');
+    final top = tester.getRect(find.text('Balance')).top;
+    expect(top, inInclusiveRange(0, 200), reason: 'scrolled to the top of the screen');
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.widget<Card>(find.ancestor(of: find.text('Balance'), matching: find.byType(Card)).first).shape, isNull,
+        reason: 'only for a moment');
+
+    final skipped = [s[0].date, s[1].date];
+    await tester.pumpWidget(MaterialApp(home: ExerciseStats('Langhantelrudern', marked: skipped)));
+    await tester.pump();
+    expect(find.textContaining('Ausgelassen am ${skipped[1].day}.${skipped[1].month}., ${skipped[0].day}.'), findsOneWidget);
   });
 }

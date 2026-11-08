@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'body_map.dart';
+import 'findings.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
@@ -27,6 +28,9 @@ const _mainMuscles = [
 int get statsDays => prefs.getInt('stats.days') ?? 90;
 
 DateTime? periodStart(int days) => days == 0 ? null : DateTime.now().subtract(Duration(days: days));
+
+/// Where the statistics tab goes the next time it opens, set by a finding ("In der Statistik ansehen").
+final statsFocus = ValueNotifier<StatsTarget?>(null);
 
 Widget periodPicker(int days, ValueChanged<int> onChanged) => SegmentedButton<int>(
       showSelectedIcon: false,
@@ -64,6 +68,47 @@ class StatsPage extends StatefulWidget {
 class _StatsPageState extends State<StatsPage> {
   int days = statsDays;
 
+  /// A finding's target: its card scrolled into view and outlined for a moment, the pair in it too.
+  StatsTarget? focus;
+  final balanceKey = GlobalKey(), weeksKey = GlobalKey();
+  final scroll = ScrollController();
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls [key]'s card to the top. The list only builds what's near the screen, so it pages down
+  /// until the card exists.
+  void reveal(GlobalKey key, [int tries = 12]) {
+    final card = key.currentContext;
+    if (card != null && card.mounted) {
+      Scrollable.ensureVisible(card, duration: const Duration(milliseconds: 400), curve: Curves.easeOut, alignment: .05);
+      return;
+    }
+    if (tries == 0 || !scroll.hasClients) return;
+    final p = scroll.position;
+    scroll.jumpTo(min(p.pixels + p.viewportDimension * .8, p.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) => reveal(key, tries - 1));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final target = statsFocus.value;
+    if (target == null) return;
+    statsFocus.value = null;
+    focus = target;
+    days = 30; // the findings look at four weeks; the remembered period stays as it is
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      reveal(target.view == StatsView.balance ? balanceKey : weeksKey);
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => focus = null);
+      });
+    });
+  }
+
   /// What the strength chart shows. Remembered.
   _ChartMode mode = _ChartMode.values.asNameMap()[prefs.getString('stats.chart')] ?? _ChartMode.percent;
 
@@ -82,6 +127,7 @@ class _StatsPageState extends State<StatsPage> {
     final small = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
 
     return ListView(
+      controller: scroll,
       padding: const EdgeInsets.all(12),
       children: [
         periodPicker(days, (d) => setState(() => days = d)),
@@ -96,8 +142,8 @@ class _StatsPageState extends State<StatsPage> {
           exercisesSection(from, now, c, small),
           const SizedBox(height: 8),
           figures(p, c, small),
-          weeksSection(sessions, now, p.weeks, c, small),
-          ?balanceSection(inPeriod, p.weeks, c, small),
+          KeyedSubtree(key: weeksKey, child: weeksSection(sessions, now, p.weeks, c, small)),
+          if (balanceSection(inPeriod, p.weeks, c, small) case final b?) KeyedSubtree(key: balanceKey, child: b),
           musclesSection(inPeriod, p.weeks, c, small),
           ?cardioSection(sessions, now, p.weeks, c),
         ],
@@ -105,10 +151,14 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget section(String title, String? trailing, List<Widget> children, {VoidCallback? onTap, VoidCallback? onInfo}) {
+  Widget section(String title, String? trailing, List<Widget> children,
+      {VoidCallback? onTap, VoidCallback? onInfo, bool highlight = false}) {
     final c = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
+      shape: highlight
+          ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: c.tertiary, width: 2))
+          : null,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -345,7 +395,7 @@ class _StatsPageState extends State<StatsPage> {
   Widget weeksSection(List<Session> sessions, DateTime now, double periodWeeks, ColorScheme c, TextStyle small) {
     final weeks = weeklySummary(sessions, now, weeks: periodWeeks.ceil().clamp(4, 26));
     final goal = weeklyGoal.value;
-    return section('Trainings pro Woche', 'Ziel $goal×', [
+    return section('Trainings pro Woche', 'Ziel $goal×', highlight: focus?.view == StatsView.weeks, [
       SizedBox(
         height: 150,
         child: CustomPaint(
@@ -430,21 +480,29 @@ class _StatsPageState extends State<StatsPage> {
               SizedBox(width: 58, child: Text(value(v), textAlign: TextAlign.end, style: small)),
             ]),
           );
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(b.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
-          _BalanceChip(b.lagging),
+      // The pair a finding points to, tinted for a moment.
+      final marked = focus?.pair == b.pair;
+      return Container(
+        decoration: marked
+            ? BoxDecoration(color: c.tertiaryContainer.withValues(alpha: .35), borderRadius: BorderRadius.circular(10))
+            : null,
+        padding: marked ? const EdgeInsets.all(8) : EdgeInsets.zero,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(b.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+            _BalanceChip(b.lagging),
+          ]),
+          const SizedBox(height: 6),
+          bar(b.a, b.aValue, b.lagging == b.aGroup),
+          bar(b.b, b.bValue, b.lagging == b.bGroup, band: true),
+          const SizedBox(height: 2),
+          Text('${b.b} bei ${b.ratio.isFinite ? pct(b.ratio) : '–'} · Richtwert $range', style: small),
+          if (b.lagging != null) ...[
+            const SizedBox(height: 4),
+            Text(tip(b), style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
+          ],
         ]),
-        const SizedBox(height: 6),
-        bar(b.a, b.aValue, b.lagging == b.aGroup),
-        bar(b.b, b.bValue, b.lagging == b.bGroup, band: true),
-        const SizedBox(height: 2),
-        Text('${b.b} bei ${b.ratio.isFinite ? pct(b.ratio) : '–'} · Richtwert $range', style: small),
-        if (b.lagging != null) ...[
-          const SizedBox(height: 4),
-          Text(tip(b), style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
-        ],
-      ]);
+      );
     }
 
     Widget group(String title, List<Balance> list) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -455,7 +513,8 @@ class _StatsPageState extends State<StatsPage> {
     final strength = [for (final b in pairs) if (b.strength) b];
     final volume = [for (final b in pairs) if (!b.strength) b];
     final off = pairs.where((b) => b.lagging != null).length;
-    return section('Balance', off == 0 ? 'alles im Richtwert' : off == 1 ? '1 Hinweis' : '$off Hinweise', onInfo: showBalanceInfo, [
+    return section('Balance', off == 0 ? 'alles im Richtwert' : off == 1 ? '1 Hinweis' : '$off Hinweise',
+        onInfo: showBalanceInfo, highlight: focus?.view == StatsView.balance, [
       if (strength.isNotEmpty) group('KRAFT · AKTUELLER 1RM', strength),
       if (strength.isNotEmpty && volume.isNotEmpty) const Divider(height: 28),
       if (volume.isNotEmpty) group('TRAININGSMENGE · SÄTZE PRO WOCHE', volume),
@@ -788,7 +847,10 @@ class TrendChip extends StatelessWidget {
 /// and every training of the period.
 class ExerciseStats extends StatefulWidget {
   final String name;
-  const ExerciseStats(this.name, {super.key});
+
+  /// Trainings a finding points to: tinted in the list; those without a set of it (left out) named on top.
+  final List<DateTime> marked;
+  const ExerciseStats(this.name, {super.key, this.marked = const []});
 
   @override
   State<ExerciseStats> createState() => _ExerciseStatsState();
@@ -798,9 +860,18 @@ enum _Measure { weight, e1rm, volume }
 
 class _ExerciseStatsState extends State<ExerciseStats> {
   late String name = widget.name;
-  int days = statsDays;
+  // Wide enough for the marked trainings.
+  late int days = widget.marked.every((d) => !d.isBefore(periodStart(statsDays) ?? DateTime(0))) ? statsDays : 0;
   // Holds have no 1RM: their weight is what counts.
   late _Measure measure = store.historyOf(name).lastOrNull?.$2.timed ?? false ? _Measure.weight : _Measure.e1rm;
+
+  /// A training a finding points to, for the exercise it was about.
+  bool isMarked(DateTime d) => name == widget.name && widget.marked.contains(d);
+
+  /// Marked trainings without a set of this exercise: left out.
+  List<DateTime> skippedOn(List<(DateTime, ExerciseLog)> history) => name != widget.name
+      ? const []
+      : ([for (final d in widget.marked) if (!history.any((h) => h.$1 == d)) d]..sort());
 
   @override
   Widget build(BuildContext context) {
@@ -842,6 +913,15 @@ class _ExerciseStatsState extends State<ExerciseStats> {
                   ),
               ]),
             ),
+          if (skippedOn(history) case final skipped when skipped.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: c.tertiaryContainer.withValues(alpha: .35), borderRadius: BorderRadius.circular(12)),
+              child: Text('Ausgelassen am ${skipped.map((d) => '${d.day}.${d.month}.').join(', ')}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ],
           const SizedBox(height: 12),
           periodPicker(days, (d) => setState(() => days = d)),
           const SizedBox(height: 8),
@@ -900,7 +980,9 @@ class _ExerciseStatsState extends State<ExerciseStats> {
           for (final (i, (date, log)) in shownHistory.reversed)
             ListTile(
               dense: true,
-              contentPadding: EdgeInsets.zero,
+              contentPadding: EdgeInsets.symmetric(horizontal: isMarked(date) ? 8 : 0),
+              tileColor: isMarked(date) ? c.tertiaryContainer.withValues(alpha: .35) : null,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               title: Text('${log.weight > 0 ? '${weightLabel(log.weight)} × ' : ''}${log.reps.map((r) => r ?? '–').join('/')}'),
               subtitle: Text(dateLabel(date)),
               trailing: out.contains(i)
