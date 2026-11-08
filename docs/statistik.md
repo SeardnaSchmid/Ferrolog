@@ -26,4 +26,4 @@ Stand der Statistik-Seite ([lib/stats.dart](../lib/stats.dart)). Wird bei jedem 
 | Schritt | Inhalt | Stand |
 |---|---|---|
 | 1 | Reihenfolge (erste Runde) | ✅ `ee62411` |
-| 2 | Kennzahlen mit Verlauf, Einklappen, neue Reihenfolge, Muskel-Titel | ✅ |
+| 2 | Kennzahlen mit Verlauf, Einklappen, neue Reihenfolge, Muskel-Titel | ✅ `69b2dc3` |
