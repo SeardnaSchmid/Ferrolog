@@ -2,8 +2,9 @@
 
 Serves build/web like the plain preview, but injects a script into index.html that fills the
 browser storage with 1.5 years of StrongLifts 5x5 (A/B, Mon/Wed/Fri) up to a training this morning:
-accessories added later and one just weeks ago, holidays, sick weeks, bad days with missed reps,
-plateaus and deloads, rows lagging behind the bench press. The data lives only here,
+accessories added later and one just weeks ago, holidays, sick weeks, bad days with missed reps or a
+last set done lighter, plateaus and deloads, rows lagging behind the bench press, curls in a rep range,
+a farmer's walk held for 30–45 s, accessories skipped for lack of time. The data lives only here,
 never in the app or a release build. Storage is per port, so other previews keep their data.
 
     python tool/demo_server.py [port]      then open http://localhost:8091 (?reset reseeds)
@@ -28,6 +29,8 @@ def demo_data():
         return (start + dt.timedelta(days=a), start + dt.timedelta(days=b))
     breaks = [days(63, 76), days(105, 111), days(200, 210), days(330, 340), days(420, 434), days(470, 474)]  # holidays, sick, Christmas
     new_lift = end - dt.timedelta(days=25)  # Romanian deadlifts, recently added
+    carry_from = end - dt.timedelta(days=120)  # farmer's walk on B, 30–45 s
+    carry_kg, carry_base = 24.0, 30.0
 
     # name: (start kg, capacity at start, newbie growth per week (diminishing), step, sets, reps); after the
     # newbie phase strength keeps growing slowly. Rows lag behind the bench press, for the balance check.
@@ -37,9 +40,10 @@ def demo_data():
         'Langhantelrudern': [35, 38, 0.6, 2.5, 5, 5],
         'Schulterdrücken': [25, 33, 0.8, 2.5, 5, 5],
         'Kreuzheben': [50, 80, 3.8, 5.0, 1, 5],
-        'Bizepscurls': [20, 24, 0.5, 2.5, 3, 10],
+        'Bizepscurls': [20, 24, 0.5, 2.5, 3, 8],
         'Rumänisches Kreuzheben': [60, 72, 0.8, 2.5, 3, 8],
     }
+    tops = {'Bizepscurls': 12}  # rep ranges: the weight goes up once every set reaches the top
     weight = {k: v[0] for k, v in lifts.items()}
     fails = {k: 0 for k in lifts}
     last_done = {}
@@ -60,6 +64,8 @@ def demo_data():
                 names.append('Bizepscurls' if is_a else 'Klimmzüge')
             if is_a and day >= new_lift:
                 names.append('Rumänisches Kreuzheben')
+            if not is_a and day >= carry_from:
+                names.append('Farmers Walk')
             if not is_a and wk >= week_cardio and random.random() < (.6 if wk < 52 else .8):
                 names.append('Laufen')
             bad = random.random() < .1
@@ -70,7 +76,27 @@ def demo_data():
             if good:
                 tags.append('Voller Energie')
             exercises = []
+            # Now and then no time left for the last accessory: skipped entirely, no miss.
+            rushed = random.random() < .08
             for name in names:
+                if rushed and name in ('Klimmzüge', 'Farmers Walk', 'Bizepscurls') and name == names[-1 if names[-1] != 'Laufen' else -2]:
+                    sets = 2 if name == 'Farmers Walk' else 3
+                    e = {'name': name, 'weight': 0.0, 'weights': [0.0] * sets, 'targetReps': 8, 'reps': [None] * sets}
+                    if name == 'Farmers Walk':
+                        e.update({'weight': carry_kg, 'weights': [carry_kg] * sets, 'targetReps': 30, 'maxReps': 45, 'type': 'timed'})
+                    elif name == 'Bizepscurls':
+                        e.update({'weight': weight[name], 'weights': [weight[name]] * sets, 'maxReps': 12})
+                    exercises.append(e)
+                    continue
+                if name == 'Farmers Walk':
+                    held = [min(45, max(15, round(carry_base - 4 * i - (5 if bad else 0) + random.uniform(-3, 3)))) for i in range(2)]
+                    exercises.append({'name': name, 'weight': carry_kg, 'weights': [carry_kg] * 2, 'targetReps': 30,
+                                      'maxReps': 45, 'reps': held, 'type': 'timed'})
+                    if all(h >= 45 for h in held):
+                        carry_kg, carry_base = carry_kg + 2.5, 32.0
+                    else:
+                        carry_base += 3
+                    continue
                 if name == 'Laufen':
                     mins = random.choice([18, 20, 22, 25])
                     exercises.append({'name': name, 'weight': 0.0, 'weights': [0.0], 'targetReps': 20, 'reps': [mins],
@@ -90,17 +116,29 @@ def demo_data():
                 capacity *= .91 if bad else 1.04 if good else 1
                 capacity *= random.uniform(.97, 1.03)
                 w = weight[name]
-                reps = []
+                top = tops.get(name, target)
+                reps, weights = [], [w] * sets
                 for i in range(sets):
                     over = (w - capacity) / capacity
                     fatigue = i * .012
-                    r = target if over + fatigue <= 0 else max(1, round(target * (1 - (over + fatigue) * 3.2)))
-                    reps.append(min(target, r))
-                exercises.append({'name': name, 'weight': w, 'weights': [w] * sets, 'targetReps': target, 'reps': reps})
+                    # In a range more reps are possible below the limit, so it starts from the top.
+                    r = top if over + fatigue <= 0 else max(1, round(top * (1 - (over + fatigue) * 3.2)))
+                    # Last set about to miss: sometimes dropped back a step and done in full instead.
+                    if i == sets - 1 and sets > 1 and r < target and name not in tops and random.random() < .08:
+                        weights[i], r = w - step, target
+                    reps.append(r)
+                e = {'name': name, 'weight': w, 'weights': weights, 'targetReps': target, 'reps': reps}
+                if name in tops:
+                    e['maxReps'] = top
+                exercises.append(e)
                 last_done[name] = day
-                if all(r >= target for r in reps):
+                if any(x < w for x in weights):
+                    pass  # a lighter set holds the weight: no increase, no miss
+                elif all(r >= top for r in reps):
                     weight[name] = w + step
                     fails[name] = 0
+                elif all(r >= target for r in reps):
+                    fails[name] = 0  # within the range
                 else:
                     fails[name] += 1
                     if fails[name] >= 3:
@@ -124,10 +162,13 @@ def demo_data():
                     clock += dt.timedelta(seconds=random.uniform(60, 120) + (e['weight'] / 25) * random.uniform(50, 80)
                                           if heavy else random.uniform(40, 100))
                     rest = 180 if len(e['reps']) == 5 else 90
+                    if all(r is None for r in e['reps']):
+                        continue  # skipped: nothing logged
                     done = []
                     for i in range(len(e['reps'])):
                         if i:
-                            clock += dt.timedelta(seconds=rest * random.uniform(1.0, 1.45) + e['targetReps'] * 4)
+                            work = e['reps'][i] if e.get('type') == 'timed' else e['targetReps'] * 4
+                            clock += dt.timedelta(seconds=rest * random.uniform(1.0, 1.45) + work)
                         done.append(clock.isoformat())
                     e['doneAt'] = done
                 finished = clock + dt.timedelta(minutes=random.uniform(1, 3))
@@ -146,22 +187,27 @@ def demo_data():
         day += dt.timedelta(days=1)
 
 
-    def plan(name, sets, reps, w, step=2.5, cardio=False):
+    def plan(name, sets, reps, w, step=2.5, cardio=False, timed=False, top=None):
         e = {'name': name, 'weight': w, 'sets': sets, 'reps': reps, 'increment': step, 'up': True, 'decrement': 10.0,
              'down': True, 'failsToDeload': 3, 'fails': fails.get(name, 0), 'restSeconds': 180 if sets == 5 else 90}
         if cardio:
             e.update({'type': 'cardio', 'up': False})
+        if timed:
+            e['type'] = 'timed'
+        if top:
+            e['maxReps'] = top
         return e
 
 
     workouts = [
         {'id': 'wA', 'name': 'StrongLifts A', 'exercises': [
             plan('Kniebeuge', 5, 5, weight['Kniebeuge']), plan('Bankdrücken', 5, 5, weight['Bankdrücken']),
-            plan('Langhantelrudern', 5, 5, weight['Langhantelrudern']), plan('Bizepscurls', 3, 10, weight['Bizepscurls']),
+            plan('Langhantelrudern', 5, 5, weight['Langhantelrudern']), plan('Bizepscurls', 3, 8, weight['Bizepscurls'], top=12),
             plan('Rumänisches Kreuzheben', 3, 8, weight['Rumänisches Kreuzheben'])]},
         {'id': 'wB', 'name': 'StrongLifts B', 'exercises': [
             plan('Kniebeuge', 5, 5, weight['Kniebeuge']), plan('Schulterdrücken', 5, 5, weight['Schulterdrücken']),
             plan('Kreuzheben', 1, 5, weight['Kreuzheben'], 5.0), plan('Klimmzüge', 3, 8, 0.0, 0.0),
+            plan('Farmers Walk', 2, 30, carry_kg, timed=True, top=45),
             plan('Laufen', 1, 20, 0.0, 0.0, cardio=True)]},
     ]
     sessions.reverse()  # newest first
