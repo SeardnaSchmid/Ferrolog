@@ -50,7 +50,7 @@ Spätere Präzisierungen beim Bauen:
 | 2 | Startseite: Karte, Detail-Sheet, Knöpfe mit Rückgängig, Einstellungen; alte Karten, `tasks.dart` und `homeFacts` entfernt | ✅ `f17b4a7` |
 | 3 | Sprünge in die Statistik: Balance-Karte und Wochengrafik scrollen ins Bild und werden hervorgehoben, Übungsdetail markiert Trainings und nennt ausgelassene | ✅ `4559014` |
 | 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ `e96ce06` |
-| 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ⏳ offen. Bis dahin füllt eine Übergangslösung `tasks`/`facts` aus den Befunden. |
+| 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ✅ siehe Phase 5 im Detail |
 | 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ⏳ offen |
 
 ### Phase 3 im Detail
@@ -67,6 +67,12 @@ Spätere Präzisierungen beim Bauen:
 - Workout-Karte ([main.dart](../lib/main.dart), `WorkoutCard`): Unter eigenen Übungen ohne bekannte Muskeln (kein Cardio) steht „Muskeln festlegen, sonst fehlt sie in der Statistik“; antippen öffnet den Übungs-Editor (`editExerciseIn`, auch vom Plateau-Sheet genutzt).
 - Übungs-Editor ([edit.dart](../lib/edit.dart), Muskel-Karte): oben der Hinweis, dass eine unbekannte Übung ohne Muskeln in Balance und Muskelkarte fehlt.
 - Tests: [test/home_test.dart](../test/home_test.dart) „care where it belongs“. Im Browser nicht sichtbar, weil die Demo weder eine unbekannte Übung noch ein altes Körpergewicht hat (kommt mit Phase 6).
+
+### Phase 5 im Detail
+
+- `derived.findings` ([derived.dart](../lib/derived.dart)) ersetzt `tasks` und `facts`: je Befund `type`, `kind`, `title`, `evidence`, `why`, `advice`, `fix` (`action`, `exercise`, `workout`) und `source` (`view`, `pair`, `exercise`, `dates`). Enthalten ist, was die Startseite gerade zeigen würde, mit den Schaltern aus den Einstellungen.
+- `title` und `evidence` stehen in der Einheit, die der Nutzer gewählt hat; das ist die einzige Stelle im Export, die nicht kg ist. So beschrieben in `derivedFormat`.
+- Test: [test/derived_test.dart](../test/derived_test.dart) prüft den Rekord-Befund samt Quelle und dass `tasks`/`facts` weg sind.
 
 ## Offene Punkte
 

@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'main.dart';
-import 'findings.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'training_card.dart';
@@ -21,13 +20,17 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     'managed before, next = planned weight for next time. setsPerMuscleWeek: done sets per muscle and week, '
     'helpers counting half (10–20 is a common guide for muscle growth). balance: opposing sides, b against a, '
     'by current 1RM (barbell lifts) or by sets per week, with the guide range (training practice, not a medical '
-    'limit) and the side that lags, over the last 90 days (balance90d). tasks: hints the app currently shows the user (empty when switched off). facts: motivating facts shown '
-    'on the home screen. minutesTypical / secondsSetToSet: median time an exercise took (setup and warm-ups '
+    'limit) and the side that lags, over the last 90 days (balance90d). findings: what the app shows the user on the home '
+    'card "Dein Training" right now, as switched on in the settings (kind action = something to act on, at most one '
+    'piece of training advice at a time; positive = a success of the last training). type weekGoal, skipped (left out '
+    'entirely at least twice in 4 weeks), balance, plateau, record, gain, milestone or month; title and evidence as shown (in the unit the user picked, the only place not in kg), '
+    'why and advice as in the sheet that actions open, fix = the one-tap change offered (moveUp, dropSet; it never adds '
+    'work), source = where the statistics show it (view balance with pair, exercise with the dates marked, weeks, history). minutesTypical / secondsSetToSet: median time an exercise took (setup and warm-ups '
     'included, from the set logged before it to its last set) and from one of its sets to the next (rest plus the set), '
     'from per-set timestamps (sessions[].exercises[].doneAt), latest 10 trainings. workoutMinutesEstimated: the app estimate '
     'per workout. weeks: trainings per calendar week (Monday) against goalPerWeek.';
 
-/// Statistics for the export: the numbers behind the statistics page, balance, tasks and insights,
+/// Statistics for the export: the numbers behind the statistics page, balance and the findings,
 /// so an AI doesn't have to recompute them (and get them wrong).
 Map<String, dynamic> derivedStats(DateTime now) {
   final sessions = store.sessions;
@@ -120,8 +123,24 @@ Map<String, dynamic> derivedStats(DateTime now) {
           'lagging': b.lagging,
         },
     ],
-    'tasks': [for (final f in openFindings()) if (f.kind == FindingKind.action) {'title': f.title, 'why': f.evidence}],
-    'facts': [for (final f in openFindings()) if (f.kind == FindingKind.positive) f.title],
+    'findings': [
+      for (final f in openFindings())
+        {
+          'type': f.type.name,
+          'kind': f.kind.name,
+          'title': f.title,
+          'evidence': f.evidence,
+          'why': ?f.why,
+          'advice': ?f.advice,
+          if (f.fix case final fix?) 'fix': {'action': fix.name, 'exercise': f.exercise, 'workout': f.workout?.name},
+          'source': {
+            'view': f.source.view.name,
+            'pair': ?f.source.pair?.name,
+            'exercise': ?f.source.exercise,
+            if (f.source.dates.isNotEmpty) 'dates': [for (final d in f.source.dates) day(d)],
+          },
+        },
+    ],
     'goalPerWeek': weeklyGoal.value,
     'workoutMinutesEstimated': {for (final w in store.workouts) w.name: (pace.ofWorkout(w).inSeconds / 60).round()},
     'weeks': [for (final (monday, n, cardio) in weeklySummary(sessions, now, weeks: 12)) {'week': day(monday), 'trainings': n, if (cardio > 0) 'cardioMinutes': cardio}],

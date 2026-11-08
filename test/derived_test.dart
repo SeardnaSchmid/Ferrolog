@@ -4,6 +4,7 @@ import 'package:ferrolog/derived.dart';
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/sync.dart';
+import 'package:ferrolog/units.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,7 @@ void main() {
     store = await Store.open();
     prefs = await SharedPreferences.getInstance();
     sync = GitHubSync(prefs);
+    unit.value = WeightUnit.kg; // findings speak the shown unit; the test locale would pick lb
     final a = Workout(name: 'A', exercises: [
       Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
       Exercise(name: 'Langhantelrudern', weight: 40, sets: 3, reps: 5),
@@ -44,7 +46,11 @@ void main() {
     expect((pullUps['bodyweight'], pullUps['repsLast'], pullUps['repsBest'], pullUps.containsKey('e1rmNow')),
         (true, 13, 14, false));
     expect((d['balance90d'] as List).map((b) => b['pair']), contains('Brust ↔ oberer Rücken'));
-    expect(d['tasks'], isA<List>(), reason: 'which ones depends on the day; see tasks_test');
+    expect(d.containsKey('tasks') || d.containsKey('facts'), isFalse, reason: 'replaced by findings');
+    final found = d['findings'] as List;
+    final record = found.singleWhere((f) => f['type'] == 'record');
+    expect((record['kind'], record['title'], record['source']['view'], record['source']['exercise']),
+        ('positive', 'Rekord: Bankdrücken 82,5 kg', 'exercise', 'Bankdrücken'));
     expect(store.toJson().containsKey('derived'), isFalse, reason: 'never stored, only exported');
 
     store.exportExtras = () => throw StateError('kaputt');
