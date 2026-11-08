@@ -133,6 +133,12 @@ void main() {
     expect((weightNum(e.weight), weightNum(e.increment)), ('110', '5'));
   });
 
+  test('new accessories start with a range, the big lifts with fixed reps', () {
+    expect(knownExercise('Kniebeuge').maxReps, isNull);
+    final rows = knownExercise('Face Pulls');
+    expect(rows.maxReps, rangeTop(rows.reps));
+  });
+
   testWidgets('timed exercises: seconds with or without weight', (tester) async {
     tester.view.physicalSize = const Size(500, 2400);
     tester.view.devicePixelRatio = 1;
@@ -153,19 +159,19 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Farmers Walk'));
     await tester.pump();
-    expect(find.text('30 s', findRichText: true), findsNWidgets(3), reason: 'catalogue: 3 × 30 s');
-    expect(find.text('Wiederholungs-Spanne'), findsNothing);
+    expect(find.text('30–45 s', findRichText: true), findsNWidgets(3), reason: 'catalogue: 3 × 30–45 s, a range as an accessory');
+    expect(find.text('Zeit-Spanne'), findsOneWidget);
 
     // Seconds in steps of 5 for every set.
-    await tester.tap(find.text('30 s', findRichText: true).first);
+    await tester.tap(find.text('30–45 s', findRichText: true).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.widgetWithText(BigStepper, 'Sekunden'), matching: find.byIcon(Icons.add)));
+    await tester.tap(find.descendant(of: find.widgetWithText(BigStepper, 'Sekunden mindestens'), matching: find.byIcon(Icons.add)));
     await tester.tap(find.text('Alle Sätze'));
     await tester.tap(find.text('Speichern'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hinzufügen'));
     await tester.pumpAndSettle();
-    expect((result?.timed, result?.reps, result?.weight), (true, 35, 24.0));
+    expect((result?.timed, result?.reps, result?.maxReps, result?.weight), (true, 35, 45, 24.0));
 
     // Switching back to reps.
     final e = result!..timed = false;
@@ -191,7 +197,7 @@ void main() {
       'Langhantelrudern 3×6–8',
       'Klimmzüge 3×5–8',
       'Face Pulls 2×12–15',
-      'Farmers Walk 3×30 s',
+      'Farmers Walk 3×30–45 s',
     ]);
   });
 

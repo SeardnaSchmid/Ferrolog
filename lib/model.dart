@@ -749,6 +749,10 @@ const exerciseCatalogue = <String, (int, int, double, double, int)>{
 const heavyLifts = {'Kniebeuge', 'Frontkniebeuge', 'Bankdrücken', 'Schulterdrücken', 'Kreuzheben', 'Sumo-Kreuzheben',
     'Trap-Bar-Kreuzheben'};
 
+/// The top of a range as suggested for a new accessory: three reps more, or half as long again for
+/// a hold (30 s → 30–45 s). The [heavyLifts] keep fixed reps.
+int rangeTop(int reps, {bool seconds = false}) => seconds ? max(reps + 5, (reps * 1.5 / 5).round() * 5) : reps + 3;
+
 /// Held or carried for a time: their reps are seconds.
 const timedExercises = {'Plank', 'Seitstütz', 'Farmers Walk', 'Suitcase Carry'};
 

@@ -329,7 +329,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       ..sets = rs.length
       ..reps = rs.first
       ..setReps = rs.toSet().length == 1 ? null : List.of(rs)
-      ..maxReps = maxReps == null || e.timed ? null : max(maxReps!, rs.reduce(max))
+      ..maxReps = maxReps == null ? null : max(maxReps!, rs.reduce(max))
       ..weight = noWeight ? 0 : ws.reduce(max)
       ..setWeights = noWeight || ws.toSet().length == 1 ? null : List.of(ws);
     if (noWeight) {
@@ -363,7 +363,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               Expanded(
                 // Typing doesn't rebuild the sheet, so the field keeps focus; ± swap in the new value.
                 child: e.timed
-                    ? BigStepper('Sekunden', '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
+                    ? BigStepper(maxReps == null ? 'Sekunden' : 'Sekunden mindestens', '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
                         () => setSheet(() => r = min(600, r ~/ 5 * 5 + 5)),
                         onTyped: (v) => r = (int.tryParse(v) ?? r).clamp(1, 600))
                     : BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
@@ -645,22 +645,24 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ]);
           }),
           const SizedBox(height: 10),
-          if (!e.timed)
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Wiederholungs-Spanne'),
+            title: Text(e.timed ? 'Zeit-Spanne' : 'Wiederholungs-Spanne'),
             subtitle: Text(maxReps == null
-                ? 'Aus · feste Wiederholungen'
-                : '${setsLabel(rs, maxReps)} · Gewicht steigt erst, wenn alle Sätze $maxReps Wdh. schaffen'),
+                ? e.timed
+                    ? 'Aus · feste Zeit'
+                    : 'Aus · feste Wiederholungen'
+                : '${setsLabel(rs, maxReps, seconds: e.timed)} · Gewicht steigt erst, wenn alle Sätze '
+                    '$maxReps ${e.timed ? 's' : 'Wdh.'} schaffen'),
             value: maxReps != null,
-            onChanged: (on) => setState(() => maxReps = on ? rs.reduce(max) + 3 : null),
+            onChanged: (on) => setState(() => maxReps = on ? rangeTop(rs.reduce(max), seconds: e.timed) : null),
           ),
           if (maxReps case final top?)
             Row(children: [
-              Expanded(child: Text('Bis Wiederholungen', style: TextStyle(color: c.onSurfaceVariant))),
+              Expanded(child: Text(e.timed ? 'Bis Sekunden' : 'Bis Wiederholungen', style: TextStyle(color: c.onSurfaceVariant))),
               IconButton.filledTonal(
                 icon: const Icon(Icons.remove, size: 20),
-                onPressed: () => setState(() => maxReps = max(rs.reduce(max), top - 1)),
+                onPressed: () => setState(() => maxReps = max(rs.reduce(max), top - (e.timed ? 5 : 1))),
               ),
               SizedBox(
                 width: 36,
@@ -668,7 +670,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               ),
               IconButton.filledTonal(
                 icon: const Icon(Icons.add, size: 20),
-                onPressed: () => setState(() => maxReps = min(50, top + 1)),
+                onPressed: () => setState(() => maxReps = e.timed ? min(600, top + 5) : min(50, top + 1)),
               ),
             ]),
           const SizedBox(height: 18),
@@ -904,7 +906,9 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
         ..weight = d.$3
         ..increment = d.$4
         ..restSeconds = d.$5
-        ..failRestSeconds = heavyLifts.contains(name) ? 120 : null;
+        ..failRestSeconds = heavyLifts.contains(name) ? 120 : null
+        // Accessories start with a range: the weight goes up once every set reaches its top.
+        ..maxReps = heavyLifts.contains(name) ? null : rangeTop(d.$2, seconds: e.timed);
       if (unit.value == WeightUnit.lb) {
         // Catalogue values are kg; in lb start on round plates (50 kg → 110 lb, +2,5 kg → +5 lb).
         e

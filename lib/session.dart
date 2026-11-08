@@ -633,6 +633,7 @@ class _SessionPageState extends State<SessionPage> {
                             ].join(' · '),
                       style: muted,
                     ),
+                    if (log.cardio ? null : rangeProgress(log) case final p?) Text(p, style: muted),
                   ]),
                 ),
                 if (log.setsDone == log.reps.length)
@@ -736,6 +737,19 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   static String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+}
+
+/// How far a rep range is from its increase: before the first set what it takes (3×8), then what the
+/// done sets still miss of the top, until every set made it. Null without a range.
+String? rangeProgress(ExerciseLog log) {
+  final top = log.maxReps;
+  if (top == null) return null;
+  final unit = log.timed ? 's' : 'Wdh.';
+  final goal = '${log.reps.length}×$top${log.timed ? ' s' : ''}';
+  final missing = [for (final r in log.reps) if (r != null) max(0, top - r)].fold(0, (a, b) => a + b);
+  if (log.setsDone == log.reps.length && missing == 0) return '$goal geschafft · nächstes Mal schwerer';
+  if (log.setsDone == 0) return 'Steigerung bei $goal';
+  return 'Steigerung bei $goal · ${missing == 0 ? 'bisher alle oben' : 'noch $missing $unit'}';
 }
 
 /// Rest timer colors: resting, about to go or just over, too long.

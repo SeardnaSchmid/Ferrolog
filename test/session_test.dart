@@ -14,6 +14,17 @@ void main() {
     expect([for (final left in [30, 16, 15]) restZone(left, 30).name], ['rest', 'rest', 'soon'], reason: 'short rest: last half');
   });
 
+  test('rep range progress: what the increase takes, what the done sets still miss', () {
+    ExerciseLog row(List<int?> reps, {bool timed = false}) =>
+        ExerciseLog(name: 'Rudern', weight: 40, targetReps: timed ? 30 : 6, maxReps: timed ? 45 : 8, reps: reps, timed: timed);
+    expect(rangeProgress(row([null, null, null])), 'Steigerung bei 3×8');
+    expect(rangeProgress(row([6, 8, null])), 'Steigerung bei 3×8 · noch 2 Wdh.');
+    expect(rangeProgress(row([8, 8, 8])), '3×8 geschafft · nächstes Mal schwerer');
+    expect(rangeProgress(row([45, 40, null], timed: true)), 'Steigerung bei 3×45 s · noch 5 s');
+    expect(rangeProgress(ExerciseLog(name: 'Kniebeuge', weight: 100, targetReps: 5, reps: [5])), isNull);
+    expect((rangeTop(6), rangeTop(12), rangeTop(30, seconds: true), rangeTop(10, seconds: true)), (9, 15, 45, 15));
+  });
+
   testWidgets('weight sheet applies to this set, open sets or all sets', (tester) async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance(); // settings: screen on, rest signal

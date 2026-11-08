@@ -33,7 +33,7 @@ const programs = [
       ('Klimmzüge', 3, 5),
       ('Face Pulls', 2, 12),
       ('Farmers Walk', 3, 30), // 20–30 m, about 30 s
-    ], upTo: {'Kreuzheben': 5, 'Langhantelrudern': 8, 'Klimmzüge': 8, 'Face Pulls': 15}),
+    ], upTo: {'Kreuzheben': 5, 'Langhantelrudern': 8, 'Klimmzüge': 8, 'Face Pulls': 15, 'Farmers Walk': 45}),
   ], note: 'Jedes Training gleich, 1–3× pro Woche, 48–72 h Erholung dazwischen. 8–12 Wochen dabei bleiben.'),
   Program('Starting Strength', [
     Day('A', 'Starting Strength A', [('Kniebeuge', 3, 5), ('Bankdrücken', 3, 5), ('Kreuzheben', 1, 5)]),
