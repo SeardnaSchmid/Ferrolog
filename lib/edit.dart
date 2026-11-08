@@ -451,6 +451,12 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       decoration: card,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Muskeln', style: TextStyle(fontWeight: FontWeight.w500)),
+        // An own exercise nothing is known about: without muscles it's missing from the statistics.
+        if (muscles == null && musclesOf(e.name) == null && e.name.trim().isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text('Unbekannte Übung: Ohne Muskeln fehlt sie in Balance und Muskelkarte. Bitte antippen, was sie trainiert.',
+              style: muted.copyWith(color: Theme.of(context).colorScheme.tertiary, fontWeight: FontWeight.w500)),
+        ],
         const SizedBox(height: 12),
         BodyMap((p, s), height: 180),
         const SizedBox(height: 14),

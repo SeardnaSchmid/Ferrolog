@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import 'edit.dart';
 import 'findings.dart';
 import 'main.dart';
 import 'model.dart';
@@ -261,7 +260,7 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
                       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                       onPressed: () {
                         Navigator.pop(sheet);
-                        _editExercise(context, plan, f.exercise!);
+                        editExerciseIn(context, plan, f.exercise!);
                       },
                       child: const Text('Im Editor anpassen'),
                     ),
@@ -309,17 +308,6 @@ String _sourceLabel(StatsTarget t) => switch (t.view) {
 
 Workout? _workoutWith(String? exercise) =>
     exercise == null ? null : store.workouts.where((w) => w.exercises.any((e) => e.name == exercise)).firstOrNull;
-
-/// Opens the exercise editor for [name] in [w] and saves what comes back.
-Future<void> _editExercise(BuildContext context, Workout w, String name) async {
-  final i = w.exercises.indexWhere((e) => e.name == name);
-  if (i < 0) return;
-  final result = await Navigator.push<Exercise>(
-    context,
-    MaterialPageRoute(fullscreenDialog: true, builder: (_) => ExerciseEditor(w.exercises[i].copy())),
-  );
-  if (result != null) await store.saveWorkout(w.copy()..exercises[i] = result);
-}
 
 /// Runs a finding's fix: moves the exercise up or drops a set. Undo from the snackbar.
 Future<void> runFix(BuildContext context, Finding f) async {

@@ -1,5 +1,6 @@
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
+import 'package:ferrolog/recap.dart';
 import 'package:ferrolog/units.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,5 +58,43 @@ void main() {
     expect(find.textContaining('noch ≈'), findsOneWidget);
     await store.saveActive(null);
   });
-}
 
+  testWidgets('care where it belongs: unknown muscles on the workout card, a stale body weight on the recap', (tester) async {
+    unit.value = WeightUnit.kg;
+    final own = Workout(name: 'Eigen', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5),
+      Exercise(name: 'Meditation', weight: 0, sets: 1, reps: 10),
+    ]);
+    await tester.runAsync(() async {
+      for (final w in [...store.workouts]) {
+        await store.deleteWorkout(w);
+      }
+      await store.saveWorkout(own);
+    });
+    tester.view.physicalSize = const Size(500, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: WorkoutCard(own))));
+    expect(find.text('Muskeln festlegen, sonst fehlt sie in der Statistik'), findsOneWidget, reason: 'Meditation only');
+
+    final now = DateTime.now();
+    Session at(int daysAgo, {double? bodyWeight}) => Session(workoutId: own.id, workoutName: 'Eigen',
+        date: now.subtract(Duration(days: daysAgo)), bodyWeight: bodyWeight,
+        exercises: [ExerciseLog(name: 'Bankdrücken', weight: 60, targetReps: 5, reps: [5, 5, 5])]);
+    final today = at(0);
+    store.sessions
+      ..clear()
+      ..addAll([today, at(10), at(40, bodyWeight: 80)]);
+    await tester.pumpWidget(MaterialApp(home: RecapPage(today)));
+    await tester.pump();
+    expect(find.text('Zuletzt vor 40 Tagen eingetragen. Einmal im Monat hält die Statistik aktuell.'), findsOneWidget);
+
+    store.sessions[2] = at(20, bodyWeight: 80);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MaterialApp(home: RecapPage(today)));
+    await tester.pump();
+    expect(find.textContaining('Zuletzt vor'), findsNothing, reason: 'three weeks is fresh enough');
+    expect(find.text('Wie zuletzt? ± übernimmt den Wert.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+}

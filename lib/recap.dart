@@ -42,8 +42,17 @@ class _RecapPageState extends State<RecapPage> {
     super.dispose();
   }
 
+  /// The earlier training with a body weight entered, if any.
+  Session? get lastWeighed => store.sessions.where((x) => x != s && x.bodyWeight != null).firstOrNull;
+
   /// Body weight entered on an earlier training.
-  double? get lastWeight => store.sessions.where((x) => x != s).map((x) => x.bodyWeight).nonNulls.firstOrNull;
+  double? get lastWeight => lastWeighed?.bodyWeight;
+
+  /// Days since the body weight was last entered, once that's over a month (only if it's tracked at all).
+  int? get weightStale => switch (lastWeighed) {
+        final x? when s.date.difference(x.date).inDays > 30 => s.date.difference(x.date).inDays,
+        _ => null,
+      };
 
   /// ±0.1 in the shown unit. The first tap starts from the last body weight entered.
   void nudge(int dir) => setState(() {
@@ -239,8 +248,13 @@ class _RecapPageState extends State<RecapPage> {
                 ),
                 if (bodyWeight == null) ...[
                   const SizedBox(height: 6),
-                  Text(lastWeight == null ? 'Optional' : 'Wie zuletzt? ± übernimmt den Wert.',
-                      textAlign: TextAlign.center, style: small),
+                  if (weightStale case final days?)
+                    Text('Zuletzt vor $days Tagen eingetragen. Einmal im Monat hält die Statistik aktuell.',
+                        textAlign: TextAlign.center,
+                        style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600))
+                  else
+                    Text(lastWeight == null ? 'Optional' : 'Wie zuletzt? ± übernimmt den Wert.',
+                        textAlign: TextAlign.center, style: small),
                 ],
                 const SizedBox(height: 12),
                 if (!noteOpen)

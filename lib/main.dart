@@ -11,6 +11,7 @@ import 'body_shapes.dart';
 import 'derived.dart';
 import 'edit.dart';
 import 'model.dart';
+import 'muscles.dart';
 import 'recap.dart';
 import 'session.dart';
 import 'settings.dart';
@@ -504,6 +505,17 @@ class SectionHeader extends StatelessWidget {
   );
 }
 
+/// Opens the exercise editor for [name] in [w] and saves what comes back.
+Future<void> editExerciseIn(BuildContext context, Workout w, String name) async {
+  final i = w.exercises.indexWhere((e) => e.name == name);
+  if (i < 0) return;
+  final result = await Navigator.push<Exercise>(
+    context,
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => ExerciseEditor(w.exercises[i].copy())),
+  );
+  if (result != null) await store.saveWorkout(w.copy()..exercises[i] = result);
+}
+
 class WorkoutCard extends StatelessWidget {
   final Workout workout;
   const WorkoutCard(this.workout, {super.key});
@@ -511,9 +523,30 @@ class WorkoutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final last = store.lastSessionOf(workout);
+    final c = Theme.of(context).colorScheme;
+    // Own exercises with no muscles known don't count in the balance and the muscle map: say so here.
+    final unknown = {for (final e in workout.exercises) if (!e.cardio && musclesOf(e.name) == null) e.name};
     return OverviewCard(
       title: workout.name,
       timed: {for (final e in workout.exercises) if (e.timed) e.name},
+      detail: (name) => !unknown.contains(name)
+          ? null
+          : InkWell(
+              onTap: () => editExerciseIn(context, workout, name),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(children: [
+                  Icon(Icons.help_outline, size: 14, color: c.tertiary),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text('Muskeln festlegen, sonst fehlt sie in der Statistik',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: c.tertiary, fontWeight: FontWeight.w500)),
+                  ),
+                ]),
+              ),
+            ),
       subtitle: [
         if (last != null) 'zuletzt ${ago(last.date)}',
         if (workout.exercises.isNotEmpty) aboutLabel(currentPace().ofWorkout(workout)),

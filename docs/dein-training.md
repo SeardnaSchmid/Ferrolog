@@ -49,7 +49,7 @@ Spätere Präzisierungen beim Bauen:
 | 1 | Befunde als Modell (`findings.dart`) mit Tests | ✅ `238f43c` |
 | 2 | Startseite: Karte, Detail-Sheet, Knöpfe mit Rückgängig, Einstellungen; alte Karten, `tasks.dart` und `homeFacts` entfernt | ✅ `f17b4a7` |
 | 3 | Sprünge in die Statistik: Balance-Karte und Wochengrafik scrollen ins Bild und werden hervorgehoben, Übungsdetail markiert Trainings und nennt ausgelassene | ✅ `4559014` |
-| 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ⏳ offen. Bis dahin fehlen diese Hinweise ganz. |
+| 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ siehe Phase 4 im Detail |
 | 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ⏳ offen. Bis dahin füllt eine Übergangslösung `tasks`/`facts` aus den Befunden. |
 | 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ⏳ offen |
 
@@ -60,6 +60,13 @@ Spätere Präzisierungen beim Bauen:
 - `ExerciseStats(name, marked: …)`: markierte Trainings getönt; Trainings ohne Satz der Übung als „Ausgelassen am …“ oben; Zeitraum weit genug für alle markierten.
 - Verlauf (Meilenstein, Rekordmonat): öffnet nur den Tab, ohne Markierung.
 - Gefunden beim Testen: Die Statistik-Liste baut Karten außerhalb des Bildschirms nicht; ohne das schrittweise Scrollen sprang der Link ins Leere.
+
+### Phase 4 im Detail
+
+- Zusammenfassung nach dem Training ([recap.dart](../lib/recap.dart)): Liegt das letzte eingetragene Körpergewicht mehr als 30 Tage zurück, steht unter dem Feld orange „Zuletzt vor N Tagen eingetragen. Einmal im Monat hält die Statistik aktuell.“ Wer nie ein Körpergewicht einträgt, wird nicht gefragt (wie vorher).
+- Workout-Karte ([main.dart](../lib/main.dart), `WorkoutCard`): Unter eigenen Übungen ohne bekannte Muskeln (kein Cardio) steht „Muskeln festlegen, sonst fehlt sie in der Statistik“; antippen öffnet den Übungs-Editor (`editExerciseIn`, auch vom Plateau-Sheet genutzt).
+- Übungs-Editor ([edit.dart](../lib/edit.dart), Muskel-Karte): oben der Hinweis, dass eine unbekannte Übung ohne Muskeln in Balance und Muskelkarte fehlt.
+- Tests: [test/home_test.dart](../test/home_test.dart) „care where it belongs“. Im Browser nicht sichtbar, weil die Demo weder eine unbekannte Übung noch ein altes Körpergewicht hat (kommt mit Phase 6).
 
 ## Offene Punkte
 
