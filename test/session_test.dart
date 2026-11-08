@@ -115,12 +115,13 @@ void main() {
     // Bench: 60 s + 3 warm-ups + 3 × 5 × 4.5 s + 2 × 120 s ≈ 9 Min; plank 30 s + 90 s + 120 s = 4 Min.
     expect(find.textContaining('≈ 9 Min'), findsOneWidget);
     expect(find.textContaining('≈ 4 Min'), findsOneWidget);
-    expect(find.textContaining('noch ≈ 13 Min · fertig gegen'), findsOneWidget);
+    expect(find.text('noch ≈ 13 Min'), findsOneWidget);
+    expect(find.textContaining('fertig gegen'), findsOneWidget);
 
     await tester.tap(find.text('–/5', findRichText: true).first);
     await tester.pump();
     expect(s.exercises.first.doneAt.first, isNotNull);
-    expect(find.textContaining('noch ≈ 9 Min'), findsOneWidget, reason: 'two sets of bench left plus the plank');
+    expect(find.textContaining('Sätze · ≈ 9 Min'), findsOneWidget, reason: 'two sets of bench left plus the plank, beside the rest');
     await tester.tap(find.text('5/5', findRichText: true).first); // fewer reps keep the time
     expect(s.exercises.first.doneAt.first, isNotNull);
   });
@@ -145,7 +146,7 @@ void main() {
     // A tap starts the lead-in; another one cancels it, nothing logged.
     await tester.tap(find.text('–/1 s', findRichText: true).first);
     await tester.pump();
-    expect(find.textContaining('Aufnehmen 1', findRichText: true), findsOneWidget, reason: 'time to pick up the weights');
+    expect(find.text('AUFNEHMEN'), findsOneWidget, reason: 'time to pick up the weights');
     expect(log.startedAt, isNotNull, reason: 'kept with the training, survives a restart');
     await tester.tap(find.byTooltip('Abbrechen'));
     await tester.pump();
@@ -158,7 +159,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
     expect((log.reps.first, log.doneAt.first != null, log.startedAt), (1, true, null));
-    expect(find.textContaining('Pause 1:30 /', findRichText: true), findsOneWidget);
+    expect(find.text('von 1:30'), findsOneWidget);
 
     // No lead-in and stopped right away: nothing held, nothing logged.
     await prefs.setInt('timed.leadIn', 0);

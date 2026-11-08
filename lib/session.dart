@@ -130,8 +130,8 @@ class _SessionPageState extends State<SessionPage> {
       .where((e) => e.name == log.name)
       .firstOrNull;
 
-  /// Keeps [log]'s card in view once the next frame is laid out: the rest line appearing in the live
-  /// strip shrinks the list and would otherwise push a card near the end out of view.
+  /// Keeps [log]'s card in view once the next frame is laid out, so a set logged near the bottom
+  /// edge doesn't stay half hidden.
   void reveal(ExerciseLog log) => WidgetsBinding.instance.addPostFrameCallback((_) {
         final card = cardKeys[log]?.currentContext;
         if (card == null || !card.mounted) return;
@@ -430,13 +430,7 @@ class _SessionPageState extends State<SessionPage> {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final left = lastSetAt == null ? null : restLeft;
-    final zone = left == null ? RestZone.rest : restZone(left, restTarget);
-    final zoneBar = switch (zone) {
-      RestZone.rest => c.primary,
-      RestZone.soon => c.tertiary,
-      RestZone.late => c.error,
-    };
+    final status = stripStatus(c);
     final muted = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     final done = s.exercises.fold(0, (n, e) => n + e.setsDone);
     final total = s.exercises.fold(0, (n, e) => n + e.reps.length);
@@ -466,73 +460,99 @@ class _SessionPageState extends State<SessionPage> {
       ),
       body: Column(
         children: [
-          // Live strip, same look as the running-training card on the overview.
-          Container(
-            color: Color.alphaBlend(c.primaryContainer.withValues(alpha: .45), c.surface),
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-            child: Column(children: [
-              Row(children: [
-                const LiveDot(),
-                const SizedBox(width: 8),
-                Text('LÄUFT',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
-                Text(' · ', style: TextStyle(color: c.onSurfaceVariant)),
-                Elapsed(s.date, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                const Spacer(),
-                Text('$done/$total Sätze', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-              ]),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(
-                value: total == 0 ? 0 : done / total,
-                minHeight: 6,
-                borderRadius: BorderRadius.circular(3),
-                backgroundColor: c.surface,
-              ),
-              // Rest: a thin bar under the progress that shrinks to the left, and one line with the
-              // time left (orange from 30 s before the end to 30 s over, then red) and its controls.
-              if (left != null) ...[
-                const SizedBox(height: 4),
-                LinearProgressIndicator(
-                  value: restTarget == 0 ? 0 : (left / restTarget).clamp(0, 1),
-                  minHeight: 4,
-                  borderRadius: BorderRadius.circular(2),
-                  color: zoneBar,
-                  backgroundColor: c.surface,
-                ),
-              ],
-              if (hold case final h?) ..._holdLine(h, c),
-              if (hold == null && (left != null || leftText != null))
+          // Live strip, same look as the running-training card on the overview. Always the same height,
+          // so the list below never jumps: status, the session's progress as a thin line, one big line
+          // for the rest (or a timed set, or what's left of the training) and the rest bar under it.
+          MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.15,
+            child: Container(
+              height: 104,
+              color: Color.alphaBlend(c.primaryContainer.withValues(alpha: .45), c.surface),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+              child: Column(children: [
                 SizedBox(
-                  height: 30,
+                  height: 18,
                   child: Row(children: [
-                    if (left != null) ...[
-                      Text.rich(
-                        TextSpan(children: [
-                          TextSpan(
-                            text: '${pausedAt != null ? 'Pausiert' : 'Pause'} ${left > 0 ? clock(left) : '+${clock(-left)}'}',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: zoneBar),
-                          ),
-                          TextSpan(text: ' / ${clock(restTarget)}', style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
-                        ]),
-                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-                      ),
-                      _stripButton(pausedAt == null ? Icons.pause : Icons.play_arrow,
-                          pausedAt == null ? 'Anhalten' : 'Weiter', toggleRestPause),
-                      _stripButton(Icons.restart_alt, 'Neu starten', restartRest),
-                      _stripButton(Icons.close, 'Ausblenden', () => setState(() => lastSetAt = null)),
-                    ],
+                    const LiveDot(),
                     const SizedBox(width: 8),
-                    Expanded(
-                      // Beside the rest only what's left, the finishing time doesn't fit on a phone.
-                      child: Text((left != null ? leftText?.split(' · ').first : leftText) ?? '',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+                    Text('LÄUFT',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
+                    Text(' · ', style: TextStyle(color: c.onSurfaceVariant)),
+                    Elapsed(s.date, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                    const Spacer(),
+                    // While the line below is taken, what's left of the training moves up here.
+                    Text(
+                      [
+                        '$done/$total Sätze',
+                        if (status != null) ?leftText?.split(' · ').first.replaceFirst('noch ', ''),
+                      ].join(' · '),
+                      style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
                     ),
                   ]),
                 ),
-            ]),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(
+                  value: total == 0 ? 0 : done / total,
+                  minHeight: 3,
+                  borderRadius: BorderRadius.circular(2),
+                  color: c.onSurface.withValues(alpha: .55),
+                  backgroundColor: c.surfaceContainerHighest,
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  height: 44,
+                  child: status == null
+                      ? Row(children: [
+                          Text(leftText?.split(' · ').first ?? '',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.onSurface)),
+                          const Spacer(),
+                          if (leftText?.split(' · ') case [_, final end])
+                            Text(end, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                        ])
+                      : Row(children: [
+                          Text(status.time,
+                              style: TextStyle(
+                                  fontSize: 36,
+                                  height: 1,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -.36,
+                                  color: status.color,
+                                  fontFeatures: const [FontFeature.tabularFigures()])),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Icon(status.icon, size: 14, color: status.color),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(status.word,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .66, color: status.color)),
+                                  ),
+                                ]),
+                                const SizedBox(height: 3),
+                                Text(status.detail,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                          for (final (i, button) in status.buttons.indexed) ...[
+                            if (i > 0) const SizedBox(width: 8),
+                            button,
+                          ],
+                        ]),
+                ),
+                const SizedBox(height: 6),
+                status?.bar ?? RestBar(color: c.onSurface, empty: true),
+              ]),
+            ),
           ),
           Expanded(
             child: ListView(
@@ -551,59 +571,110 @@ class _SessionPageState extends State<SessionPage> {
     );
   }
 
-  /// A timed set in the live strip: lead-in to go, then the seconds held against the range, with a
-  /// bar filling up to its top and a button to stop (or cancel during the lead-in).
-  List<Widget> _holdLine(({ExerciseLog log, int set, DateTime start}) h, ColorScheme c) {
-    final held = heldOf(h);
-    final (low, top) = holdRange(h.log, h.set);
-    final color = held < 0 ? c.tertiary : c.primary;
-    return [
-      const SizedBox(height: 4),
-      LinearProgressIndicator(
-        value: held < 0 ? 1 + held / max(1, leadIn) : (held / top).clamp(0, 1),
-        minHeight: 4,
-        borderRadius: BorderRadius.circular(2),
-        color: color,
-        backgroundColor: c.surface,
-      ),
-      SizedBox(
-        height: 30,
-        child: Row(children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(children: [
-                TextSpan(
-                  text: held < 0 ? 'Aufnehmen ${-held}' : '${h.log.name} ${clock(held)}',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color),
-                ),
-                TextSpan(
-                  text: held < 0 ? ' · ${h.log.name}' : ' / ${top > low ? '$low–$top' : '$top'} s',
-                  style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant),
-                ),
-              ]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-            ),
-          ),
-          _stripButton(held < 0 ? Icons.close : Icons.stop, held < 0 ? 'Abbrechen' : 'Stopp', () {
-            setState(endHold);
-            store.saveActive(s);
-          }),
-        ]),
-      ),
+  /// What the big line of the live strip shows: a timed set (lead-in, then held) before a running
+  /// rest; null when neither runs. The rest's zones: blue while resting, orange from 30 s before the end
+  /// ("go" once it's over) to 30 s over, then red with a striped bar; paused in grey with a dashed bar.
+  ({String time, Color color, IconData icon, String word, String detail, List<Widget> buttons, Widget bar})? stripStatus(
+      ColorScheme c) {
+    if (hold case final h?) {
+      final held = heldOf(h);
+      final (low, top) = holdRange(h.log, h.set);
+      void stop() {
+        setState(endHold);
+        store.saveActive(s);
+      }
+
+      return held < 0
+          ? (
+              time: '${-held}',
+              color: c.tertiary,
+              icon: Icons.back_hand_outlined,
+              word: 'AUFNEHMEN',
+              detail: h.log.name,
+              buttons: [_roundButton(Icons.close, 'Abbrechen', stop)],
+              bar: RestBar(color: c.tertiary, fraction: -held / max(1, leadIn)),
+            )
+          : (
+              time: clock(held),
+              color: c.primary,
+              icon: Icons.timer_outlined,
+              word: 'HALTEN',
+              detail: 'Ziel ${top > low ? '$low–$top' : '$top'} s',
+              buttons: [_roundButton(Icons.stop, 'Stopp', stop, filled: true)],
+              bar: RestBar(color: c.primary, fraction: held / top, marker: top > low ? low / top : null),
+            );
+    }
+    if (lastSetAt == null) return null;
+    final left = restLeft;
+    final fraction = restTarget == 0 ? 0.0 : (left / restTarget).clamp(0.0, 1.0);
+    final time = left > 0 ? clock(left) : '+${clock(-left)}';
+    final buttons = [
+      pausedAt == null
+          ? _roundButton(Icons.pause, 'Anhalten', toggleRestPause)
+          : _roundButton(Icons.play_arrow, 'Weiter', toggleRestPause, filled: true),
+      _roundButton(Icons.restart_alt, 'Neu starten', restartRest),
     ];
+    final of = 'von ${clock(restTarget)}', goal = 'Ziel ${clock(restTarget)}';
+    if (pausedAt != null) {
+      return (
+        time: time,
+        color: c.onSurfaceVariant,
+        icon: Icons.pause,
+        word: 'ANGEHALTEN',
+        detail: left > 0 ? of : goal,
+        buttons: buttons,
+        bar: RestBar(color: c.primary, fraction: fraction, dashed: true),
+      );
+    }
+    return switch (restZone(left, restTarget)) {
+      RestZone.rest => (
+          time: time,
+          color: c.primary,
+          icon: Icons.timer_outlined,
+          word: 'PAUSE',
+          detail: of,
+          buttons: buttons,
+          bar: RestBar(color: c.primary, fraction: fraction),
+        ),
+      RestZone.soon when left > 0 => (
+          time: time,
+          color: c.tertiary,
+          icon: Icons.arrow_forward,
+          word: 'GLEICH WEITER',
+          detail: of,
+          buttons: buttons,
+          bar: RestBar(color: c.tertiary, fraction: fraction),
+        ),
+      RestZone.soon => (
+          time: time,
+          color: c.tertiary,
+          icon: Icons.notifications_none,
+          word: 'LOS',
+          detail: goal,
+          buttons: buttons,
+          bar: RestBar(color: c.tertiary.withValues(alpha: .35)),
+        ),
+      RestZone.late => (
+          time: time,
+          color: c.error,
+          icon: Icons.warning_amber_rounded,
+          word: 'ÜBERZOGEN',
+          detail: goal,
+          buttons: buttons,
+          bar: RestBar(color: c.error, striped: true),
+        ),
+    };
   }
 
-  /// A small icon button for the live strip, so the rest line stays one line high.
-  Widget _stripButton(IconData icon, String tooltip, VoidCallback onPressed) => IconButton(
-        icon: Icon(icon, size: 20),
-        tooltip: tooltip,
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 34, height: 30),
-        onPressed: onPressed,
-      );
+  /// A round 44 dp button for the live strip: tonal, or filled for the action that matters now.
+  Widget _roundButton(IconData icon, String tooltip, VoidCallback onPressed, {bool filled = false}) {
+    final style = IconButton.styleFrom(
+        fixedSize: const Size(44, 44), minimumSize: const Size(44, 44), padding: EdgeInsets.zero);
+    final child = Icon(icon, size: 22);
+    return filled
+        ? IconButton.filled(style: style, tooltip: tooltip, onPressed: onPressed, icon: child)
+        : IconButton.filledTonal(style: style, tooltip: tooltip, onPressed: onPressed, icon: child);
+  }
 
   /// One exercise as a card; the current one outlined and tinted like the running training on the overview.
   Widget _exerciseCard(ExerciseLog log, bool current, ColorScheme c, TextStyle muted) => Card(
@@ -738,6 +809,79 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   static String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+}
+
+/// The rest bar under the big line of the live strip, 6 dp: filled from the left to [fraction] (all
+/// of it when null), dashed while paused, striped when the rest ran far over, with an optional [marker]
+/// (the bottom of a timed range). [empty]: just the track, faded.
+class RestBar extends StatelessWidget {
+  final Color color;
+  final double? fraction, marker;
+  final bool dashed, striped, empty;
+  const RestBar(
+      {required this.color, this.fraction, this.marker, this.dashed = false, this.striped = false, this.empty = false, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Opacity(
+      opacity: empty ? .5 : 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: SizedBox(
+          height: 6,
+          width: double.infinity,
+          child: CustomPaint(painter: _RestBarPainter(this, c.surfaceContainerHighest, c.onSurface)),
+        ),
+      ),
+    );
+  }
+}
+
+class _RestBarPainter extends CustomPainter {
+  final RestBar bar;
+  final Color track, markerColor;
+  _RestBarPainter(this.bar, this.track, this.markerColor);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = track);
+    if (bar.empty) return;
+    final fill = Paint()..color = bar.color;
+    final w = size.width * (bar.fraction ?? 1).clamp(0.0, 1.0);
+    if (bar.striped) {
+      // Diagonal stripes, 6 on and 5 off, leaning right.
+      for (var x = -size.height; x < size.width; x += 11) {
+        canvas.drawPath(
+            Path()
+              ..moveTo(x, size.height)
+              ..lineTo(x + 6, size.height)
+              ..lineTo(x + 6 + size.height, 0)
+              ..lineTo(x + size.height, 0)
+              ..close(),
+            fill);
+      }
+    } else if (bar.dashed) {
+      fill.color = bar.color.withValues(alpha: .7);
+      for (var x = 0.0; x < w; x += 12) {
+        canvas.drawRect(Rect.fromLTWH(x, 0, min(8, w - x), size.height), fill);
+      }
+    } else {
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, size.height), const Radius.circular(3)), fill);
+    }
+    if (bar.marker case final m?) {
+      canvas.drawRect(Rect.fromLTWH(size.width * m - 1, 0, 2, size.height), Paint()..color = markerColor);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RestBarPainter old) =>
+      old.bar.fraction != bar.fraction ||
+      old.bar.color != bar.color ||
+      old.bar.dashed != bar.dashed ||
+      old.bar.striped != bar.striped ||
+      old.bar.marker != bar.marker ||
+      old.track != track;
 }
 
 /// How far a rep range is from its increase: before the first set what it takes (3×8), then what the
