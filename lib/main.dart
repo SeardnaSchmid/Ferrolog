@@ -36,6 +36,7 @@ Future<void> main() async {
   LicenseRegistry.addLicense(() => Stream.value(const LicenseEntryWithLineBreaks(['react-native-body-highlighter'], bodyShapesLicense)));
   store = await Store.open();
   prefs = await SharedPreferences.getInstance();
+  loadBalanceGuides();
   weeklyGoal.value = prefs.getInt('streak.perWeek') ?? 3;
   unit.value = unitFromSetting(prefs.getString('unit'), WidgetsBinding.instance.platformDispatcher.locale.countryCode);
   sync = GitHubSync(prefs);

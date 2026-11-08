@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 
 import 'main.dart';
 import 'model.dart';
@@ -231,131 +234,246 @@ List<(String, double)> exercisesFor(Muscle m, Iterable<Session> sessions) {
   return [for (final e in sets.entries) (e.key, e.value)]..sort((a, b) => b.$2.compareTo(a.$2));
 }
 
-/// The pairs [balances] checks.
-enum Pair { chestBack, squatHinge, quadsHamstrings, pushPullFlat, pushPullOverhead }
+/// The pairs [balances] checks, all by done sets per week: side [a] against side [b], balanced while
+/// b / a lies within [low]–[high] (guide values from training practice, not medical limits; the user
+/// can change them, see [guideOf]). [aLabel] and [bLabel] name what's counted, [note] what counts half.
+enum Pair {
+  pushPullFlat('Brust', 'Oberer Rücken', 'Drücken', 'Rudern', 1, 1.5),
+  pushPullOverhead('Schultern', 'Latissimus', 'Über Kopf drücken', 'Klimmzüge, Latzug', 1, double.infinity),
+  rearDelts(
+    'Vordere Schulter',
+    'Hintere Schulter',
+    'Vordere Schulter',
+    'hintere Schulter',
+    .5,
+    double.infinity,
+    note: 'Drückübungen zählen halb',
+  ),
+  quadsHamstrings('Quadrizeps', 'Hintere Oberschenkel', 'Quadrizeps', 'hintere Oberschenkel', .6, double.infinity),
+  rotators(
+    'Innenrotation',
+    'Außenrotation',
+    'Innenrotation',
+    'Außenrotation',
+    .5,
+    double.infinity,
+    note: 'Drückübungen zählen halb',
+  ),
+  core('Bauch', 'Unterer Rücken', 'Bauch', 'unterer Rücken', .75, 1.35, note: 'Kreuzheben und Kniebeuge zählen halb');
 
-/// Two opposing sides, [b] against [a]: balanced while b / a lies within [low]–[high] (guide values from
-/// training practice, not medical limits). [strength]: the sides are lifts and the values their
-/// current 1RM in kg; else the values are sets per week.
+  const Pair(this.a, this.b, this.aLabel, this.bLabel, this.low, this.high, {this.note});
+  final String a, b, aLabel, bLabel;
+  final double low, high;
+  final String? note;
+}
+
+/// The user's own guide values, by pair; the rest keep [Pair.low] and [Pair.high]. Loaded at start.
+final balanceGuides = ValueNotifier<Map<Pair, (double, double)>>({});
+
+(double, double) guideOf(Pair p) => balanceGuides.value[p] ?? (p.low, p.high);
+
+void loadBalanceGuides() {
+  final raw = prefs.getString('balance.guides');
+  if (raw == null) return;
+  final map = jsonDecode(raw) as Map<String, dynamic>;
+  balanceGuides.value = {
+    for (final MapEntry(:key, :value) in map.entries)
+      ?Pair.values.asNameMap()[key]: (
+        (value[0] as num).toDouble(),
+        value[1] == null ? double.infinity : (value[1] as num).toDouble(),
+      ),
+  };
+}
+
+/// Stores [p]'s guide values; the defaults again remove the own ones. Null: all back to the defaults.
+Future<void> setBalanceGuide(Pair? p, [double? low, double? high]) {
+  final next = {...balanceGuides.value};
+  if (p == null) {
+    next.clear();
+  } else if (low == p.low && high == p.high) {
+    next.remove(p);
+  } else {
+    next[p] = (low!, high!);
+  }
+  balanceGuides.value = next;
+  return prefs.setString(
+    'balance.guides',
+    jsonEncode({
+      for (final MapEntry(:key, :value) in next.entries) key.name: [value.$1, value.$2.isFinite ? value.$2 : null],
+    }),
+  );
+}
+
+/// One pair over a stretch of time: sets per week on each side against the guide values.
 class Balance {
   final Pair pair;
-  final String title, a, b, aGroup, bGroup;
   final double aValue, bValue, low, high;
-  final bool strength;
-  Balance(this.pair, this.title, (String, String, double) sideA, (String, String, double) sideB, this.low, this.high,
-      {this.strength = false})
-      : aGroup = sideA.$1,
-        a = sideA.$2,
-        aValue = sideA.$3,
-        bGroup = sideB.$1,
-        b = sideB.$2,
-        bValue = sideB.$3;
+  Balance(this.pair, this.aValue, this.bValue) : low = guideOf(pair).$1, high = guideOf(pair).$2;
+
+  String get title => '${pair.a} ↔ ${pair.b}';
+  String get aGroup => pair.a;
+  String get bGroup => pair.b;
+  String get a => pair.aLabel;
+  String get b => pair.bLabel;
 
   double get ratio => aValue == 0 ? double.infinity : bValue / aValue;
 
   /// The muscle group that falls behind, or null when balanced.
-  String? get lagging => ratio < low ? bGroup : ratio > high ? aGroup : null;
+  String? get lagging => ratio < low
+      ? bGroup
+      : ratio > high
+      ? aGroup
+      : null;
 }
 
 // Lifts compared by strength, matched on the name; dumbbells (weight per hand), split and front squats,
-// inclines, declines and machines don't compare. Other exercises still count in the pairs by sets.
+// inclines, declines and machines don't compare.
 bool _press(String k) => (k.contains('bankdrueck') || k.contains('benchpress')) && !_odd(k);
-bool _row(String k) => (k.contains('rudern') || k.endsWith('row')) && !_odd(k) && !k.contains('aufrecht') && !k.contains('upright');
+bool _row(String k) =>
+    (k.contains('rudern') || k.endsWith('row')) && !_odd(k) && !k.contains('aufrecht') && !k.contains('upright');
 bool _squat(String k) => (k.contains('kniebeuge') || k.contains('squat')) && !_odd(k);
-bool _hinge(String k) => (k.contains('kreuzheb') || k.contains('deadlift')) && !k.contains('rumaen') && !k.contains('romanian');
-bool _odd(String k) => const ['kurzhantel', 'dumbbell', 'schraeg', 'incline', 'split', 'bulgarian', 'front', 'goblet',
-      'negativ', 'decline', 'hack', 'maschine', 'machine', 'kabel', 'cable', 'tbar']
-    .any(k.contains);
+bool _hinge(String k) =>
+    (k.contains('kreuzheb') || k.contains('deadlift')) && !k.contains('rumaen') && !k.contains('romanian');
+bool _odd(String k) => const [
+  'kurzhantel',
+  'dumbbell',
+  'schraeg',
+  'incline',
+  'split',
+  'bulgarian',
+  'front',
+  'goblet',
+  'negativ',
+  'decline',
+  'hack',
+  'maschine',
+  'machine',
+  'kabel',
+  'cable',
+  'tbar',
+].any(k.contains);
 
-/// Which side of a pair by sets an exercise counts on: 0 for side a, 1 for side b, null for neither.
-/// Pressing: chest (flat), or shoulders with the triceps helping (overhead). Pulling: rows train the
-/// middle back (flat), pull-ups and pulldowns only the lats (from above). Legs by the primary muscle.
-int? sideOf(Pair pair, String name) {
+// Rear delts and external rotation have no muscle of their own in the data, so by name.
+bool _rearDelt(String k) => const [
+  'facepull',
+  'reversebutterfly',
+  'reversefly',
+  'reardelt',
+  'hintereschulter',
+  'vorgebeugtesseitheb',
+].any(k.contains);
+bool _externalRotation(String k) =>
+    const ['facepull', 'aussenrot', 'externalrot', 'cubanpress', 'rotatorenmanschette'].any(k.contains);
+
+/// How much one set of [name] counts on each side of [pair], as (side a, side b). Pressing: chest
+/// (flat), or shoulders with the triceps helping (overhead); both work the front delts and rotate
+/// inwards, there they count half. Pulling: rows train the middle back (flat, rear delts half),
+/// pull-ups and pulldowns the lats (from above). Legs and core by the muscles, helpers half; lower
+/// back in compound lifts (deadlift, squat) half too.
+(double, double) shareOf(Pair pair, String name) {
   final (p, sec) = musclesOf(name) ?? (0, 0);
   bool has(int bits, Muscle m) => bits & m.bit != 0;
-  final push = has(p, Muscle.middleBack) || has(p, Muscle.lats)
-      ? null
-      : has(p, Muscle.chest)
-          ? Pair.pushPullFlat
-          : has(p, Muscle.shoulders) && has(sec, Muscle.triceps)
-              ? Pair.pushPullOverhead
-              : null;
+  double muscle(Muscle m) => has(p, m)
+      ? 1
+      : has(sec, m)
+      ? .5
+      : 0;
+  final k = searchKey(name);
+  final pulls = has(p, Muscle.middleBack) || has(p, Muscle.lats);
+  final flat = !pulls && has(p, Muscle.chest);
+  final overhead = !pulls && !flat && has(p, Muscle.shoulders) && has(sec, Muscle.triceps);
   return switch (pair) {
-    Pair.pushPullFlat => has(p, Muscle.middleBack) ? 1 : push == Pair.pushPullFlat ? 0 : null,
-    Pair.pushPullOverhead => !has(p, Muscle.middleBack) && has(p, Muscle.lats) ? 1 : push == Pair.pushPullOverhead ? 0 : null,
-    Pair.quadsHamstrings => has(p, Muscle.quadriceps) ? 0 : has(p, Muscle.hamstrings) ? 1 : null,
-    Pair.chestBack || Pair.squatHinge => null,
+    Pair.pushPullFlat => (flat ? 1 : 0, has(p, Muscle.middleBack) ? 1 : 0),
+    Pair.pushPullOverhead => (overhead ? 1 : 0, !has(p, Muscle.middleBack) && has(p, Muscle.lats) ? 1 : 0),
+    Pair.rearDelts => (
+      overhead || k.contains('frontheb') || k.contains('frontraise')
+          ? 1
+          : flat && has(sec, Muscle.shoulders)
+          ? .5
+          : 0,
+      _rearDelt(k)
+          ? 1
+          : has(p, Muscle.middleBack)
+          ? .5
+          : 0,
+    ),
+    Pair.quadsHamstrings => (muscle(Muscle.quadriceps), muscle(Muscle.hamstrings)),
+    Pair.rotators => (flat || overhead ? .5 : 0, _externalRotation(k) ? 1 : 0),
+    Pair.core => (
+      muscle(Muscle.abdominals),
+      has(p, Muscle.lowerBack)
+          ? (has(p, Muscle.hamstrings) || has(p, Muscle.glutes) || has(p, Muscle.quadriceps) || has(p, Muscle.traps)
+                ? .5
+                : 1)
+          : has(sec, Muscle.lowerBack)
+          ? .5
+          : 0,
+    ),
   };
 }
 
-/// Pairs that drift apart easily, from [sessions] (newest first) over [weeks]. Guide values:
-/// - Brust ↔ oberer Rücken by strength: barbell rows at 75–120 % of the bench press (coaching practice),
-/// - Quadrizeps ↔ hintere Kette by strength: the deadlift at 100–140 % of the squat (in powerlifting
-///   it's mostly 110–125 %),
-/// - Quadrizeps ↔ Beinbeuger by sets: at least 60 % (hamstrings to quadriceps, the one ratio with some
-///   evidence on strains),
-/// - Drücken ↔ Ziehen, flat and overhead, by sets: at least as much pulling as pressing.
-/// The strength pairs need both barbell lifts; the pairs by sets work with any exercise and show once
-/// side [a] was trained (nothing on side b is the clearest imbalance).
+/// Which side of [pair] an exercise mainly trains: 0 for side a, 1 for side b, null for neither.
+int? sideOf(Pair pair, String name) {
+  final (a, b) = shareOf(pair, name);
+  return a > b
+      ? 0
+      : b > a
+      ? 1
+      : null;
+}
+
+/// How long the balance looks back: four weeks, the same on the card and in the findings.
+const balanceDays = 28;
+
+/// The pairs from [sessions] (newest first) over [weeks]; a pair shows once either side was trained
+/// (nothing on one side is the clearest imbalance).
 List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
-  // Current level: the best 1RM of an exercise's latest four trainings; the strongest exercise counts.
-  (String, double)? strongest(bool Function(String) family) {
-    final recent = <String, List<double>>{};
-    for (final s in sessions) {
-      for (final e in s.exercises) {
-        if (e.cardio || e.weight == 0 || e.setsDone == 0 || !family(searchKey(e.name))) continue;
-        final list = recent.putIfAbsent(e.name, () => []);
-        if (list.length < 4) list.add(estimated1rm(e));
-      }
-    }
-    (String, double)? best;
-    for (final MapEntry(key: name, value: v) in recent.entries) {
-      final top = v.reduce(max);
-      if (best == null || top > best.$2) best = (name, top);
-    }
-    return best;
-  }
-
-  final result = <Balance>[];
-  if ((strongest(_press), strongest(_row)) case ((final na, final va)?, (final nb, final vb)?)) {
-    result.add(Balance(Pair.chestBack, 'Brust ↔ oberer Rücken', ('Brust', na, va), ('Oberer Rücken', nb, vb), .75, 1.2,
-        strength: true));
-  }
-  if ((strongest(_squat), strongest(_hinge)) case ((final na, final va)?, (final nb, final vb)?)) {
-    result.add(Balance(Pair.squatHinge, 'Quadrizeps ↔ hintere Kette', ('Quadrizeps', na, va), ('Hintere Kette', nb, vb), 1,
-        1.4, strength: true));
-  }
-
-  final perMuscle = setsPerSingleMuscle(sessions);
-  final (quads, hams) = (perMuscle[Muscle.quadriceps]!, perMuscle[Muscle.hamstrings]!);
-  if (quads > 0) {
-    result.add(Balance(Pair.quadsHamstrings, 'Quadrizeps ↔ Beinbeuger', ('Quadrizeps', 'Quadrizeps', quads / weeks),
-        ('Beinbeuger', 'Beinbeuger', hams / weeks), .6, double.infinity));
-  }
-
-  var (pushFlat, pushUp, pullFlat, pullUp) = (0.0, 0.0, 0.0, 0.0);
+  final sums = {
+    for (final p in Pair.values) p: [0.0, 0.0],
+  };
   for (final s in sessions) {
     for (final e in s.exercises) {
       if (e.cardio || e.setsDone == 0) continue;
-      switch ((sideOf(Pair.pushPullFlat, e.name), sideOf(Pair.pushPullOverhead, e.name))) {
-        case (0, _):
-          pushFlat += e.setsDone;
-        case (1, _):
-          pullFlat += e.setsDone;
-        case (_, 0):
-          pushUp += e.setsDone;
-        case (_, 1):
-          pullUp += e.setsDone;
+      for (final p in Pair.values) {
+        final (a, b) = shareOf(p, e.name);
+        sums[p]![0] += e.setsDone * a;
+        sums[p]![1] += e.setsDone * b;
       }
     }
   }
-  if (pushFlat > 0) {
-    result.add(Balance(Pair.pushPullFlat, 'Drücken ↔ Rudern', ('Brust', 'Drücken', pushFlat / weeks),
-        ('Oberer Rücken', 'Rudern', pullFlat / weeks), 1, double.infinity));
+  return [
+    for (final MapEntry(key: p, value: v) in sums.entries)
+      if (v[0] > 0 || v[1] > 0) Balance(p, v[0] / weeks, v[1] / weeks),
+  ];
+}
+
+/// The two strength ratios of the barbell lifts over [sessions] (newest first, e.g. 90 days), as
+/// (name, at the start, now) in percent: rows to bench press, deadlift to squat. Each lift's level is
+/// its best 1RM of four trainings, the first four for the start, the latest four for now; the
+/// strongest lift of a family counts. Shown as a course, not against values from the literature.
+List<(String, double, double)> strengthTrends(List<Session> sessions) {
+  double? level(Iterable<Session> ordered, bool Function(String) family) {
+    final four = <String, List<double>>{};
+    for (final s in ordered) {
+      for (final e in s.exercises) {
+        if (e.cardio || e.weight == 0 || e.setsDone == 0 || !family(searchKey(e.name))) continue;
+        final list = four.putIfAbsent(e.name, () => []);
+        if (list.length < 4) list.add(estimated1rm(e));
+      }
+    }
+    return four.isEmpty ? null : four.values.map((v) => v.reduce(max)).reduce(max);
   }
-  if (pushUp > 0) {
-    result.add(Balance(Pair.pushPullOverhead, 'Über Kopf ↔ Klimmzüge', ('Schultern', 'Über Kopf drücken', pushUp / weeks),
-        ('Latissimus', 'Klimmzüge, Latzug', pullUp / weeks), 1, double.infinity));
+
+  final result = <(String, double, double)>[];
+  for (final (name, b, a) in [('Rudern : Bankdrücken', _row, _press), ('Kreuzheben : Kniebeuge', _hinge, _squat)]) {
+    final (a0, b0, a1, b1) = (
+      level(sessions.reversed, a),
+      level(sessions.reversed, b),
+      level(sessions, a),
+      level(sessions, b),
+    );
+    if (a0 == null || b0 == null || a1 == null || b1 == null) continue;
+    result.add((name, b0 / a0 * 100, b1 / a1 * 100));
   }
   return result;
 }

@@ -34,7 +34,14 @@ List<Session> eight(Workout w, [void Function(Session s, int i)? change]) {
   return list;
 }
 
+/// Only the classic pairs judge: rear delts, rotators and core flag nearly every plan without face
+/// pulls or ab work, the test about them sets its own.
+void classicPairs() => balanceGuides.value = {
+      for (final p in [Pair.rearDelts, Pair.rotators, Pair.core]) p: (0, double.infinity),
+    };
+
 void main() {
+  setUp(classicPairs);
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     unit.value = WeightUnit.kg;
@@ -90,7 +97,7 @@ void main() {
     expect(once.where((f) => f.type == FindingType.skipped), isEmpty, reason: dump(once));
   });
 
-  test('balance by cause: one set less of an accessory ahead, never more work; strength: raise it', () {
+  test('balance by cause: one set less of an accessory ahead, never more work; else name what trains it', () {
     final push = Workout(name: 'P', exercises: [
       Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
       Exercise(name: 'Dips', weight: 0, sets: 3, reps: 10),
@@ -102,12 +109,14 @@ void main() {
     expect(f.advice, 'Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.');
 
     final weak = Workout(name: 'S', exercises: [
-      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 5, reps: 5),
       Exercise(name: 'Langhantelrudern', weight: 40, sets: 3, reps: 5),
     ]);
+    balanceGuides.value = {for (final p in [Pair.rearDelts, Pair.core]) p: (0, double.infinity)};
     final s = findings(eight(weak), [weak], now).single;
-    expect((s.source.pair, s.fix), (Pair.chestBack, null));
-    expect(s.advice, startsWith('Langhantelrudern weiter steigern'));
+    expect((s.source.pair, s.fix), (Pair.rotators, null), reason: 'furthest off: nothing rotates outwards');
+    expect(s.advice, startsWith('Nichts im Plan trainiert die Außenrotation direkt, zum Beispiel Face Pulls.'));
+    expect(s.why, contains('Gezählt werden die gemachten Sätze der letzten 28 Tage, Drückübungen zählen halb.'));
   });
 
   test('plateau: three trainings at one weight without more reps, explained, no button', () {
@@ -225,7 +234,7 @@ void main() {
 
     await tester.tap(find.text('Oberer Rücken kommt zu kurz'));
     await tester.pumpAndSettle();
-    expect(find.text('BALANCE · LETZTE 30 TAGE'), findsOneWidget);
+    expect(find.text('BALANCE · LETZTE 28 TAGE'), findsOneWidget);
     expect(find.text('Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.'), findsOneWidget);
     await tester.tap(find.text('1 Satz weniger Dips'));
     await tester.pumpAndSettle();

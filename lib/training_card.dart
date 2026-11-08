@@ -65,7 +65,7 @@ const _icons = {
 const _labels = {
   FindingType.weekGoal: 'WOCHENZIEL',
   FindingType.skipped: 'AUSGELASSEN · LETZTE 4 WOCHEN',
-  FindingType.balance: 'BALANCE · LETZTE 30 TAGE',
+  FindingType.balance: 'BALANCE · LETZTE 28 TAGE',
   FindingType.plateau: 'PLATEAU',
 };
 

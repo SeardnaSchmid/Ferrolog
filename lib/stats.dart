@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import 'balance_card.dart';
 import 'body_map.dart';
 import 'findings.dart';
 import 'main.dart';
@@ -100,7 +100,7 @@ class _StatsPageState extends State<StatsPage> {
     if (target == null) return;
     statsFocus.value = null;
     focus = target;
-    days = 30; // the findings look at four weeks; the remembered period stays as it is
+    days = 30; // the findings look at four weeks (the balance card always does); the remembered period stays
     WidgetsBinding.instance.addPostFrameCallback((_) {
       reveal(target.view == StatsView.balance ? balanceKey : weeksKey);
       Future.delayed(const Duration(seconds: 4), () {
@@ -143,7 +143,7 @@ class _StatsPageState extends State<StatsPage> {
           const SizedBox(height: 8),
           figures(p, c, small),
           KeyedSubtree(key: weeksKey, child: weeksSection(sessions, now, p.weeks, c, small)),
-          if (balanceSection(inPeriod, p.weeks, c, small) case final b?) KeyedSubtree(key: balanceKey, child: b),
+          if (balanceSection(sessions, now) case final b?) KeyedSubtree(key: balanceKey, child: b),
           musclesSection(inPeriod, p.weeks, c, small),
           ?cardioSection(sessions, now, p.weeks, c),
         ],
@@ -415,198 +415,17 @@ class _StatsPageState extends State<StatsPage> {
     ]);
   }
 
-  /// Opposing sides against each other: by strength (current 1RM of the barbell lifts) and by sets per
-  /// week. Each pair as two bars, side b with its guide range as a band, so the gap is visible at a
-  /// glance; when a side falls behind, what to add.
-  Widget? balanceSection(List<Session> sessions, double weeks, ColorScheme c, TextStyle small) {
-    final pairs = balances(sessions, weeks: weeks);
+  /// The balance card: the pairs of the last four weeks as scales, independent of the period (the
+  /// findings look at the same four weeks), and the strength ratios over 90 days as a course.
+  Widget? balanceSection(List<Session> sessions, DateTime now) {
+    final recent = [for (final s in sessions) if (now.difference(s.date).inDays < balanceDays) s];
+    final pairs = balances(recent, weeks: periodStats(sessions, now, days: balanceDays).weeks);
     if (pairs.isEmpty) return null;
-    // Rounded down, so 59.6 % under a 60 % guide doesn't read as 60 %.
-    String pct(double v) => '${(v * 100).floor()} %';
-    String sets(double v) => v.toStringAsFixed(v < 10 ? 1 : 0).replaceAll('.', ',');
-    String tip(Balance b) => switch ((b.pair, b.lagging == b.bGroup)) {
-          (Pair.chestBack, true) => 'Mehr Rudern: ein Satz mehr oder Rudern vor dem Bankdrücken.',
-          (Pair.chestBack, false) => 'Das Bankdrücken hängt hinterher: dort den Schwerpunkt setzen.',
-          (Pair.squatHinge, true) => 'Hintere Kette stärken: Kreuzheben, Rumänisches Kreuzheben, Hip Thrust.',
-          (Pair.squatHinge, false) => 'Die Kniebeuge hängt hinterher: Technik prüfen, Beinpresse ergänzen.',
-          (Pair.quadsHamstrings, _) =>
-            'Beinbeuger-Curls oder Nordic Curls ergänzen: Sie trainieren die Beinbeuger am Knie, das Kreuzheben kaum.',
-          (Pair.pushPullFlat, _) => 'Mehr Rudern (Langhantel, Kurzhantel, Kabel), bis auf jeden Drück-Satz ein Zug-Satz kommt.',
-          (Pair.pushPullOverhead, _) => 'Mehr von oben ziehen: Klimmzüge oder Latzug, so viele Sätze wie Schulterdrücken.',
-        };
-
-    Widget pair(Balance b) {
-      final range = b.high.isFinite ? '${pct(b.low)}–${pct(b.high)}' : 'ab ${pct(b.low)}';
-      String value(double v) => b.strength ? weightLabel(roundedKg(v)) : sets(v);
-      // One scale for both bars, wide enough for the values and the start of the guide range.
-      final top = [b.aValue, b.bValue, b.aValue * (b.high.isFinite ? b.high : b.low * 1.25)].reduce(max) * 1.05;
-      Widget bar(String label, double v, bool behind, {bool band = false}) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(children: [
-              SizedBox(width: 112, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: small)),
-              Expanded(
-                child: LayoutBuilder(builder: (context, box) {
-                  double x(double v) => box.maxWidth * (v / top).clamp(0, 1);
-                  final from = b.aValue * b.low, to = b.high.isFinite ? b.aValue * b.high : top;
-                  return SizedBox(
-                    height: 14,
-                    child: Stack(children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                            decoration: BoxDecoration(color: c.surfaceContainerHighest, borderRadius: BorderRadius.circular(4))),
-                      ),
-                      if (band)
-                        Positioned(
-                          left: x(from),
-                          width: x(to) - x(from),
-                          top: 0,
-                          bottom: 0,
-                          child: DecoratedBox(
-                              decoration: BoxDecoration(color: c.primary.withValues(alpha: .45), borderRadius: BorderRadius.circular(4))),
-                        ),
-                      Positioned(
-                        left: 0,
-                        width: x(v),
-                        top: 3,
-                        bottom: 3,
-                        child: DecoratedBox(
-                            decoration: BoxDecoration(
-                                color: behind ? c.tertiary : c.primary, borderRadius: BorderRadius.circular(3))),
-                      ),
-                    ]),
-                  );
-                }),
-              ),
-              SizedBox(width: 58, child: Text(value(v), textAlign: TextAlign.end, style: small)),
-            ]),
-          );
-      // The pair a finding points to, tinted for a moment.
-      final marked = focus?.pair == b.pair;
-      return Container(
-        decoration: marked
-            ? BoxDecoration(color: c.tertiaryContainer.withValues(alpha: .35), borderRadius: BorderRadius.circular(10))
-            : null,
-        padding: marked ? const EdgeInsets.all(8) : EdgeInsets.zero,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(b.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
-            _BalanceChip(b.lagging),
-          ]),
-          const SizedBox(height: 6),
-          bar(b.a, b.aValue, b.lagging == b.aGroup),
-          bar(b.b, b.bValue, b.lagging == b.bGroup, band: true),
-          const SizedBox(height: 2),
-          Text('${b.b} bei ${b.ratio.isFinite ? pct(b.ratio) : '–'} · Richtwert $range', style: small),
-          if (b.lagging != null) ...[
-            const SizedBox(height: 4),
-            Text(tip(b), style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
-          ],
-        ]),
-      );
-    }
-
-    Widget group(String title, List<Balance> list) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: small.copyWith(fontWeight: FontWeight.w600, letterSpacing: .3)),
-          for (final b in list) ...[const SizedBox(height: 10), pair(b)],
-        ]);
-
-    final strength = [for (final b in pairs) if (b.strength) b];
-    final volume = [for (final b in pairs) if (!b.strength) b];
-    final off = pairs.where((b) => b.lagging != null).length;
-    return section('Balance', off == 0 ? 'alles im Richtwert' : off == 1 ? '1 Hinweis' : '$off Hinweise',
-        onInfo: showBalanceInfo, highlight: focus?.view == StatsView.balance, [
-      if (strength.isNotEmpty) group('KRAFT · AKTUELLER 1RM', strength),
-      if (strength.isNotEmpty && volume.isNotEmpty) const Divider(height: 28),
-      if (volume.isNotEmpty) group('TRAININGSMENGE · SÄTZE PRO WOCHE', volume),
-      const SizedBox(height: 14),
-      Text(
-        'Band: Richtwert aus der Trainingspraxis, keine medizinische Grenze. Der Kraftvergleich braucht '
-        'Langhantel-Übungen, die Sätze zählen jede Übung, Hilfsmuskeln halb.',
-        style: small,
-      ),
+    final trends = strengthTrends([for (final s in sessions) if (now.difference(s.date).inDays < 90) s]);
+    return section('Balance', '$balanceDays Tage',
+        onInfo: () => showBalanceInfo(context), highlight: focus?.view == StatsView.balance, [
+      BalanceBody(pairs, recent, trends, focus: focus?.pair),
     ]);
-  }
-
-  /// What research says about the pairs and their guide values, behind the (i) of the balance card.
-  void showBalanceInfo() {
-    final c = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    Widget heading(String s) => Padding(
-          padding: const EdgeInsets.only(top: 18, bottom: 6),
-          child: Text(s, style: text.titleSmall?.copyWith(color: c.primary)),
-        );
-    Widget point(String s) => Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('•  '),
-            Expanded(child: Text(s, style: text.bodyMedium)),
-          ]),
-        );
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: .7,
-        maxChildSize: .92,
-        builder: (context, scroll) => ListView(
-          controller: scroll,
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-          children: [
-            Text('Balance: was dahintersteckt', style: text.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'Die Zielbereiche sind Richtwerte aus der Trainingspraxis, keine medizinischen Grenzen. '
-              'Für die meisten Paare gibt es keine direkten Studien.',
-              style: text.bodyMedium,
-            ),
-            heading('Was belegt ist'),
-            point('Mehr Sätze pro Woche bringen mehr Muskelaufbau, das ist gut belegt [1]. Eine neuere Auswertung von 67 '
-                'Studien sagt das Wachstum am besten voraus, wenn Sätze für Hilfsmuskeln halb zählen [2], so wie FerroLog '
-                'zählt. Die Vergleiche nach Sätzen stehen deshalb auf sichererem Boden als die nach Kraft.'),
-            point('Nordic Curls halbieren in Studien mit über 8 000 Sportlern die Zahl der Zerrungen am hinteren '
-                'Oberschenkel [3]. Deshalb der Tipp bei den Beinbeugern.'),
-            point('Freizeit-Kraftsportler mit Schulter-Engpass (Impingement) hatten schwächere Außenrotatoren und untere '
-                'Trapezmuskeln [4]. Wer die Außenrotatoren trainierte, zeigte seltener Anzeichen dafür [5]. Das passt zu '
-                '„genug ziehen“, belegt aber keine Ursache.'),
-            heading('Was unsicher ist'),
-            point('Beinbeuger zu Quadrizeps ist das am besten untersuchte Kraftverhältnis. Im Profifußball hatten Spieler '
-                'mit Ungleichgewicht fast dreimal so oft Zerrungen, ausgeglichen sank das Risiko wieder [6]. Eine '
-                'Übersicht über 18 Studien findet aber nur sehr schwache Belege, dass das Verhältnis allein Verletzungen '
-                'vorhersagt [7]. Die stärksten Risikofaktoren sind Alter und frühere Zerrungen [8].'),
-            point('Aus einzelnen Messwerten lassen sich Verletzungen beim Einzelnen kaum vorhersagen [9]. Die Balance zeigt '
-                'deshalb Trainingshinweise, keine Warnungen.'),
-            heading('Woher die Richtwerte kommen'),
-            point('Rudern 75–120 % vom Bankdrücken: Bei schwedischen Spitzen-Werfern lag das Bankdrücken 15–22 % über dem '
-                'liegenden Rudern [10], Rudern also bei gut 80 %. Für Freizeitsportler gibt es keine Studie.'),
-            point('Kreuzheben 100–140 % der Kniebeuge: Bei rund 800 000 Wettkampf-Starts im Kraftdreikampf liegt das '
-                'Kreuzheben im Mittel bei etwa 115–120 % der Kniebeuge [11]. Das beschreibt, was üblich ist, und sagt '
-                'nichts über Verletzungen.'),
-            point('Mindestens so viele Zug- wie Drück-Sätze, waagerecht und über Kopf getrennt: gängige Empfehlung aus der '
-                'Praxis, nicht durch Studien geprüft.'),
-            point('Beinbeuger ab 60 % der Quadrizeps-Sätze: angelehnt an den üblichen Kraft-Richtwert von etwa 0,6 am Knie. '
-                'Das Kreuzheben trainiert vor allem Gesäß und unteren Rücken, die Beinbeuger arbeiten dort eher haltend.'),
-            heading('Wie FerroLog rechnet'),
-            point('Kraft: der beste geschätzte 1RM aus den letzten vier Trainings einer Übung. Nur Langhantel-Übungen, '
-                'denn bei Kurzhanteln gilt das Gewicht pro Hand.'),
-            point('Sätze: jede Übung im Zeitraum, pro Woche gerechnet. Hilfsmuskeln zählen halb.'),
-            point('Nicht dabei: links ↔ rechts (die App speichert keine Seiten), Bizeps ↔ Trizeps und Bauch ↔ unterer '
-                'Rücken (selten ein Problem, dünne Datenlage).'),
-            heading('Quellen'),
-            for (final (i, (label, url)) in _balanceSources.indexed)
-              InkWell(
-                onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('[${i + 1}] $label',
-                      style: text.bodySmall?.copyWith(color: c.primary, decoration: TextDecoration.underline)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
   /// Sets per muscle and week: the body map in fixed steps (so it shows too little, not just the most),
@@ -794,28 +613,6 @@ double muscleLevel(double perWeek) => switch (perWeek) {
     };
 
 /// "steigt +4 %", "stabil +1 %", "hängt fest −2 %" for the last four weeks.
-/// "ausgewogen", or which side falls behind.
-class _BalanceChip extends StatelessWidget {
-  final String? lagging;
-  const _BalanceChip(this.lagging);
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    final ok = lagging == null;
-    final (bg, fg) = ok ? (c.primaryContainer, c.onPrimaryContainer) : (c.tertiaryContainer, c.onTertiaryContainer);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(ok ? Icons.check : Icons.warning_amber_rounded, size: 13, color: fg),
-        const SizedBox(width: 3),
-        Text(ok ? 'ausgewogen' : '$lagging hängt hinterher', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
-      ]),
-    );
-  }
-}
-
 class TrendChip extends StatelessWidget {
   final (Trend, double)? trend;
   const TrendChip(this.trend, {super.key});
@@ -1275,17 +1072,3 @@ Widget _cardioStats(BuildContext context, String name, List<(DateTime, ExerciseL
   );
 }
 
-/// Studies behind the balance card's info sheet, numbered as cited there.
-const _balanceSources = [
-  ('Schoenfeld et al. 2017, J Sports Sci: Trainingsvolumen und Muskelaufbau', 'https://pubmed.ncbi.nlm.nih.gov/27433992/'),
-  ('Pelland et al. 2024, SportRxiv (Preprint): Dosis-Wirkung von Volumen und Frequenz', 'https://doi.org/10.51224/SRXIV.460'),
-  ('van Dyk et al. 2019, Br J Sports Med: Nordic Curls halbieren Zerrungen', 'https://doi.org/10.1136/bjsports-2018-100045'),
-  ('Kolber et al. 2017, J Strength Cond Res: Schulter bei Kraftsportlern mit Impingement', 'https://doi.org/10.1519/JSC.0000000000001554'),
-  ('Kolber et al. 2014, J Strength Cond Res: Impingement im Freizeit-Krafttraining', 'https://pubmed.ncbi.nlm.nih.gov/24077379/'),
-  ('Croisier et al. 2008, Am J Sports Med: Kraft-Ungleichgewicht und Zerrungen im Profifußball', 'https://pubmed.ncbi.nlm.nih.gov/18448578/'),
-  ('Kellis et al. 2023, J Sport Health Sci: Sagt das H:Q-Verhältnis Verletzungen voraus?', 'https://doi.org/10.1016/j.jshs.2022.01.002'),
-  ('Green et al. 2020, Br J Sports Med: Risikofaktoren für Zerrungen am hinteren Oberschenkel', 'https://pubmed.ncbi.nlm.nih.gov/32299793/'),
-  ('Bahr 2016, Br J Sports Med: Warum Screening-Tests Verletzungen nicht vorhersagen', 'https://pubmed.ncbi.nlm.nih.gov/27095747/'),
-  ('Sports 2024: Drücken zu Ziehen bei schwedischen Werfern', 'https://pubmed.ncbi.nlm.nih.gov/39195577/'),
-  ('van den Hoek et al. 2024, J Sci Med Sport: Normwerte aus 809 986 Wettkampf-Starts', 'https://pubmed.ncbi.nlm.nih.gov/39060209/'),
-];

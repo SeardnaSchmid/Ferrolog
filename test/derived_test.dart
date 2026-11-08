@@ -45,7 +45,7 @@ void main() {
     final pullUps = (d['exercises'] as List).firstWhere((e) => e['name'] == 'Klimmzüge');
     expect((pullUps['bodyweight'], pullUps['repsLast'], pullUps['repsBest'], pullUps.containsKey('e1rmNow')),
         (true, 13, 14, false));
-    expect((d['balance90d'] as List).map((b) => b['pair']), contains('Brust ↔ oberer Rücken'));
+    expect((d['balance28d'] as List).map((b) => b['pair']), contains('Brust ↔ Oberer Rücken'));
     expect(d.containsKey('tasks') || d.containsKey('facts'), isFalse, reason: 'replaced by findings');
     final found = d['findings'] as List;
     final record = found.singleWhere((f) => f['type'] == 'record');

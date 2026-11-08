@@ -19,8 +19,9 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     'last 3, else flat), setbacks90d = trainings with fewer reps at a weight '
     'managed before, next = planned weight for next time. setsPerMuscleWeek: done sets per muscle and week, '
     'helpers counting half (10–20 is a common guide for muscle growth). balance: opposing sides, b against a, '
-    'by current 1RM (barbell lifts) or by sets per week, with the guide range (training practice, not a medical '
-    'limit) and the side that lags, over the last 90 days (balance90d). findings: what the app shows the user on the home '
+    'by done sets per week (helpers half), with the guide range (training practice, not a medical limit, the user '
+    'can change it) and the side that lags, over the last 28 days (balance28d); strength90d: rows to bench press and '
+    'deadlift to squat by 1RM in percent, at the start of the last 90 days and now, a course only. findings: what the app shows the user on the home '
     'card "Dein Training" right now, as switched on in the settings (kind action = something to act on, at most one '
     'piece of training advice at a time; positive = a success of the last training). type weekGoal, skipped (left out '
     'entirely at least twice in 4 weeks), balance, plateau, record, gain, milestone or month; title and evidence as shown (in the unit the user picked, the only place not in kg), '
@@ -104,24 +105,27 @@ Map<String, dynamic> derivedStats(DateTime now) {
   }
 
   final pace = currentPace();
-  final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 90) s];
-  final weeks = periodStats(sessions, now, days: 90).weeks;
+  final recent = [for (final s in sessions) if (now.difference(s.date).inDays < balanceDays) s];
+  final weeks = periodStats(sessions, now, days: balanceDays).weeks;
   return {
     'about': derivedFormat,
     'periods': {'30d': period(30), '90d': period(90), '365d': period(365), 'all': period(null)},
     'exercises': exercises,
     'setsPerMuscleWeek': {'last28d': perMuscle(28), 'last90d': perMuscle(90)},
-    'balance90d': [
+    'balance28d': [
       for (final b in balances(recent, weeks: weeks))
         {
           'pair': b.title,
-          'basis': b.strength ? '1RM kg' : 'sets per week',
           'a': {'group': b.aGroup, 'label': b.a, 'value': r1(b.aValue)},
           'b': {'group': b.bGroup, 'label': b.b, 'value': r1(b.bValue)},
           'ratio': b.ratio.isFinite ? (b.ratio * 100).round() / 100 : null,
           'guide': {'low': b.low, 'high': b.high.isFinite ? b.high : null},
           'lagging': b.lagging,
         },
+    ],
+    'strength90d': [
+      for (final (name, start, current) in strengthTrends([for (final s in sessions) if (now.difference(s.date).inDays < 90) s]))
+        {'pair': name, 'startPct': start.round(), 'nowPct': current.round()},
     ],
     'findings': [
       for (final f in openFindings())

@@ -88,11 +88,11 @@ List<Finding> findings(List<Session> sessions, List<Workout> workouts, DateTime 
   if (_weekGoal(sessions, now, perWeek) case final f? when !off(f)) result.add(f);
 
   if (lastAdvice == null || now.difference(lastAdvice) >= advicePause) {
-    final recent = [for (final s in sessions) if (now.difference(s.date).inDays < 28) s];
+    final recent = [for (final s in sessions) if (now.difference(s.date).inDays < balanceDays) s];
     final baseline = sessions.length >= baselineTrainings && now.difference(sessions.last.date).inDays >= 14;
-    // The balance over the same 30 days and weeks as the statistics shows, so the numbers match there.
-    final month = [for (final s in sessions) if (s.date.isAfter(now.subtract(const Duration(days: 30)))) s];
-    final balance = baseline ? _balance(month, workouts, periodStats(sessions, now, days: 30).weeks) : <Finding>[];
+    // The balance over the same four weeks as the balance card, so the numbers match there.
+    final balance =
+        baseline ? _balance(recent, workouts, periodStats(sessions, now, days: balanceDays).weeks) : <Finding>[];
     final skipped = _skipped(recent, workouts, balance);
     // A skip that explains a balance gap stands for it: the cause is what can be changed.
     final explained = {for (final f in skipped) if (f.source.view == StatsView.balance) f.source.pair};
@@ -198,84 +198,127 @@ List<Finding> _skipped(List<Session> recent, List<Workout> workouts, List<Findin
 const _remedies = <String, (List<String>, String)>{
   'Oberer Rücken': (['Langhantelrudern', 'Kurzhantelrudern', 'Kabelrudern'], 'Kurzhantelrudern'),
   'Brust': (['Bankdrücken', 'Kurzhantel-Bankdrücken', 'Dips'], 'Kurzhantel-Bankdrücken'),
-  'Hintere Kette': (['Rumänisches Kreuzheben', 'Hip Thrust'], 'Rumänisches Kreuzheben'),
-  'Quadrizeps': (['Kniebeuge', 'Beinpresse', 'Bulgarian Split Squat'], 'Beinpresse'),
-  'Beinbeuger': (['Nordic Curls', 'Beinbeuger'], 'Nordic Curls'),
+  'Schultern': (['Schulterdrücken', 'Kurzhantel-Schulterdrücken'], 'Schulterdrücken'),
   'Latissimus': (['Klimmzüge', 'Latzug'], 'Latzug'),
+  'Vordere Schulter': (['Schulterdrücken', 'Frontheben'], 'Schulterdrücken'),
+  'Hintere Schulter': (['Face Pulls', 'Reverse Butterfly'], 'Face Pulls oder Reverse Flys'),
+  'Quadrizeps': (['Kniebeuge', 'Beinpresse', 'Bulgarian Split Squat'], 'Beinpresse'),
+  'Hintere Oberschenkel': (['Rumänisches Kreuzheben', 'Nordic Curls', 'Beinbeuger'], 'Nordic Curls'),
+  'Innenrotation': (['Bankdrücken', 'Schulterdrücken'], 'Bankdrücken'),
+  'Außenrotation': (['Face Pulls'], 'Face Pulls'),
+  'Bauch': (['Crunches', 'Plank', 'Ab Wheel'], 'Plank oder Ab Wheel'),
+  'Unterer Rücken': (['Rückenstrecker', 'Kreuzheben'], 'Rückenstrecker'),
 };
 
-/// Opposing pairs off their guide range over [recent] (30 days, [weeks] long), with a tip by cause that never
-/// adds work:
-/// - by strength (1RM): keep raising the side behind, it catches up;
-/// - by sets, planned but sets left out: plan it earlier;
-/// - by sets and planned that way, with an accessory on the side ahead: one set less there;
-/// - else the main lifts stay as planned and the side behind is named.
+/// Extra words for the advice where one exercise covers more than its pair.
+const _remedyNotes = <String, String>{
+  'Außenrotation': ' Face Pulls decken beides ab: Außenrotation und hintere Schulter. Am Ende eines Oberkörper-Trainings einplanen.',
+  'Hintere Schulter': ' Face Pulls decken beides ab: hintere Schulter und Außenrotation.',
+};
+
+/// What to do about a pair off its guide, by cause, never adding work:
+/// - planned evenly but sets left out on the side behind: plan it earlier;
+/// - planned that way, with an accessory on the side ahead: one set less there ([Fix.dropSet]);
+/// - else the main lifts stay as planned and the side behind is named, or suggested when nothing
+///   in the plan trains it.
+/// Null when the pair is balanced. Shared by the finding and the balance card, so both say the same.
+({String advice, Workout? workout, String? exercise, Fix? fix})? balanceAdvice(
+    Balance b, List<Session> recent, List<Workout> workouts) {
+  final lagging = b.lagging;
+  if (lagging == null) return null;
+  final behind = lagging == b.bGroup ? 1 : 0;
+  final behindLabel = behind == 1 ? b.b : b.a;
+  final planned = [0.0, 0.0], done = [0.0, 0.0];
+  for (final s in recent) {
+    for (final e in s.exercises) {
+      if (e.cardio) continue;
+      final (a, bb) = shareOf(b.pair, e.name);
+      planned[0] += e.reps.length * a;
+      planned[1] += e.reps.length * bb;
+      done[0] += e.setsDone * a;
+      done[1] += e.setsDone * bb;
+    }
+  }
+  final plannedRatio = planned[0] == 0 ? double.infinity : planned[1] / planned[0];
+  if (done[behind] < planned[behind] && plannedRatio >= b.low && plannedRatio <= b.high) {
+    return (
+      advice: 'Geplant ist es ausgeglichen, aber Sätze fallen weg. ${behindLabel[0].toUpperCase()}${behindLabel.substring(1)} '
+          'früher im Training einplanen.',
+      workout: null, exercise: null, fix: null,
+    );
+  }
+  final ahead = 1 - behind;
+  // Only exercises that train just that side: a row is no lever for the core.
+  bool only(String name, int side) => shareOf(b.pair, name) == (side == 0 ? (1.0, 0.0) : (0.0, 1.0));
+  final accessory = [
+    for (final w in workouts)
+      for (final e in w.exercises)
+        if (!e.cardio && e.sets > 1 && !heavyLifts.contains(e.name) && only(e.name, ahead)) (w, e),
+  ].firstOrNull;
+  if (accessory case (final w, final e)?) {
+    return (
+      advice: 'Ein Satz weniger ${e.name} in ${w.name} gleicht aus, ohne mehr Arbeit.',
+      workout: w, exercise: e.name, fix: Fix.dropSet,
+    );
+  }
+  final (specific, suggest) = _remedies[lagging] ?? (const <String>[], '');
+  final trains = [
+    for (final w in workouts)
+      for (final e in w.exercises)
+        if (!e.cardio && (only(e.name, behind) || specific.contains(e.name))) e.name,
+  ];
+  final note = _remedyNotes[lagging] ?? '';
+  return (
+    advice: trains.isNotEmpty
+        ? 'Grundübungen bleiben wie geplant, ${trains.first} nicht auslassen und weiter steigern.'
+        : suggest.isEmpty
+            ? 'Nichts im Plan trainiert ${_accusative[lagging] ?? lagging} direkt.'
+            : 'Nichts im Plan trainiert ${_accusative[lagging] ?? lagging} direkt, zum Beispiel $suggest.$note',
+    workout: null, exercise: null, fix: null,
+  );
+}
+
+/// "Nichts im Plan trainiert die hintere Schulter": the groups with their article, as an object.
+const _accusative = {
+  'Brust': 'die Brust',
+  'Oberer Rücken': 'den oberen Rücken',
+  'Schultern': 'die Schultern',
+  'Latissimus': 'den Latissimus',
+  'Vordere Schulter': 'die vordere Schulter',
+  'Hintere Schulter': 'die hintere Schulter',
+  'Quadrizeps': 'den Quadrizeps',
+  'Hintere Oberschenkel': 'die hinteren Oberschenkel',
+  'Innenrotation': 'die Innenrotation',
+  'Außenrotation': 'die Außenrotation',
+  'Bauch': 'den Bauch',
+  'Unterer Rücken': 'den unteren Rücken',
+};
+
+/// Opposing pairs off their guide range over [recent] ([balanceDays], [weeks] long), with the advice of
+/// [balanceAdvice].
 List<Finding> _balance(List<Session> recent, List<Workout> workouts, double weeks) {
   final result = <Finding>[];
   for (final b in balances(recent, weeks: weeks)) {
     final lagging = b.lagging;
-    if (lagging == null || !_remedies.containsKey(lagging)) continue;
-    final behindB = lagging == b.bGroup;
-    final range = b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %';
-    final unit = b.strength ? ' kg 1RM' : ' Sätze/Woche';
-    // Short on the card: the lifts by strength, else the muscle groups; what counts goes in the why.
-    final (an, bn) = b.strength ? (b.a, b.b) : (b.aGroup, b.bGroup);
+    if (lagging == null) continue;
+    final advice = balanceAdvice(b, recent, workouts)!;
+    final range = guideRange(b.low, b.high);
     // The ratio first, so a narrow screen cuts the counts, not it.
-    final evidence = '${(b.ratio * 100).floor()} % · $an ${_num(b.aValue)} : $bn ${_num(b.bValue)}$unit';
-    final why = b.strength
-        ? 'Richtwert $range. Verglichen wird das aktuelle 1RM.'
-        : '${b.a} gegen ${b.b}, Richtwert $range. Gezählt werden die gemachten Sätze der letzten 30 Tage.';
+    final ratio = b.ratio.isFinite ? '${(b.ratio * 100).floor()} %' : '–';
+    final evidence = '$ratio · ${b.aGroup} ${_num(b.aValue)} : ${b.bGroup} ${_num(b.bValue)} Sätze/Woche';
+    final why = '${b.a[0].toUpperCase()}${b.a.substring(1)} gegen ${b.b}, Richtwert $range. '
+        'Gezählt werden die gemachten Sätze der letzten 28 Tage${b.pair.note == null ? '' : ', ${b.pair.note}'}.';
     final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
-    Finding make(String advice, {Workout? w, String? exercise, Fix? fix}) => Finding(
-        'balance:${b.pair.name}', FindingType.balance, '$lagging kommt zu kurz', evidence,
-        why: why, advice: advice, source: statsAt(StatsView.balance, pair: b.pair),
-        workout: w, exercise: exercise, fix: fix, weight: gap);
-
-    if (b.strength) {
-      result.add(make('${behindB ? b.b : b.a} weiter steigern, das holt auf. Mehr Sätze lösen das nicht.'));
-      continue;
-    }
-    // Planned evenly, but sets left out on the side behind.
-    final behind = behindB ? 1 : 0;
-    final planned = [0.0, 0.0], done = [0.0, 0.0];
-    for (final s in recent) {
-      for (final e in s.exercises) {
-        if (e.cardio) continue;
-        if (sideOf(b.pair, e.name) case final side?) {
-          planned[side] += e.reps.length;
-          done[side] += e.setsDone;
-        }
-      }
-    }
-    final plannedRatio = planned[0] == 0 ? double.infinity : planned[1] / planned[0];
-    if (done[behind] < planned[behind] && plannedRatio >= b.low && plannedRatio <= b.high) {
-      result.add(make('Geplant ist es ausgeglichen, aber Sätze fallen weg. ${behindB ? b.b : b.a} früher im Training einplanen.'));
-      continue;
-    }
-    // Planned that way: an accessory ahead can give up a set.
-    final ahead = 1 - behind;
-    final accessory = [
-      for (final w in workouts)
-        for (final e in w.exercises)
-          if (!e.cardio && e.sets > 1 && !heavyLifts.contains(e.name) && sideOf(b.pair, e.name) == ahead) (w, e),
-    ].firstOrNull;
-    if (accessory case (final w, final e)?) {
-      result.add(make('Ein Satz weniger ${e.name} in ${w.name} gleicht aus, ohne mehr Arbeit.',
-          w: w, exercise: e.name, fix: Fix.dropSet));
-      continue;
-    }
-    final (specific, suggest) = _remedies[lagging]!;
-    final trains = [
-      for (final w in workouts)
-        for (final e in w.exercises)
-          if (sideOf(b.pair, e.name) == behind || specific.contains(e.name)) e.name,
-    ];
-    result.add(make(trains.isEmpty
-        ? 'Nichts im Plan trainiert das, zum Beispiel $suggest.'
-        : 'Grundübungen bleiben wie geplant, ${trains.first} nicht auslassen und weiter steigern.'));
+    result.add(Finding('balance:${b.pair.name}', FindingType.balance, '$lagging kommt zu kurz', evidence,
+        why: why, advice: advice.advice, source: statsAt(StatsView.balance, pair: b.pair),
+        workout: advice.workout, exercise: advice.exercise, fix: advice.fix, weight: gap));
   }
   return result;
 }
+
+/// "100–150 %" or "ab 60 %", the guide range as the card and the findings write it.
+String guideRange(double low, double high) =>
+    high.isFinite ? '${(low * 100).round()}–${(high * 100).round()} %' : 'ab ${(low * 100).round()} %';
 
 /// Planned exercises with weight stuck: the last three trainings at the same weight, some set missed
 /// or done lighter, no more reps at that weight than three trainings ago (a range climbing in reps is
