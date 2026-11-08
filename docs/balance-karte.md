@@ -38,7 +38,7 @@ Umbau der Balance-Karte in der Statistik nach dem Entwurf „Balance-Karte v4“
 | 2 | Befunde: 28 Tage, ohne Kraftpaare, gemeinsame Empfehlung | ✅ |
 | 3 | Karte, Info-Sheet, Richtwert-Editor | ✅ |
 | 4 | Tests (59 grün), `web-demo` durchgeklickt | ✅ |
-| 5 | Commit, Handy | offen, auf Zuruf |
+| 5 | Commit, Handy | ✅ `1749c89` |
 
 ## Offen
 
