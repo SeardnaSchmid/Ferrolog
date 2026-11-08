@@ -256,7 +256,7 @@ void main() {
     expect(snoozedFindings.keys, contains('balance:pushPullFlat'));
   });
 
-  testWidgets('into the statistics: the balance card outlined with its pair; the exercise names the trainings left out', (tester) async {
+  testWidgets('into the statistics: the balance card outlined with its pair, the weekly goal as a course; folded cards; the exercise names the trainings left out', (tester) async {
     final push = Workout(name: 'P', exercises: [
       Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
       Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
@@ -286,6 +286,28 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     expect(tester.widget<Card>(find.ancestor(of: find.text('Balance'), matching: find.byType(Card)).first).shape, isNull,
         reason: 'only for a moment');
+
+    // The weekly goal opens the course of trainings per week below the tiles.
+    statsFocus.value = statsAt(StatsView.weeks);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: StatsPage())));
+    await tester.pumpAndSettle();
+    expect(find.text('Trainings pro Woche'), findsOneWidget);
+    await tester.tap(find.text('Ø Dauer'));
+    await tester.pump();
+    expect(find.text('Trainings pro Woche'), findsNothing, reason: 'one course at a time');
+    expect(find.textContaining('Minuten pro Training'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+
+    // Folded cards: exercises start folded with a summary, a tap on the title opens them and it's kept.
+    await tester.scrollUntilVisible(find.text('2 Übungen'), 300);
+    await tester.pumpAndSettle();
+    expect(find.text('2 Übungen'), findsOneWidget);
+    await tester.tap(find.text('Übungen'));
+    await tester.pump();
+    expect(find.text('2 Übungen'), findsNothing);
+    expect(prefs.getBool('stats.open.exercises'), isTrue);
+    await prefs.remove('stats.open.exercises');
 
     final skipped = [s[0].date, s[1].date];
     await tester.pumpWidget(MaterialApp(home: ExerciseStats('Langhantelrudern', marked: skipped)));

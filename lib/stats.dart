@@ -71,6 +71,9 @@ class _StatsPageState extends State<StatsPage> {
   /// A finding's target: its card scrolled into view and outlined for a moment, the pair in it too.
   StatsTarget? focus;
   final balanceKey = GlobalKey(), weeksKey = GlobalKey();
+
+  /// The key figure whose course is open below the tiles.
+  _Kpi? kpi;
   final scroll = ScrollController();
 
   @override
@@ -101,6 +104,7 @@ class _StatsPageState extends State<StatsPage> {
     statsFocus.value = null;
     focus = target;
     days = 30; // the findings look at four weeks (the balance card always does); the remembered period stays
+    if (target.view == StatsView.weeks) kpi = _Kpi.perWeek;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       reveal(target.view == StatsView.balance ? balanceKey : weeksKey);
       Future.delayed(const Duration(seconds: 4), () {
@@ -138,22 +142,85 @@ class _StatsPageState extends State<StatsPage> {
             child: Text('Kein Training in diesem Zeitraum.', textAlign: TextAlign.center, style: small),
           )
         else ...[
-          // By the question asked: do I keep at it, do I get stronger, do I train evenly.
-          figures(p, c, small),
-          KeyedSubtree(key: weeksKey, child: weeksSection(sessions, now, p.weeks, c, small)),
+          // By the question asked: do I keep at it, do I get stronger, what do I train, how evenly. The
+          // details further down start folded.
+          KeyedSubtree(key: weeksKey, child: figures(sessions, now, p, c, small)),
           ?progressSection(from, c, small),
-          exercisesSection(from, now, c, small),
-          if (balanceSection(sessions, now) case final b?) KeyedSubtree(key: balanceKey, child: b),
           musclesSection(inPeriod, p.weeks, c, small),
+          if (balanceSection(sessions, now) case final b?) KeyedSubtree(key: balanceKey, child: b),
+          exercisesSection(from, now, c, small),
           ?cardioSection(sessions, now, p.weeks, c),
         ],
       ],
     );
   }
 
+  /// A card with a title. With [fold] it folds on a tap of its title, open or not by [openByDefault]
+  /// until the user changes it (remembered); folded it shows [summary]. A card a finding points to
+  /// ([highlight]) is always open.
   Widget section(String title, String? trailing, List<Widget> children,
-      {VoidCallback? onTap, VoidCallback? onInfo, bool highlight = false}) {
+      {VoidCallback? onTap,
+      VoidCallback? onInfo,
+      bool highlight = false,
+      String? fold,
+      bool openByDefault = true,
+      String? summary}) {
     final c = Theme.of(context).colorScheme;
+    final open = fold == null || highlight || (prefs.getBool('stats.open.$fold') ?? openByDefault);
+    final head = Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Expanded(
+        child: Row(children: [
+          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          if (onInfo != null)
+            IconButton(
+              icon: Icon(Icons.info_outline, size: 18, color: c.onSurfaceVariant),
+              tooltip: 'Hintergrund',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+              onPressed: onInfo,
+            ),
+        ]),
+      ),
+      if (trailing != null) Text(trailing, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+      if (fold != null) ...[
+        const SizedBox(width: 4),
+        Icon(open ? Icons.expand_less : Icons.expand_more, size: 20, color: c.onSurfaceVariant),
+      ],
+    ]);
+    if (fold != null) {
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        shape: highlight
+            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: c.tertiary, width: 2))
+            : null,
+        child: InkWell(
+          onTap: open ? onTap : null,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            InkWell(
+              onTap: () {
+                prefs.setBool('stats.open.$fold', !open);
+                setState(() {});
+              },
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 10, 12, open || summary == null ? 10 : 2),
+                child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 32), child: head),
+              ),
+            ),
+            if (!open && summary != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Text(summary, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+              ),
+            if (open)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+              ),
+          ]),
+        ),
+      );
+    }
     return Card(
       clipBehavior: Clip.antiAlias,
       shape: highlight
@@ -228,7 +295,11 @@ class _StatsPageState extends State<StatsPage> {
     }
     if (series.isEmpty) return null;
     final first = series.map((s) => s.points.first.$1).reduce((a, b) => a.isBefore(b) ? a : b);
-    return section('Kraftentwicklung', null, onTap: () => openExercise(series.first.name), [
+    final movers = deltas.entries.toList()..sort((a, b) => b.value.$2.compareTo(a.value.$2));
+    return section('Kraftentwicklung', null,
+        onTap: () => openExercise(series.first.name),
+        fold: 'progress',
+        summary: [for (final e in movers.take(3)) '${e.key} ${signed(e.value.$2.roundToDouble())} %'].join(' · '), [
       SegmentedButton<_ChartMode>(
         showSelectedIcon: false,
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
@@ -307,7 +378,11 @@ class _StatsPageState extends State<StatsPage> {
       ..sort((a, b) => b.$3.length.compareTo(a.$3.length));
     final colored = strengthExercises();
     final palette = Theme.of(context).brightness == Brightness.dark ? _seriesDark : _seriesLight;
-    return section('Übungen', 'Status: letzte 4 Wochen', [
+    final stuck = [for (final (_, history, logs) in rows) if (!logs.last.cardio && trendOf(history, now)?.$1 == Trend.stuck) 1].length;
+    return section('Übungen', 'Status: letzte 4 Wochen',
+        fold: 'exercises',
+        openByDefault: false,
+        summary: '${rows.length} Übungen${stuck > 0 ? ' · $stuck ${stuck == 1 ? 'hängt' : 'hängen'} fest' : ''}', [
       for (final (name, history, logs) in rows)
         InkWell(
           onTap: () => openExercise(name),
@@ -350,13 +425,22 @@ class _StatsPageState extends State<StatsPage> {
 
   /// Four tiles: trainings per week against the goal, average duration, volume against the period
   /// before, records (how many lifts set one, and the latest; a count of records would only grow with
-  /// linear progression).
-  Widget figures(PeriodStats p,
-      ColorScheme c, TextStyle small) {
+  /// linear progression). A tap on a tile opens its course over the period below them.
+  Widget figures(List<Session> sessions, DateTime now, PeriodStats p, ColorScheme c, TextStyle small) {
     String num1(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
-    Widget tile(IconData icon, String label, String value, String? sub, [Color? subColor]) => Expanded(
-          child: Card(
-            margin: const EdgeInsets.all(4),
+    final marked = focus?.view == StatsView.weeks;
+    Widget tile(_Kpi k, IconData icon, String label, String value, String? sub, [Color? subColor]) {
+      final selected = kpi == k;
+      final border = marked && k == _Kpi.perWeek ? c.tertiary : selected ? c.primary : null;
+      return Expanded(
+        child: Card(
+          margin: const EdgeInsets.all(4),
+          clipBehavior: Clip.antiAlias,
+          shape: border == null
+              ? null
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: border, width: 2)),
+          child: InkWell(
+            onTap: () => setState(() => kpi = selected ? null : k),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -364,55 +448,153 @@ class _StatsPageState extends State<StatsPage> {
                   Icon(icon, size: 16, color: c.onSurfaceVariant),
                   const SizedBox(width: 6),
                   Expanded(child: Text(label, overflow: TextOverflow.ellipsis, style: small)),
+                  Icon(selected ? Icons.expand_less : Icons.show_chart, size: 16, color: c.onSurfaceVariant),
                 ]),
                 const SizedBox(height: 4),
-                Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                Text(value,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
                 Text(sub ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: small.copyWith(color: subColor)),
               ]),
             ),
           ),
-        );
+        ),
+      );
+    }
+
     final delta = switch (p.volumeBefore) {
       final b? when b > 0 => ((p.volume / b - 1) * 100).round(),
       _ => null,
     };
+    final goal = weeklyGoal.value;
+    final weeks = weeklySummary(sessions, now, weeks: max(1, p.weeks.ceil()));
+    final hit = weeks.where((w) => w.$2 >= goal).length;
     return Column(children: [
       Row(children: [
-        tile(Icons.calendar_view_week, 'Pro Woche', num1(p.perWeek), 'Ziel ${weeklyGoal.value} · ${p.trainings} Trainings',
-            p.perWeek >= weeklyGoal.value ? c.primary : null),
-        tile(Icons.timer_outlined, 'Ø Dauer', switch (p.avgDuration) { final d? => durationLabel(d), null => '–' }, null),
+        tile(_Kpi.perWeek, Icons.calendar_view_week, 'Pro Woche', num1(p.perWeek),
+            'Ziel $goal · $hit von ${weeks.length} Wochen', p.perWeek >= goal ? c.primary : null),
+        tile(_Kpi.duration, Icons.timer_outlined, 'Ø Dauer', switch (p.avgDuration) { final d? => durationLabel(d), null => '–' },
+            '${p.trainings} Trainings'),
       ]),
       Row(children: [
-        tile(Icons.stacked_bar_chart, 'Volumen', volumeLabel(p.volume),
-            delta == null ? null : '${delta >= 0 ? '+' : '−'}${delta.abs()} % zum Zeitraum davor', delta != null && delta < 0 ? c.tertiary : c.primary),
-        tile(Icons.emoji_events_outlined, 'Übungen mit Rekord', p.lifts == 0 ? '–' : '${p.recordLifts} von ${p.lifts}',
-            switch (p.lastRecord) { (final name, _, final d)? => '${ago(d)[0].toUpperCase()}${ago(d).substring(1)}: $name', null => 'kein neues Höchstgewicht' }),
+        tile(_Kpi.volume, Icons.stacked_bar_chart, 'Volumen', volumeLabel(p.volume),
+            delta == null ? null : '${delta >= 0 ? '+' : '−'}${delta.abs()} % zum Zeitraum davor',
+            delta != null && delta < 0 ? c.tertiary : c.primary),
+        tile(_Kpi.records, Icons.emoji_events_outlined, 'Mit Rekord', p.lifts == 0 ? '–' : '${p.recordLifts} von ${p.lifts}',
+            switch (p.lastRecord) {
+              (final name, _, final d)? => '${ago(d)[0].toUpperCase()}${ago(d).substring(1)}: $name',
+              null => 'kein neues Höchstgewicht',
+            }),
       ]),
+      if (kpi case final k?) kpiCourse(k, sessions, now, p, c, small),
     ]);
   }
 
-  /// Trainings per calendar week of the period (at most half a year of bars) against the goal.
-  Widget weeksSection(List<Session> sessions, DateTime now, double periodWeeks, ColorScheme c, TextStyle small) {
-    final weeks = weeklySummary(sessions, now, weeks: periodWeeks.ceil().clamp(4, 26));
-    final goal = weeklyGoal.value;
-    return section('Trainings pro Woche', 'Ziel $goal×', highlight: focus?.view == StatsView.weeks, [
-      SizedBox(
-        height: 150,
-        child: CustomPaint(
-          size: Size.infinite,
-          painter: BarChart(
-            [for (final w in weeks) w.$2.toDouble()],
-            [for (final w in weeks) weekLabel(w.$1)],
-            goal: goal.toDouble(),
-            hit: c.primary,
-            miss: c.outlineVariant,
-            label: c.onSurfaceVariant,
-          ),
+  /// The period in bars: weeks up to 90 days, months beyond, so the bars don't get too thin.
+  List<(DateTime, DateTime, String)> buckets(List<Session> sessions, DateTime now) {
+    final from = periodStart(days) ?? sessions.last.date;
+    if (days != 0 && days <= 90) {
+      return [
+        for (var m = mondayOf(from); !m.isAfter(now); m = DateTime(m.year, m.month, m.day + 7))
+          (m, DateTime(m.year, m.month, m.day + 7), weekLabel(m)),
+      ];
+    }
+    const names = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+    return [
+      for (var m = DateTime(from.year, from.month); !m.isAfter(now); m = DateTime(m.year, m.month + 1))
+        (m, DateTime(m.year, m.month + 1), m.month == 1 ? '${m.year}' : names[m.month - 1]),
+    ];
+  }
+
+  /// A key figure over the period, as bars per week or month.
+  Widget kpiCourse(_Kpi k, List<Session> sessions, DateTime now, PeriodStats p, ColorScheme c, TextStyle small) {
+    final from = periodStart(days);
+    final slots = buckets(sessions, now);
+    final byWeek = days != 0 && days <= 90;
+    final per = byWeek ? 'Woche' : 'Monat';
+    List<Session> inSlot((DateTime, DateTime, String) b) => [
+          for (final s in sessions)
+            if (!s.date.isBefore(b.$1) && s.date.isBefore(b.$2) && (from == null || s.date.isAfter(from))) s,
+        ];
+    // Records: a heavier weight than ever before, counted where it happened.
+    final records = <DateTime>[];
+    if (k == _Kpi.records) {
+      final best = <String, double>{};
+      for (final s in sessions.reversed) {
+        for (final e in s.exercises) {
+          if (e.cardio || e.weight == 0 || e.setsDone == 0) continue;
+          if (best[e.name] case final b? when e.weight > b) records.add(s.date);
+          if (e.weight > (best[e.name] ?? 0)) best[e.name] = e.weight;
+        }
+      }
+    }
+    final goal = weeklyGoal.value.toDouble();
+    final (title, values, line, judge, caption) = switch (k) {
+      _Kpi.perWeek => (
+          'Trainings pro Woche',
+          [
+            for (final b in slots)
+              byWeek
+                  ? inSlot(b).length.toDouble()
+                  : inSlot(b).length / (min(b.$2.difference(b.$1).inDays, now.difference(b.$1).inDays + 1) / 7).clamp(1 / 7, 5),
+          ],
+          goal,
+          true,
+          byWeek ? 'Linie: Ziel $goal× pro Woche' : 'Schnitt je Monat · Linie: Ziel ${goal.round()}× pro Woche',
         ),
+      _Kpi.duration => (
+          'Ø Dauer',
+          [
+            for (final b in slots)
+              switch ([for (final s in inSlot(b)) ?s.duration].where((d) => d > Duration.zero).toList()) {
+                final ds when ds.isNotEmpty => (ds.fold(0, (n, d) => n + d.inMinutes) / ds.length).roundToDouble(),
+                _ => 0.0,
+              },
+          ],
+          p.avgDuration?.inMinutes.toDouble(),
+          false,
+          'Minuten pro Training, Schnitt je $per · Linie: Schnitt im Zeitraum',
+        ),
+      _Kpi.volume => (
+          'Volumen',
+          [
+            for (final b in slots)
+              (shown(inSlot(b).fold(0.0, (v, s) => v + s.exercises.fold(0.0, (v, e) => v + e.volume))) / 100).round() / 10,
+          ],
+          null,
+          false,
+          '${unit.value == WeightUnit.kg ? 'Tonnen' : 'Tausend lb'} je $per',
+        ),
+      _Kpi.records => (
+          'Rekorde',
+          [
+            for (final b in slots)
+              records.where((d) => !d.isBefore(b.$1) && d.isBefore(b.$2) && (from == null || d.isAfter(from))).length.toDouble(),
+          ],
+          null,
+          false,
+          'Neue Höchstgewichte je $per, über alle Übungen',
+        ),
+    };
+    return Card(
+      margin: const EdgeInsets.all(4),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 150,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: BarChart(values, [for (final b in slots) b.$3],
+                  goal: line, judge: judge, hit: c.primary, miss: c.outlineVariant, label: c.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(caption, style: small),
+        ]),
       ),
-      const SizedBox(height: 6),
-      Text('${weeks.where((w) => w.$2 >= goal).length} von ${weeks.length} Wochen mit Ziel erreicht', style: small),
-    ]);
+    );
   }
 
   /// The balance card: the pairs of the last four weeks as scales, independent of the period (the
@@ -422,8 +604,12 @@ class _StatsPageState extends State<StatsPage> {
     final pairs = balances(recent, weeks: periodStats(sessions, now, days: balanceDays).weeks);
     if (pairs.isEmpty) return null;
     final trends = strengthTrends([for (final s in sessions) if (now.difference(s.date).inDays < 90) s]);
+    final off = pairs.where((b) => b.lagging != null).length;
     return section('Balance', '$balanceDays Tage',
-        onInfo: () => showBalanceInfo(context), highlight: focus?.view == StatsView.balance, [
+        onInfo: () => showBalanceInfo(context),
+        highlight: focus?.view == StatsView.balance,
+        fold: 'balance',
+        summary: off == 0 ? 'Alle Muskelpaare ausgewogen' : '${off == 1 ? '1 Hinweis' : '$off Hinweise'} · ${pairs.length - off} von ${pairs.length} ausgewogen', [
       BalanceBody(pairs, recent, trends, focus: focus?.pair),
     ]);
   }
@@ -448,7 +634,13 @@ class _StatsPageState extends State<StatsPage> {
           const SizedBox(width: 4),
           Text(text, style: small),
         ]);
-    return section('Muskeln', 'Sätze pro Woche', [
+    final low = [for (final m in _mainMuscles) if (perWeek[m]! > 0 && perWeek[m]! < 10) m].length;
+    return section('Sätze je Muskel', 'pro Woche',
+        fold: 'muscles',
+        summary: [
+          if (never.isNotEmpty) 'Nicht trainiert: ${never.join(', ')}',
+          if (low > 0) '$low ${low == 1 ? 'Muskel' : 'Muskeln'} unter 10 Sätzen',
+        ].join(' · '), [
       Center(
         child: BodyMap.heat(
           {for (final e in perWeek.entries) e.key: muscleLevel(e.value)},
@@ -469,7 +661,10 @@ class _StatsPageState extends State<StatsPage> {
         const SizedBox(height: 12),
         Text('Nicht trainiert: ${never.join(', ')}', style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
       ],
-      const SizedBox(height: 12),
+      const SizedBox(height: 14),
+      Text('Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.',
+          style: small),
+      const SizedBox(height: 8),
       for (final m in _mainMuscles)
         InkWell(
           onTap: () => showMuscle(m, perWeek[m]!, sessions),
@@ -515,8 +710,7 @@ class _StatsPageState extends State<StatsPage> {
         ),
       const SizedBox(height: 8),
       Text(
-        'Band: 10–20 Sätze pro Woche, ein Richtwert für Muskelaufbau. Kraftprogramme wie 5×5 lassen bewusst '
-        'Muskeln aus. Hilfsmuskeln zählen halb.',
+        'Kraftprogramme wie 5×5 lassen bewusst Muskeln aus. Hilfsmuskeln zählen halb.',
         style: TextStyle(fontSize: 11, color: c.onSurfaceVariant),
       ),
     ]);
@@ -556,7 +750,9 @@ class _StatsPageState extends State<StatsPage> {
   Widget? cardioSection(List<Session> sessions, DateTime now, double periodWeeks, ColorScheme c) {
     final weeks = weeklySummary(sessions, now, weeks: periodWeeks.ceil().clamp(4, 26));
     if (!weeks.any((w) => w.$3 > 0)) return null;
-    return section('Cardio pro Woche', 'Minuten', [
+    final avg = weeks.fold(0, (n, w) => n + w.$3) / weeks.length;
+    return section('Cardio pro Woche', 'Minuten',
+        fold: 'cardio', openByDefault: false, summary: 'Ø ${avg.round()} Min pro Woche', [
       SizedBox(
         height: 130,
         child: CustomPaint(
@@ -590,6 +786,9 @@ class _StatsPageState extends State<StatsPage> {
 }
 
 enum _ChartMode { percent, deltaKg, weight }
+
+/// The key figures whose course opens below the tiles.
+enum _Kpi { perWeek, duration, volume, records }
 
 /// "+4,5", "−2", "0" with one decimal at most.
 String signed(double v) {
@@ -978,8 +1177,12 @@ class BarChart extends CustomPainter {
   final List<double> values;
   final List<String> labels;
   final double? goal;
+
+  /// Bars below [goal] in [miss]; without, [goal] is only a line (an average).
+  final bool judge;
   final Color hit, miss, label;
-  BarChart(this.values, this.labels, {this.goal, required this.hit, required this.miss, required this.label});
+  BarChart(this.values, this.labels,
+      {this.goal, this.judge = true, required this.hit, required this.miss, required this.label});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1003,14 +1206,17 @@ class BarChart extends CustomPainter {
     final every = max(1, (36 / slot).ceil());
     for (final (i, v) in values.indexed) {
       final x = slot * i + slot / 2;
-      final reached = goal == null || v >= goal!;
+      final reached = goal == null || !judge || v >= goal!;
       if (v > 0) {
         canvas.drawRRect(
           RRect.fromRectAndCorners(Rect.fromLTRB(x - barW / 2, y(v), x + barW / 2, top + h),
               topLeft: const Radius.circular(5), topRight: const Radius.circular(5)),
           Paint()..color = reached ? hit : miss,
         );
-        if (slot >= 14) text(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1), Offset(x, y(v) - 8), bold: true);
+        if (slot >= 14) {
+          text(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1).replaceAll('.', ','), Offset(x, y(v) - 8),
+              bold: true);
+        }
       }
       if ((values.length - 1 - i) % every == 0) text(labels[i], Offset(x, size.height - bottom / 2));
     }
