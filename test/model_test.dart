@@ -156,6 +156,10 @@ void main() {
     expect(trendOf([...history.take(2), (DateTime(2026, 9, 5), squat(85, [5, 5, 4]))], DateTime(2026, 9, 6))!.$1, Trend.up,
         reason: 'two misses, but the 1RM still rose');
     expect(trendOf([history.last], now), isNull);
+
+    ExerciseLog pull(List<int?> reps) => ExerciseLog(name: 'Klimmzüge', weight: 0, targetReps: 5, reps: reps);
+    final pullUps = [(now.subtract(const Duration(days: 30)), pull([5, 4, 3])), (now, pull([5, 5, 5]))];
+    expect(trendOf(pullUps, now)?.$1, Trend.up, reason: 'bodyweight: more reps is progress');
   });
 
   test('switching increase/decrease off keeps the step; old files with 0 read as off', () {

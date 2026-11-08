@@ -65,15 +65,23 @@ Set<int> setbacks(List<(DateTime, ExerciseLog)> history) => {
 
 enum Trend { up, flat, stuck }
 
-/// How an exercise is going, with the 1RM change in percent over the last [days]: up when the 1RM rose
-/// by more than 2 % (catching up after a deload counts, misses or not), else stuck when at least two of
-/// the last three trainings missed reps, else flat.
+/// What a training of an exercise achieved, for its trend: the 1RM; without one (bodyweight, holds) the
+/// reps or seconds of all sets, times the weight if any.
+double progressOf(ExerciseLog log) {
+  final e1rm = estimated1rm(log);
+  if (e1rm > 0 || log.cardio) return e1rm;
+  return log.reps.fold(0, (n, r) => n + (r ?? 0)) * max(1.0, log.weight);
+}
+
+/// How an exercise is going, with the change in percent over the last [days] ([progressOf]: the 1RM,
+/// or reps and seconds without one): up when it rose by more than 2 % (catching up after a deload
+/// counts, misses or not), else stuck when at least two of the last three trainings missed reps, else flat.
 /// Null with fewer than two trainings.
 (Trend, double)? trendOf(List<(DateTime, ExerciseLog)> history, DateTime now, {int days = 28}) {
   if (history.length < 2) return null;
   final cutoff = now.subtract(Duration(days: days));
-  final before = estimated1rm(history.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => history.first).$2);
-  final change = before == 0 ? 0.0 : (estimated1rm(history.last.$2) / before - 1) * 100;
+  final before = progressOf(history.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => history.first).$2);
+  final change = before == 0 ? 0.0 : (progressOf(history.last.$2) / before - 1) * 100;
   final misses = history.reversed.take(3).where((h) => !h.$2.succeeded).length;
   return (change > 2 ? Trend.up : misses >= 2 ? Trend.stuck : Trend.flat, change);
 }

@@ -16,12 +16,14 @@ void main() {
     final a = Workout(name: 'A', exercises: [
       Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
       Exercise(name: 'Langhantelrudern', weight: 40, sets: 3, reps: 5),
+      Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 5),
     ]);
     await store.saveWorkout(a);
     for (final reps in [5, 4]) {
       final s = Session.start(a);
       s.exercises[0].reps.setAll(0, [5, 5, reps]);
       s.exercises[1].reps.setAll(0, [5, 5, 5]);
+      s.exercises[2].reps.setAll(0, [5, 4, reps]);
       await store.finishSession(s);
     }
     expect(jsonDecode(store.exportJson()).containsKey('derived'), isFalse, reason: 'only with the hook, as in main');
@@ -36,6 +38,11 @@ void main() {
     final bench = (d['exercises'] as List).firstWhere((e) => e['name'] == 'Bankdrücken');
     expect((bench['trainings'], bench['bestWeight'], bench['next']), (2, 82.5, 82.5), reason: '80 done, so 82.5; missed a rep there');
     expect(d['setsPerMuscleWeek']['last28d']['Brust'], greaterThan(0));
+    expect(d['setsPerMuscleWeek']['last90d'], d['setsPerMuscleWeek']['last28d'],
+        reason: 'both trainings today: weeks since the first training, not the whole span');
+    final pullUps = (d['exercises'] as List).firstWhere((e) => e['name'] == 'Klimmzüge');
+    expect((pullUps['bodyweight'], pullUps['repsLast'], pullUps['repsBest'], pullUps.containsKey('e1rmNow')),
+        (true, 13, 14, false));
     expect((d['balance90d'] as List).map((b) => b['pair']), contains('Brust ↔ oberer Rücken'));
     expect(d['tasks'], isA<List>(), reason: 'which ones depends on the day; see tasks_test');
     expect(store.toJson().containsKey('derived'), isFalse, reason: 'never stored, only exported');
