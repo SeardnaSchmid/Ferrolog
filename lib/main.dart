@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,7 +16,7 @@ import 'session.dart';
 import 'settings.dart';
 import 'stats.dart';
 import 'sync.dart';
-import 'tasks.dart';
+import 'training_card.dart';
 import 'timing.dart';
 import 'units.dart';
 
@@ -149,7 +148,7 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       // Settings (unit, weekly goal) change what every tab shows.
-      listenable: Listenable.merge([store, unit, weeklyGoal, homeTab]),
+      listenable: Listenable.merge([store, unit, weeklyGoal, homeTab, findingsVersion]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: const Logo(),
@@ -209,15 +208,8 @@ class WorkoutList extends StatelessWidget {
           ActiveTrainingCard(active, key: ValueKey(active.id)),
           const SizedBox(height: 12),
         ],
-        // Keyed by the latest training, so a new one starts the card at its freshest fact.
-        // Both can be switched off in the settings.
-        if (active == null) ...[
-          if (prefs.getBool('home.insights') ?? true) ...[
-            InsightCard(key: ValueKey(store.sessions.firstOrNull?.id)),
-            const SizedBox(height: 4),
-          ],
-          if (prefs.getBool('home.tasks') ?? true) const TasksCard(),
-        ],
+        // What the statistics found; not while training, then only "Fortsetzen" counts.
+        if (active == null) TrainingCard(),
         if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
         for (final w in store.workouts) WorkoutCard(w),
         const SizedBox(height: 8),
@@ -490,122 +482,6 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
       duration: const Duration(milliseconds: 200),
       alignment: Alignment.topCenter,
       child: AnimatedSwitcher(duration: const Duration(milliseconds: 150), child: child),
-    );
-  }
-}
-
-/// Top of the workouts tab: little facts about recent training, one at a time, swipe for the next.
-class InsightCard extends StatefulWidget {
-  const InsightCard({super.key});
-
-  @override
-  State<InsightCard> createState() => _InsightCardState();
-}
-
-class _InsightCardState extends State<InsightCard> {
-  int page = 0;
-  final pages = PageController();
-  Timer? timer;
-  DateTime touched = DateTime(0); // last swipe by hand: the rotation waits a while after it
-
-  /// Every 5 seconds the next fact, round and round; not right after a swipe.
-  @override
-  void initState() {
-    super.initState();
-    timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!pages.hasClients || DateTime.now().difference(touched) < const Duration(seconds: 10)) return;
-      final count = homeFacts(store.sessions, store.workouts, DateTime.now(), perWeek: weeklyGoal.value).length;
-      if (count < 2) return;
-      final next = (page + 1) % count;
-      next == 0 ? pages.jumpToPage(0) : pages.animateToPage(next, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
-    });
-  }
-
-  @override
-  void dispose() {
-    timer?.cancel();
-    pages.dispose();
-    super.dispose();
-  }
-
-  static const icons = {
-    Fact.record: Icons.local_fire_department,
-    Fact.today: Icons.today_outlined,
-    Fact.next: Icons.arrow_upward,
-    Fact.fresh: Icons.fiber_new_outlined,
-    Fact.journey: Icons.route_outlined,
-    Fact.bodyWeight: Icons.accessibility_new,
-    Fact.month: Icons.calendar_month_outlined,
-    Fact.streak: Icons.check_circle_outline,
-    Fact.gain: Icons.trending_up,
-    Fact.close: Icons.flag_outlined,
-    Fact.milestone: Icons.emoji_events_outlined,
-    Fact.week: Icons.calendar_today_outlined,
-    Fact.stall: Icons.landscape_outlined,
-    Fact.pause: Icons.bedtime_outlined,
-    Fact.tonnage: Icons.fitness_center,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-    final facts = homeFacts(store.sessions, store.workouts, DateTime.now(), perWeek: weeklyGoal.value);
-    if (facts.isEmpty) return const SizedBox();
-    final current = page.clamp(0, facts.length - 1);
-    return Card(
-      // A light tint sets it apart from the workout cards below, softer than the running training.
-      color: Color.alphaBlend(c.primaryContainer.withValues(alpha: .25), c.surfaceContainerLow),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide.none),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
-        child: Column(children: [
-          SizedBox(
-            height: 38, // two lines of text
-            child: NotificationListener<ScrollStartNotification>(
-              onNotification: (n) {
-                if (n.dragDetails != null) touched = DateTime.now();
-                return false;
-              },
-              child: PageView(
-                controller: pages,
-                // Mouse drags too, so it swipes in the browser as well.
-                scrollBehavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
-                onPageChanged: (i) => setState(() => page = i),
-                children: [
-                  for (final (kind, text) in facts)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(children: [
-                        Icon(icons[kind], size: 20, color: kind == Fact.record ? c.tertiary : c.primary),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(text,
-                              maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, height: 1.25)),
-                        ),
-                      ]),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          if (facts.length > 1) ...[
-            const SizedBox(height: 2),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              for (var i = 0; i < facts.length; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == current ? 14 : 5,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: i == current ? c.primary : c.outlineVariant,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-            ]),
-          ],
-        ]),
-      ),
     );
   }
 }

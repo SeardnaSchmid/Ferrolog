@@ -2,7 +2,10 @@ import 'package:ferrolog/findings.dart';
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/muscles.dart';
+import 'package:ferrolog/sync.dart';
+import 'package:ferrolog/training_card.dart';
 import 'package:ferrolog/units.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,6 +38,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     unit.value = WeightUnit.kg;
     store = await Store.open();
+    prefs = await SharedPreferences.getInstance();
+    sync = GitHubSync(prefs);
   });
 
   test('nothing trained: nothing found', () {
@@ -92,7 +97,7 @@ void main() {
     ]);
     final f = findings(eight(push), [push], now).single;
     expect((f.type, f.title, f.fix, f.exercise), (FindingType.balance, 'Oberer Rücken kommt zu kurz', Fix.dropSet, 'Dips'));
-    expect(f.evidence, 'Drücken 12 : Rudern 6 Sätze/Woche (50 %)');
+    expect(f.evidence, '50 % · Brust 12 : Oberer Rücken 6 Sätze/Woche');
     expect(f.advice, 'Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.');
 
     final weak = Workout(name: 'S', exercises: [
@@ -168,5 +173,76 @@ void main() {
     final all = findings(s, [a], now, perWeek: 1);
     expect([for (final f in all) f.title], ['Fortschritt: Rudern 50 → 60 kg', 'Rekordmonat: 3 Trainings']);
     expect(all.first.evidence, 'Seit 1.10.');
+  });
+
+  test('weekly goal: only when tight and still doable one a day, not right after training, not in the first week', () {
+    final a = Workout(name: 'A', exercises: [Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5)]);
+    final saturday = DateTime(2026, 11, 7, 12), sunday = DateTime(2026, 11, 8, 12);
+    List<Finding> week(List<int> daysAgo, DateTime when, int perWeek) => [
+          for (final f in findings([for (final d in daysAgo) at(a, d)], [a], when, perWeek: perWeek))
+            if (f.type == FindingType.weekGoal) f,
+        ];
+    final due = week([6, 8], sunday, 1).single;
+    expect((due.title, due.evidence), ('Noch 1 Training diese Woche', '0 von 1 geschafft, heute ist der letzte Tag'));
+    expect((due.source.view, due.fix), (StatsView.weeks, null));
+    expect(week([6, 8], sunday, 3), isEmpty, reason: 'three on the last day: not doable');
+    expect(week([-4, 6, 8], sunday, 2), isEmpty, reason: 'trained today: no second one');
+    expect(week([-3, 6, 8], saturday, 2).single.evidence, '1 von 2 geschafft, morgen ist der letzte Tag');
+    expect(week([-2], sunday, 2), isEmpty, reason: 'first week of training');
+  });
+
+  test('an exercise skipped in every training breaks nothing', () {
+    final a = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 2, reps: 5),
+      Exercise(name: 'Rudern', weight: 50, sets: 2, reps: 5),
+    ]);
+    final s = eight(a, (s, i) => s.exercises[1].reps.fillRange(0, 2, null));
+    expect(findings(s, [a], now).map((f) => f.title), contains('Rudern 8× ausgelassen'));
+  });
+
+  testWidgets('card → sheet → fix changes the plan and puts the finding away; undo brings both back', (tester) async {
+    final push = Workout(name: 'P', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Dips', weight: 0, sets: 3, reps: 10),
+      Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
+    ]);
+    await tester.runAsync(() async {
+      for (final w in [...store.workouts]) {
+        await store.deleteWorkout(w);
+      }
+      await store.saveWorkout(push);
+    });
+    // Eight trainings up to yesterday, whatever day the test runs.
+    final shift = DateTime.now().difference(now);
+    store.sessions
+      ..clear()
+      ..addAll([for (final s in eight(push)) Session.fromJson({...s.toJson(), 'date': s.date.add(shift).toIso8601String()})]);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: ListenableBuilder(listenable: Listenable.merge([store, findingsVersion]), builder: (_, _) => TrainingCard())),
+    ));
+    expect(find.text('Oberer Rücken kommt zu kurz'), findsOneWidget);
+
+    await tester.tap(find.text('Oberer Rücken kommt zu kurz'));
+    await tester.pumpAndSettle();
+    expect(find.text('BALANCE · LETZTE 4 WOCHEN'), findsOneWidget);
+    expect(find.text('Ein Satz weniger Dips in P gleicht aus, ohne mehr Arbeit.'), findsOneWidget);
+    await tester.tap(find.text('1 Satz weniger Dips'));
+    await tester.pumpAndSettle();
+    Exercise dips() => store.workouts.single.exercises.firstWhere((e) => e.name == 'Dips');
+    expect(dips().sets, 2);
+    expect(find.text('Oberer Rücken kommt zu kurz'), findsNothing, reason: 'done until the numbers can move');
+
+    await tester.tap(find.text('Rückgängig'));
+    await tester.pumpAndSettle();
+    expect(dips().sets, 3);
+    expect(find.text('Oberer Rücken kommt zu kurz'), findsOneWidget);
+
+    // Put off from the sheet.
+    await tester.tap(find.text('Oberer Rücken kommt zu kurz'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Später'));
+    await tester.pumpAndSettle();
+    expect(find.text('Oberer Rücken kommt zu kurz'), findsNothing);
+    expect(snoozedFindings.keys, contains('balance:pushPullFlat'));
   });
 }

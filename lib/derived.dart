@@ -1,9 +1,10 @@
 import 'dart:math';
 
 import 'main.dart';
+import 'findings.dart';
 import 'model.dart';
 import 'muscles.dart';
-import 'tasks.dart';
+import 'training_card.dart';
 import 'timing.dart';
 
 /// What [derivedStats] contains, for the AI reading the export.
@@ -119,8 +120,8 @@ Map<String, dynamic> derivedStats(DateTime now) {
           'lagging': b.lagging,
         },
     ],
-    'tasks': [if (prefs.getBool('home.tasks') ?? true) for (final t in openTasks()) {'title': t.title, 'why': t.why}],
-    'facts': [for (final (_, text) in homeFacts(sessions, store.workouts, now, perWeek: weeklyGoal.value)) text],
+    'tasks': [for (final f in openFindings()) if (f.kind == FindingKind.action) {'title': f.title, 'why': f.evidence}],
+    'facts': [for (final f in openFindings()) if (f.kind == FindingKind.positive) f.title],
     'goalPerWeek': weeklyGoal.value,
     'workoutMinutesEstimated': {for (final w in store.workouts) w.name: (pace.ofWorkout(w).inSeconds / 60).round()},
     'weeks': [for (final (monday, n, cardio) in weeklySummary(sessions, now, weeks: 12)) {'week': day(monday), 'trainings': n, if (cardio > 0) 'cardioMinutes': cardio}],

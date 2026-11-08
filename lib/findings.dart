@@ -216,8 +216,13 @@ List<Finding> _balance(List<Session> recent, List<Workout> workouts) {
     final behindB = lagging == b.bGroup;
     final range = b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %';
     final unit = b.strength ? ' kg 1RM' : ' Sätze/Woche';
-    final evidence = '${b.a} ${_num(b.aValue)} : ${b.b} ${_num(b.bValue)}$unit (${(b.ratio * 100).floor()} %)';
-    final why = 'Richtwert $range. ${b.strength ? 'Verglichen wird das aktuelle 1RM.' : 'Gezählt werden die gemachten Sätze der letzten 4 Wochen.'}';
+    // Short on the card: the lifts by strength, else the muscle groups; what counts goes in the why.
+    final (an, bn) = b.strength ? (b.a, b.b) : (b.aGroup, b.bGroup);
+    // The ratio first, so a narrow screen cuts the counts, not it.
+    final evidence = '${(b.ratio * 100).floor()} % · $an ${_num(b.aValue)} : $bn ${_num(b.bValue)}$unit';
+    final why = b.strength
+        ? 'Richtwert $range. Verglichen wird das aktuelle 1RM.'
+        : '${b.a} gegen ${b.b}, Richtwert $range. Gezählt werden die gemachten Sätze der letzten 4 Wochen.';
     final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
     Finding make(String advice, {Workout? w, String? exercise, Fix? fix}) => Finding(
         'balance:${b.pair.name}', FindingType.balance, '$lagging kommt zu kurz', evidence,

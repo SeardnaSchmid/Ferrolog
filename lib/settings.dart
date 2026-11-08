@@ -136,9 +136,9 @@ class _SyncSettingsState extends State<SyncSettings> {
           const Divider(height: 32),
           Text('Startseite', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           for (final (key, icon, title, subtitle) in const [
-            ('home.insights', Icons.auto_awesome_outlined, 'Motivation', 'Wechselnde Fakten zu deinem Training'),
-            ('home.tasks', Icons.task_alt, 'Aufgaben & Ratschläge',
-                'Zum Beispiel Gegenspieler, die zu kurz kommen, oder das Wochenziel'),
+            ('home.tasks', Icons.insights_outlined, 'Hinweise zum Training',
+                'Wenn die Statistik etwas findet: Ausgelassenes, Balance, Plateau, Wochenziel'),
+            ('home.insights', Icons.emoji_events_outlined, 'Erfolge', 'Rekorde, Fortschritt und Meilensteine des letzten Trainings'),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
