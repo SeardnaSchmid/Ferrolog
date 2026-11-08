@@ -180,4 +180,33 @@ void main() {
       'Farmers Walk 3×30 s',
     ]);
   });
+
+  testWidgets('set sheet: reps and weight can be typed, not only stepped', (tester) async {
+    tester.view.physicalSize = const Size(500, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Exercise? result;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () async => result = await Navigator.push<Exercise>(context,
+              MaterialPageRoute(builder: (_) => ExerciseEditor(Exercise(name: 'Eigene Presse', weight: 60, sets: 3, reps: 5)))),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('60 kg', findRichText: true).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.descendant(of: find.widgetWithText(BigStepper, 'Wiederholungen'), matching: find.byType(TextField)), '8');
+    await tester.enterText(find.descendant(of: find.widgetWithText(BigStepper, 'Gewicht (kg)'), matching: find.byType(TextField)), '120,5');
+    await tester.tap(find.text('Alle Sätze'));
+    await tester.tap(find.text('Speichern').last); // the sheet's
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Speichern')); // the editor's
+    await tester.pumpAndSettle();
+    expect((result?.reps, result?.weight, result?.sets), (8, 120.5, 3));
+  });
 }
+

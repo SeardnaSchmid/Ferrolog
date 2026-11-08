@@ -361,17 +361,25 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             const SizedBox(height: 16),
             Row(children: [
               Expanded(
+                // Typing doesn't rebuild the sheet, so the field keeps focus; ± swap in the new value.
                 child: e.timed
                     ? BigStepper('Sekunden', '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
-                        () => setSheet(() => r = min(600, r ~/ 5 * 5 + 5)))
+                        () => setSheet(() => r = min(600, r ~/ 5 * 5 + 5)),
+                        onTyped: (v) => r = (int.tryParse(v) ?? r).clamp(1, 600))
                     : BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
-                        () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1))),
+                        () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1)),
+                        onTyped: (v) => r = (int.tryParse(v) ?? r).clamp(1, 50)),
               ),
               if (!noWeight) ...[
                 const SizedBox(width: 12),
                 Expanded(
                   child: BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
-                      () => setSheet(() => w = nudged(w, 1))),
+                      () => setSheet(() => w = nudged(w, 1)),
+                      decimal: true,
+                      onTyped: (v) => w = switch (parseWeight(v)) {
+                            final kg? when kg >= 0 && kg <= 1000 => kg,
+                            _ => w,
+                          }),
                 ),
               ],
             ]),
@@ -615,7 +623,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           const SizedBox(height: 18),
           Row(children: [
             const Expanded(child: Text('Sätze', style: TextStyle(fontWeight: FontWeight.w500))),
-            Text(isNew ? 'Satz antippen zum Ändern' : 'Nächstes Training · antippen zum Ändern', style: muted),
+            Flexible(
+              child: Text(isNew ? 'Satz antippen zum Ändern' : 'Nächstes Training · antippen zum Ändern',
+                  textAlign: TextAlign.end, style: muted),
+            ),
           ]),
           const SizedBox(height: 8),
           // Four tiles per row, like the sets in the training.
