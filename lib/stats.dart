@@ -56,8 +56,8 @@ List<String> strengthExercises() => [
         final c => c,
       });
 
-/// Overview, top to bottom: period, strength of every exercise in one chart, the exercises with their
-/// trend, key figures with trainings per week, muscles, cardio.
+/// Overview, top to bottom: period, key figures with trainings per week, strength of every exercise in
+/// one chart, the exercises with their trend, balance, muscles, cardio.
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
 
@@ -138,11 +138,11 @@ class _StatsPageState extends State<StatsPage> {
             child: Text('Kein Training in diesem Zeitraum.', textAlign: TextAlign.center, style: small),
           )
         else ...[
-          ?progressSection(from, c, small),
-          exercisesSection(from, now, c, small),
-          const SizedBox(height: 8),
+          // By the question asked: do I keep at it, do I get stronger, do I train evenly.
           figures(p, c, small),
           KeyedSubtree(key: weeksKey, child: weeksSection(sessions, now, p.weeks, c, small)),
+          ?progressSection(from, c, small),
+          exercisesSection(from, now, c, small),
           if (balanceSection(sessions, now) case final b?) KeyedSubtree(key: balanceKey, child: b),
           musclesSection(inPeriod, p.weeks, c, small),
           ?cardioSection(sessions, now, p.weeks, c),
