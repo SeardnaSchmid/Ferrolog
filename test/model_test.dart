@@ -35,6 +35,18 @@ void main() {
     expect(jsonDecode(reopened.exportJson())['sessions'], hasLength(1));
   });
 
+  test('an exercise skipped entirely is not a miss', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final pullUps = Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 5, down: true, failsToDeload: 1);
+    final w = Workout(name: 'A', exercises: [pullUps, Exercise(name: 'Kniebeuge', weight: 100, sets: 1, reps: 5)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    s.exercises[1].reps[0] = 5;
+    await store.finishSession(s);
+    expect((pullUps.weight, pullUps.fails), (0, 0));
+  });
+
   test('week streak', () {
     final now = DateTime(2026, 11, 4); // Wednesday
     expect(weekStreak([], now), 0);

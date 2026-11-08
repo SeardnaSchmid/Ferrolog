@@ -164,8 +164,16 @@ class Exercise {
         timed = false;
 
   /// Next session's weights from what was lifted: up on success, down after enough misses in a row.
+  /// A set done lighter than planned holds the plan: the new weight was trained, just not every set
+  /// (e.g. the last set dropped back), so neither an increase nor a miss towards a deload.
   void applyResult(ExerciseLog log) {
     if (cardio) return; // cardio stays as planned
+    final planned = weights;
+    final lighter = [
+      for (final (i, r) in log.reps.indexed)
+        if (r != null && i < planned.length && log.weights[i] < planned[i]) i,
+    ].isNotEmpty;
+    if (lighter) return;
     var delta = 0.0;
     final top = maxReps;
     if (top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top)) {
@@ -523,7 +531,8 @@ class Store extends ChangeNotifier {
         'format': 'workouts = plans; exercise.weight is the weight for the NEXT session (setWeights, if '
             'present, per set; all 0 = no weight) and rises by "increment" when all sets hit "reps" (setReps, if present, '
             'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
-            'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true. sessions = completed trainings, '
+            'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true; a set done lighter than '
+            'planned holds the weight (no increase, no miss), an exercise skipped entirely changes nothing. sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
             'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
@@ -575,6 +584,7 @@ class Store extends ChangeNotifier {
 
   /// Stores the session and adjusts next time's weights: every exercise where all sets hit the
   /// target gets `increment` added; after `failsToDeload` misses in a row it drops by `decrement`.
+  /// Exercises skipped entirely stay as they are.
   /// No activity for this long and the training counts as over.
   static const idleLimit = Duration(minutes: 30);
 
@@ -600,7 +610,8 @@ class Store extends ChangeNotifier {
     if (w != null) {
       for (final log in s.exercises) {
         final e = w.exercises.where((x) => x.name == log.name).firstOrNull;
-        if (e == null) continue;
+        // Skipped entirely (no time, no bar): not a miss, the plan stays.
+        if (e == null || log.setsDone == 0) continue;
         e.applyResult(log);
       }
     }

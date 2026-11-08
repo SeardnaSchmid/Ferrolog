@@ -87,6 +87,20 @@ void main() {
     expect(backOff.weight, 82.5);
   });
 
+  test('progression: a set done lighter than planned holds the weight, neither up nor a miss', () {
+    final e = Exercise(name: 'Schulterdrücken', weight: 50, sets: 3, reps: 5, increment: 1.25, down: true, failsToDeload: 2);
+    e.applyResult(ExerciseLog(name: 'Schulterdrücken', weight: 50, targetReps: 5, reps: [5, 5, 5], weights: [50, 50, 40]));
+    expect((e.weight, e.fails), (50, 0), reason: 'all reps, but the last set dropped back');
+    e.applyResult(ExerciseLog(name: 'Schulterdrücken', weight: 50, targetReps: 5, reps: [5, 5, 4], weights: [50, 50, 40]));
+    expect((e.weight, e.fails), (50, 0), reason: 'a missed rep on the lighter set does not deload either');
+    e.applyResult(ExerciseLog(name: 'Schulterdrücken', weight: 50, targetReps: 5, reps: [5, 5, null], weights: [50, 50, 40]));
+    expect(e.fails, 1, reason: 'the lighter set was skipped: an ordinary miss');
+
+    final backOff = Exercise(name: 'Bankdrücken', sets: 3, reps: 5, setWeights: [80, 80, 70]);
+    backOff.applyResult(ExerciseLog(name: 'Bankdrücken', weight: 0, targetReps: 5, reps: [5, 5, 5], weights: [80, 70, 70]));
+    expect(backOff.setWeights, [80, 80, 70], reason: 'the plan keeps its shape, not the lighter set');
+  });
+
   testWidgets('new workout: program chips show the day right away, switching days swaps the list', (tester) async {
     tester.view.physicalSize = const Size(600, 1600);
     tester.view.devicePixelRatio = 1;
