@@ -49,7 +49,7 @@ Spätere Präzisierungen beim Bauen:
 | 1 | Befunde als Modell (`findings.dart`) mit Tests | ✅ `238f43c` |
 | 2 | Startseite: Karte, Detail-Sheet, Knöpfe mit Rückgängig, Einstellungen; alte Karten, `tasks.dart` und `homeFacts` entfernt | ✅ `f17b4a7` |
 | 3 | Sprünge in die Statistik: Balance-Karte und Wochengrafik scrollen ins Bild und werden hervorgehoben, Übungsdetail markiert Trainings und nennt ausgelassene | ✅ `4559014` |
-| 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ siehe Phase 4 im Detail |
+| 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ `e96ce06` |
 | 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ⏳ offen. Bis dahin füllt eine Übergangslösung `tasks`/`facts` aus den Befunden. |
 | 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ⏳ offen |
 
