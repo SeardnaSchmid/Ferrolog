@@ -51,7 +51,7 @@ Spätere Präzisierungen beim Bauen:
 | 3 | Sprünge in die Statistik: Balance-Karte und Wochengrafik scrollen ins Bild und werden hervorgehoben, Übungsdetail markiert Trainings und nennt ausgelassene | ✅ `4559014` |
 | 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ `e96ce06` |
 | 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ✅ `b0062bb` |
-| 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ⏳ offen |
+| 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ✅ siehe Phase 6 im Detail |
 
 ### Phase 3 im Detail
 
@@ -73,6 +73,13 @@ Spätere Präzisierungen beim Bauen:
 - `derived.findings` ([derived.dart](../lib/derived.dart)) ersetzt `tasks` und `facts`: je Befund `type`, `kind`, `title`, `evidence`, `why`, `advice`, `fix` (`action`, `exercise`, `workout`) und `source` (`view`, `pair`, `exercise`, `dates`). Enthalten ist, was die Startseite gerade zeigen würde, mit den Schaltern aus den Einstellungen.
 - `title` und `evidence` stehen in der Einheit, die der Nutzer gewählt hat; das ist die einzige Stelle im Export, die nicht kg ist. So beschrieben in `derivedFormat`.
 - Test: [test/derived_test.dart](../test/derived_test.dart) prüft den Rekord-Befund samt Quelle und dass `tasks`/`facts` weg sind.
+
+### Phase 6 im Detail
+
+- Demo ([tool/demo_server.py](../tool/demo_server.py)): Klimmzüge in den letzten 4 Wochen 2× komplett ausgelassen (Top-Befund, Folge für die Balance im Sheet), kein Körpergewicht in den letzten 40 Tagen, eigene Übung „Atemübung“ ohne Muskeln in StrongLifts A. Beschrieben in [CLAUDE.md](../CLAUDE.md).
+- Im `web-demo` geprüft: Karte mit „Klimmzüge 2× ausgelassen“, Rekord und Fortschritt darunter; Sheet mit Warum, Folge und Link; Sprung zur Balance-Karte mit hervorgehobenem Paar; Übungsdetail mit markiertem Training; Hinweis unter der Atemübung; Körpergewicht-Hinweis in der Zusammenfassung („vor 52 Tagen“).
+- Beim Prüfen geändert: Die Folge im Sheet heißt jetzt „Folge für die Balance: 40 % · Schultern 7,8 : Latissimus 3,1 Sätze/Woche.“ statt „Deshalb: …, …“.
+- Nicht im Browser sichtbar, nur per Test: Plateau, Wochenziel, „−1 Satz“, „Vorziehen“ (die Demo zeigt nur einen Ratschlag gleichzeitig; die Klimmzüge stehen in B schon vor den Zusatzübungen, daher kein Knopf).
 
 ## Offene Punkte
 

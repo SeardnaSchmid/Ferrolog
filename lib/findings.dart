@@ -174,7 +174,7 @@ List<Finding> _skipped(List<Session> recent, List<Workout> workouts, List<Findin
     final atEnd = ss.where(lastIn).length;
     final end = atEnd == n ? ', jedes Mal als letzte Übung' : atEnd * 2 >= n ? ', meist als letzte Übung' : '';
     final lagging = balance.where((b) => b.source.pair != null && sideOf(b.source.pair!, name) != null).firstOrNull;
-    final consequence = lagging == null ? '' : ' Deshalb: ${lagging.title}, ${lagging.evidence}.';
+    final consequence = lagging == null ? '' : ' Folge für die Balance: ${lagging.evidence}.';
     final w = workouts.where((w) => w.exercises.any((e) => e.name == name)).firstOrNull;
     final i = w?.exercises.indexWhere((e) => e.name == name) ?? -1;
     final canMove = w != null && earlierSlot(w) < i;

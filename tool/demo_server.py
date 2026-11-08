@@ -4,7 +4,9 @@ Serves build/web like the plain preview, but injects a script into index.html th
 browser storage with 1.5 years of StrongLifts 5x5 (A/B, Mon/Wed/Fri) up to a training this morning:
 accessories added later and one just weeks ago, holidays, sick weeks, bad days with missed reps or a
 last set done lighter, plateaus and deloads, rows lagging behind the bench press, curls in a rep range,
-a farmer's walk held for 30–45 s, accessories skipped for lack of time. The data lives only here,
+a farmer's walk held for 30–45 s, accessories skipped for lack of time, pull-ups left out twice in the
+last four weeks (the home card's top finding), no body weight for the last 40 days and an own exercise
+without muscles. The data lives only here,
 never in the app or a release build. Storage is per port, so other previews keep their data.
 
     python tool/demo_server.py [port]      then open http://localhost:8091 (?reset reseeds)
@@ -53,6 +55,7 @@ def demo_data():
     week_cardio = 14
 
     sessions, bw = [], 84.0
+    late_b = 0  # B trainings in the last four weeks, oldest first: the 1st and 3rd leave out the pull-ups
     day, n = start, 0
     while day <= end:
         wk = (day - start).days // 7
@@ -78,7 +81,13 @@ def demo_data():
             exercises = []
             # Now and then no time left for the last accessory: skipped entirely, no miss.
             rushed = random.random() < .08
+            if not is_a and 0 < (end - day).days < 28:
+                late_b += 1
+            no_pullups = not is_a and 0 < (end - day).days < 28 and late_b in (1, 3)
             for name in names:
+                if name == 'Klimmzüge' and no_pullups:
+                    exercises.append({'name': name, 'weight': 0.0, 'weights': [0.0] * 3, 'targetReps': 8, 'reps': [None] * 3})
+                    continue
                 if rushed and name in ('Klimmzüge', 'Farmers Walk', 'Bizepscurls') and name == names[-1 if names[-1] != 'Laufen' else -2]:
                     sets = 2 if name == 'Farmers Walk' else 3
                     e = {'name': name, 'weight': 0.0, 'weights': [0.0] * sets, 'targetReps': 8, 'reps': [None] * sets}
@@ -176,7 +185,8 @@ def demo_data():
                  'workoutName': 'StrongLifts A' if is_a else 'StrongLifts B',
                  'date': date.isoformat(), 'finishedAt': finished.isoformat(),
                  'exercises': exercises}
-            if random.random() < .45:
+            # Body weight now and then, but not for the last 40 days: the recap asks for it.
+            if random.random() < .45 and (end - day).days > 40:
                 s['bodyWeight'] = round(bw, 1)
             if random.random() < .6:
                 s['mood'] = 1 if bad else random.choice([2, 3, 3])
@@ -203,7 +213,9 @@ def demo_data():
         {'id': 'wA', 'name': 'StrongLifts A', 'exercises': [
             plan('Kniebeuge', 5, 5, weight['Kniebeuge']), plan('Bankdrücken', 5, 5, weight['Bankdrücken']),
             plan('Langhantelrudern', 5, 5, weight['Langhantelrudern']), plan('Bizepscurls', 3, 8, weight['Bizepscurls'], top=12),
-            plan('Rumänisches Kreuzheben', 3, 8, weight['Rumänisches Kreuzheben'])]},
+            plan('Rumänisches Kreuzheben', 3, 8, weight['Rumänisches Kreuzheben']),
+            # An own exercise the app knows no muscles of: the workout card asks for them.
+            {**plan('Atemübung', 1, 10, 0.0, 0.0), 'up': False, 'down': False}]},
         {'id': 'wB', 'name': 'StrongLifts B', 'exercises': [
             plan('Kniebeuge', 5, 5, weight['Kniebeuge']), plan('Schulterdrücken', 5, 5, weight['Schulterdrücken']),
             plan('Kreuzheben', 1, 5, weight['Kreuzheben'], 5.0), plan('Klimmzüge', 3, 8, 0.0, 0.0),

@@ -61,7 +61,7 @@ void main() {
     final f = all.first;
     expect((f.type, f.title, f.evidence), (FindingType.skipped, 'Klimmzüge 4× ausgelassen', 'In 4 Wochen, jedes Mal als letzte Übung'));
     expect((f.fix, f.workout, f.exercise), (Fix.moveUp, b, 'Klimmzüge'));
-    expect(f.why, contains('Deshalb: Latissimus kommt zu kurz'));
+    expect(f.why, contains('Folge für die Balance: '));
     expect((f.source.view, f.source.pair), (StatsView.balance, Pair.pushPullOverhead), reason: 'the gap it causes');
 
     // Put off: the gap it explains stays quiet too.
