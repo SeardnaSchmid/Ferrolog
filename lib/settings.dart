@@ -118,6 +118,21 @@ class _SyncSettingsState extends State<SyncSettings> {
                 setState(() {});
               },
             ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.hourglass_top),
+            title: const Text('Vorlauf bei Zeitübungen'),
+            subtitle: const Text('Zeit zum Aufnehmen der Gewichte, bevor die Sekunden zählen'),
+            trailing: DropdownButton<int>(
+              value: prefs.getInt('timed.leadIn') ?? 10,
+              items: [for (final n in const [0, 5, 10, 15]) DropdownMenuItem(value: n, child: Text('$n s'))],
+              onChanged: (v) async {
+                if (v == null) return;
+                await prefs.setInt('timed.leadIn', v);
+                setState(() {});
+              },
+            ),
+          ),
           const Divider(height: 32),
           Text('Startseite', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           for (final (key, icon, title, subtitle) in const [

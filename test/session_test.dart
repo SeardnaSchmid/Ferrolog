@@ -114,7 +114,8 @@ void main() {
     expect(s.exercises.first.doneAt.first, isNotNull);
   });
 
-  testWidgets('timed set: a tap starts the countdown, at 0 the set is done and the rest starts', (tester) async {
+  testWidgets('timed set, hands-free: lead-in, then logged by itself at the target; a tap cancels or stops', (tester) async {
+    await prefs.setInt('timed.leadIn', 1);
     final w = Workout(name: 'Carry', exercises: [
       Exercise(name: 'Farmers Walk', weight: 24, sets: 2, reps: 1, restSeconds: 90, timed: true),
     ]);
@@ -130,20 +131,32 @@ void main() {
     expect(find.textContaining('2×1 s'), findsOneWidget);
     expect(find.text('24 kg', findRichText: true), findsNWidgets(2), reason: 'weight per set, as usual');
 
+    // A tap starts the lead-in; another one cancels it, nothing logged.
     await tester.tap(find.text('–/1 s', findRichText: true).first);
     await tester.pump();
-    expect(find.text('1/1 s', findRichText: true), findsOneWidget, reason: 'counting down');
-    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 1100)));
+    expect(find.textContaining('Aufnehmen 1', findRichText: true), findsOneWidget, reason: 'time to pick up the weights');
+    expect(log.startedAt, isNotNull, reason: 'kept with the training, survives a restart');
+    await tester.tap(find.byTooltip('Abbrechen'));
+    await tester.pump();
+    expect((log.reps.first, log.startedAt), (null, null));
+
+    // Started again and left alone: go after the lead-in, logged at the target, then the rest.
+    await tester.tap(find.text('–/1 s', findRichText: true).first);
+    await tester.pump();
+    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 2100)));
     await tester.pump(const Duration(seconds: 1));
-    expect((log.reps.first, log.doneAt.first != null), (1, true));
+    await tester.pump(const Duration(seconds: 1));
+    expect((log.reps.first, log.doneAt.first != null, log.startedAt), (1, true, null));
     expect(find.textContaining('Pause 1:30 /', findRichText: true), findsOneWidget);
 
-    // Stopped right away: nothing held, nothing logged.
+    // No lead-in and stopped right away: nothing held, nothing logged.
+    await prefs.setInt('timed.leadIn', 0);
     await tester.tap(find.text('–/1 s', findRichText: true).first);
     await tester.pump();
-    await tester.tap(find.text('1/1 s', findRichText: true).last);
+    await tester.tap(find.byTooltip('Stopp'));
     await tester.pump();
     expect(log.reps.last, isNull);
+    await prefs.remove('timed.leadIn');
   });
 }
 

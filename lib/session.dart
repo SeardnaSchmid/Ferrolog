@@ -28,8 +28,21 @@ class _SessionPageState extends State<SessionPage> {
   /// Estimates from the trainings before this one; they don't change while training.
   final pace = currentPace();
 
-  /// A timed set being held right now, counting down to its target seconds.
+  /// A timed set, hands-free: a tap starts a lead-in of [leadIn] seconds to pick up the weights, so
+  /// [start] lies ahead until "go"; then it counts up and is logged by itself at the top of the range
+  /// (the target without one), with a signal at go, at the bottom of a range and at the end. A tap
+  /// while held logs the seconds so far, a tap during the lead-in cancels.
   ({ExerciseLog log, int set, DateTime start})? hold;
+  bool holdGo = false, holdLow = false;
+
+  static int get leadIn => prefs.getInt('timed.leadIn') ?? 10;
+
+  /// Seconds held so far; negative during the lead-in.
+  int heldOf(({ExerciseLog log, int set, DateTime start}) h) =>
+      (DateTime.now().difference(h.start).inMilliseconds / 1000).floor();
+
+  /// The seconds a timed set aims for at least, and at most (the top of the range).
+  (int, int) holdRange(ExerciseLog log, int set) => (log.targets[set], max(log.targets[set], log.maxReps ?? 0));
 
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
@@ -42,11 +55,23 @@ class _SessionPageState extends State<SessionPage> {
       if (mounted) Navigator.pop(context);
       return;
     }
-    // Held long enough: the set is done, with the same signal as the end of a rest.
-    if (hold case final h? when DateTime.now().difference(h.start).inSeconds >= h.log.targets[h.set]) {
-      setState(endHold);
-      store.saveActive(s);
-      restAlert();
+    // Timed set: signal at go and at the bottom of a range; at the top it's done, with a signal too.
+    if (hold case final h?) {
+      final held = heldOf(h);
+      final (low, top) = holdRange(h.log, h.set);
+      if (!holdGo && held >= 0) {
+        holdGo = true;
+        restAlert();
+      }
+      if (top > low && !holdLow && held >= low) {
+        holdLow = true;
+        restAlert();
+      }
+      if (held >= top) {
+        setState(endHold);
+        store.saveActive(s);
+        restAlert();
+      }
     }
     // Rest over: sound and/or vibration once, as configured in the settings.
     if (lastSetAt != null && pausedAt == null && !alerted && restLeft <= 0) {
@@ -79,6 +104,15 @@ class _SessionPageState extends State<SessionPage> {
   void initState() {
     super.initState();
     ticker; // start
+    // A timed set running when the app was closed carries on.
+    for (final log in s.exercises) {
+      if (log.timed && log.startedAt != null) {
+        final i = log.reps.indexWhere((r) => r == null);
+        hold = (log: log, set: i < 0 ? 0 : i, start: log.startedAt!);
+        holdGo = heldOf(hold!) >= 0;
+        holdLow = heldOf(hold!) >= holdRange(log, hold!.set).$1;
+      }
+    }
     if (prefs.getBool('session.keepScreenOn') ?? true) keepScreenOn(true);
   }
 
@@ -107,12 +141,14 @@ class _SessionPageState extends State<SessionPage> {
             alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
       });
 
-  /// Ends the hold: the seconds held (the target once reached) are the set's result, then the rest runs.
+  /// Ends the hold: the seconds held (up to the top of the range) are the set's result, then the rest
+  /// runs. During the lead-in nothing is logged.
   void endHold() {
     final h = hold!;
     hold = null;
+    h.log.startedAt = null;
     final target = h.log.targets[h.set];
-    final held = min(target, DateTime.now().difference(h.start).inSeconds);
+    final held = min(holdRange(h.log, h.set).$2, heldOf(h));
     h.log.reps[h.set] = held >= 1 ? held : null;
     h.log.doneAt[h.set] = held >= 1 ? DateTime.now() : null;
     if (held < 1) return;
@@ -126,7 +162,7 @@ class _SessionPageState extends State<SessionPage> {
   void tapSet(ExerciseLog log, int i) {
     reveal(log);
     if (log.timed) {
-      // Timed set: start the countdown, tap again to stop early; a done set goes back to empty.
+      // Timed set: start the lead-in, tap again to cancel it or to stop early; a done set goes back to empty.
       setState(() {
         touched = log;
         if (hold case final h? when h.log == log && h.set == i) {
@@ -135,7 +171,11 @@ class _SessionPageState extends State<SessionPage> {
           log.reps[i] = log.doneAt[i] = null;
         } else {
           if (hold != null) endHold();
-          hold = (log: log, set: i, start: DateTime.now());
+          final start = DateTime.now().add(Duration(seconds: leadIn));
+          hold = (log: log, set: i, start: start);
+          log.startedAt = start;
+          holdGo = leadIn == 0;
+          holdLow = false;
           lastSetAt = null; // the rest is over once the next hold starts
         }
       });
@@ -460,7 +500,8 @@ class _SessionPageState extends State<SessionPage> {
                   backgroundColor: c.surface,
                 ),
               ],
-              if (left != null || leftText != null)
+              if (hold case final h?) ..._holdLine(h, c),
+              if (hold == null && (left != null || leftText != null))
                 SizedBox(
                   height: 30,
                   child: Row(children: [
@@ -507,6 +548,50 @@ class _SessionPageState extends State<SessionPage> {
         ],
       ),
     );
+  }
+
+  /// A timed set in the live strip: lead-in to go, then the seconds held against the range, with a
+  /// bar filling up to its top and a button to stop (or cancel during the lead-in).
+  List<Widget> _holdLine(({ExerciseLog log, int set, DateTime start}) h, ColorScheme c) {
+    final held = heldOf(h);
+    final (low, top) = holdRange(h.log, h.set);
+    final color = held < 0 ? c.tertiary : c.primary;
+    return [
+      const SizedBox(height: 4),
+      LinearProgressIndicator(
+        value: held < 0 ? 1 + held / max(1, leadIn) : (held / top).clamp(0, 1),
+        minHeight: 4,
+        borderRadius: BorderRadius.circular(2),
+        color: color,
+        backgroundColor: c.surface,
+      ),
+      SizedBox(
+        height: 30,
+        child: Row(children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: held < 0 ? 'Aufnehmen ${-held}' : '${h.log.name} ${clock(held)}',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color),
+                ),
+                TextSpan(
+                  text: held < 0 ? ' · ${h.log.name}' : ' / ${top > low ? '$low–$top' : '$top'} s',
+                  style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant),
+                ),
+              ]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+            ),
+          ),
+          _stripButton(held < 0 ? Icons.close : Icons.stop, held < 0 ? 'Abbrechen' : 'Stopp', () {
+            setState(endHold);
+            store.saveActive(s);
+          }),
+        ]),
+      ),
+    ];
   }
 
   /// A small icon button for the live strip, so the rest line stays one line high.
@@ -572,10 +657,9 @@ class _SessionPageState extends State<SessionPage> {
                           target: log.targets[i],
                           targetMax: log.maxReps,
                           repsUnit: log.timed ? ' s' : '',
-                          // Counting down while held.
+                          // Held: the seconds so far; in the lead-in the seconds to go, negative.
                           live: switch (hold) {
-                            final h? when h.log == log && h.set == i =>
-                              '${max(0, log.targets[i] - DateTime.now().difference(h.start).inSeconds)}',
+                            final h? when h.log == log && h.set == i => '${heldOf(h)}',
                             _ => null,
                           },
                           // No weight: reps only, the weight can still be added by tapping.
