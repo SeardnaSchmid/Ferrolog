@@ -11,7 +11,7 @@ import 'timing.dart';
 import 'units.dart';
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
-/// further tap one rep less, then back to empty). A rest timer runs after each set.
+/// further tap one rep less, then back to empty). A rest timer runs after each set, in the live strip on top.
 class SessionPage extends StatefulWidget {
   final Session session;
   const SessionPage(this.session, {super.key});
@@ -96,8 +96,8 @@ class _SessionPageState extends State<SessionPage> {
       .where((e) => e.name == log.name)
       .firstOrNull;
 
-  /// Keeps [log]'s card in view once the next frame is laid out: the rest timer appearing at the
-  /// bottom shrinks the list and would otherwise cover a card near the end.
+  /// Keeps [log]'s card in view once the next frame is laid out: the rest line appearing in the live
+  /// strip shrinks the list and would otherwise push a card near the end out of view.
   void reveal(ExerciseLog log) => WidgetsBinding.instance.addPostFrameCallback((_) {
         final card = cardKeys[log]?.currentContext;
         if (card == null || !card.mounted) return;
@@ -391,12 +391,11 @@ class _SessionPageState extends State<SessionPage> {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final left = lastSetAt == null ? null : restLeft;
-    final over = left != null && left <= 0;
     final zone = left == null ? RestZone.rest : restZone(left, restTarget);
-    final (zoneBg, zoneFg, zoneBar) = switch (zone) {
-      RestZone.rest => (c.primaryContainer, c.onPrimaryContainer, c.primary),
-      RestZone.soon => (c.tertiaryContainer, c.onTertiaryContainer, c.tertiary),
-      RestZone.late => (c.errorContainer, c.onErrorContainer, c.error),
+    final zoneBar = switch (zone) {
+      RestZone.rest => c.primary,
+      RestZone.soon => c.tertiary,
+      RestZone.late => c.error,
     };
     final muted = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     final done = s.exercises.fold(0, (n, e) => n + e.setsDone);
@@ -449,13 +448,48 @@ class _SessionPageState extends State<SessionPage> {
                 borderRadius: BorderRadius.circular(3),
                 backgroundColor: c.surface,
               ),
-              if (leftText != null) ...[
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(leftText, style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+              // Rest: a thin bar under the progress that shrinks to the left, and one line with the
+              // time left (orange from 30 s before the end to 30 s over, then red) and its controls.
+              if (left != null) ...[
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: restTarget == 0 ? 0 : (left / restTarget).clamp(0, 1),
+                  minHeight: 4,
+                  borderRadius: BorderRadius.circular(2),
+                  color: zoneBar,
+                  backgroundColor: c.surface,
                 ),
               ],
+              if (left != null || leftText != null)
+                SizedBox(
+                  height: 30,
+                  child: Row(children: [
+                    if (left != null) ...[
+                      Text.rich(
+                        TextSpan(children: [
+                          TextSpan(
+                            text: '${pausedAt != null ? 'Pausiert' : 'Pause'} ${left > 0 ? clock(left) : '+${clock(-left)}'}',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: zoneBar),
+                          ),
+                          TextSpan(text: ' / ${clock(restTarget)}', style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+                        ]),
+                        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                      ),
+                      _stripButton(pausedAt == null ? Icons.pause : Icons.play_arrow,
+                          pausedAt == null ? 'Anhalten' : 'Weiter', toggleRestPause),
+                      _stripButton(Icons.restart_alt, 'Neu starten', restartRest),
+                      _stripButton(Icons.close, 'Ausblenden', () => setState(() => lastSetAt = null)),
+                    ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(leftText ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(fontSize: 12.5, color: c.onSurfaceVariant)),
+                    ),
+                  ]),
+                ),
             ]),
           ),
           Expanded(
@@ -472,77 +506,18 @@ class _SessionPageState extends State<SessionPage> {
           ),
         ],
       ),
-      bottomNavigationBar: left == null
-          ? null
-          : SafeArea(
-              // Rest timer: big centered countdown, blue while resting, orange from 30 s before the end
-              // (alarm at 0) to 30 s over, then red.
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-                padding: const EdgeInsets.fromLTRB(8, 10, 8, 14),
-                decoration: BoxDecoration(
-                  color: zoneBg,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  // Equal-width sides keep the countdown exactly centered.
-                  Row(children: [
-                    Expanded(
-                      child: Row(children: [
-                        IconButton(icon: const Icon(Icons.restart_alt), tooltip: 'Neu starten', onPressed: restartRest),
-                        IconButton(
-                          icon: Icon(pausedAt == null ? Icons.pause : Icons.play_arrow),
-                          tooltip: pausedAt == null ? 'Anhalten' : 'Weiter',
-                          onPressed: toggleRestPause,
-                        ),
-                      ]),
-                    ),
-                    Column(children: [
-                      // Counts down to 0:00, then up to show how long the rest has run over.
-                      Text(left > 0 ? clock(left) : '+${clock(-left)}',
-                          style: TextStyle(
-                              fontSize: 52,
-                              height: 1.1,
-                              fontWeight: FontWeight.w700,
-                              color: zoneFg,
-                              fontFeatures: const [FontFeature.tabularFigures()])),
-                      Text(
-                        '${pausedAt != null ? 'PAUSIERT' : zone == RestZone.late ? 'PAUSE ÜBERZOGEN' : over ? 'PAUSE VORBEI' : zone == RestZone.soon ? 'GLEICH WEITER' : 'PAUSE'} · ${clock(restTarget)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1,
-                          color: zoneFg.withValues(alpha: .75),
-                        ),
-                      ),
-                    ]),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Ausblenden',
-                          onPressed: () => setState(() => lastSetAt = null),
-                        ),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: LinearProgressIndicator(
-                      value: restTarget == 0 ? 1 : (1 - left / restTarget).clamp(0, 1),
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                      color: zoneBar,
-                      backgroundColor: c.surface.withValues(alpha: .6),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
     );
   }
+
+  /// A small icon button for the live strip, so the rest line stays one line high.
+  Widget _stripButton(IconData icon, String tooltip, VoidCallback onPressed) => IconButton(
+        icon: Icon(icon, size: 20),
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 30),
+        onPressed: onPressed,
+      );
 
   /// One exercise as a card; the current one outlined and tinted like the running training on the overview.
   Widget _exerciseCard(ExerciseLog log, bool current, ColorScheme c, TextStyle muted) => Card(

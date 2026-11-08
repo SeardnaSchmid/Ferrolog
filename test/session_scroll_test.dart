@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('logging a set at the bottom keeps its exercise above the rest timer', (tester) async {
+  testWidgets('logging a set at the bottom keeps its exercise in view, the rest timer sits on top', (tester) async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     unit.value = WeightUnit.kg;
@@ -32,13 +32,15 @@ void main() {
     final tile = find.descendant(of: find.ancestor(of: last, matching: find.byType(Card)), matching: find.text('–/5', findRichText: true)).first;
     expect(tester.getRect(tile).bottom, greaterThan(screen - 200), reason: 'starts near the bottom');
     await tester.tap(tile);
-    await tester.pump(); // rest timer appears
+    await tester.pump(); // rest line appears
     await tester.pump(); // scroll animation starts
     await tester.pump(const Duration(milliseconds: 400));
 
     final card = tester.getRect(find.ancestor(of: last, matching: find.byType(Card)));
-    final timer = tester.getRect(find.text('PAUSE · 2:00').first);
-    expect(card.bottom, lessThanOrEqualTo(timer.top - 20), reason: 'the whole card stays above the timer');
+    final timer = tester.getRect(find.textContaining('Pause 2:00 /', findRichText: true));
+    expect(card.bottom, lessThanOrEqualTo(screen), reason: 'the whole card stays in view');
+    expect(timer.bottom, lessThan(card.top), reason: 'the timer is in the strip above the list');
+    expect(timer.top, lessThan(150), reason: 'right under the app bar, not at the bottom');
 
     await tester.pumpWidget(const SizedBox());
   });

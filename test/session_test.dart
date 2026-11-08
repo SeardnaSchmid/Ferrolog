@@ -136,7 +136,7 @@ void main() {
     await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 1100)));
     await tester.pump(const Duration(seconds: 1));
     expect((log.reps.first, log.doneAt.first != null), (1, true));
-    expect(find.textContaining('PAUSE'), findsOneWidget);
+    expect(find.textContaining('Pause 1:30 /', findRichText: true), findsOneWidget);
 
     // Stopped right away: nothing held, nothing logged.
     await tester.tap(find.text('–/1 s', findRichText: true).first);
