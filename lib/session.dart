@@ -523,7 +523,8 @@ class _SessionPageState extends State<SessionPage> {
                     ],
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(leftText ?? '',
+                      // Beside the rest only what's left, the finishing time doesn't fit on a phone.
+                      child: Text((left != null ? leftText?.split(' · ').first : leftText) ?? '',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
