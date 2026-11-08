@@ -50,7 +50,7 @@ Spätere Präzisierungen beim Bauen:
 | 2 | Startseite: Karte, Detail-Sheet, Knöpfe mit Rückgängig, Einstellungen; alte Karten, `tasks.dart` und `homeFacts` entfernt | ✅ `f17b4a7` |
 | 3 | Sprünge in die Statistik: Balance-Karte und Wochengrafik scrollen ins Bild und werden hervorgehoben, Übungsdetail markiert Trainings und nennt ausgelassene | ✅ `4559014` |
 | 4 | Pflege an ihren Ort: Körpergewicht in der Zusammenfassung hervorheben, eigene Übungen ohne Muskeln im Editor und in der Workout-Liste markieren | ✅ `e96ce06` |
-| 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ✅ siehe Phase 5 im Detail |
+| 5 | Export: `derived.findings` statt `tasks`/`facts`, `about` und Tests anpassen | ✅ `b0062bb` |
 | 6 | Demo-Daten mit jedem Befundtyp, Durchklicken im `web-demo`, Commits; Push und Handy nur auf Zuruf | ⏳ offen |
 
 ### Phase 3 im Detail
