@@ -11,6 +11,15 @@ import 'recap.dart';
 /// What a task asks for; the UI picks icon and button from it.
 enum TaskKind { balance, week, bodyWeight, muscles }
 
+/// What the button of a training advice does: never more work, at most the same.
+enum Fix {
+  /// Moves [Task.exercise] up in [Task.workout], before the accessories, so it isn't the one left out.
+  moveUp,
+
+  /// One set less of [Task.exercise] in [Task.workout], an accessory on the side that's ahead.
+  dropSet,
+}
+
 /// Something worth doing, derived from the data: why, and (where possible) a one-tap fix. A task
 /// disappears by itself once its reason is gone; [id] stays the same while the reason does, so it can
 /// be put off.
@@ -18,26 +27,25 @@ class Task {
   final String id, title, why;
   final TaskKind kind;
 
-  /// The fix: add [exercise] to [workout], or with [addSet] one more set of it there. [why] then starts
-  /// with it, so the two lines on the home screen say what the button does.
+  /// Training advice: an optional [fix] for [exercise] in [workout]; without one it's a hint only.
   final Workout? workout;
   final String? exercise;
-  final bool addSet;
-  const Task(this.id, this.kind, this.title, this.why, {this.workout, this.exercise, this.addSet = false});
+  final Fix? fix;
+  const Task(this.id, this.kind, this.title, this.why, {this.workout, this.exercise, this.fix});
 
   /// Button label for the fix, null = no button.
   String? get action => switch (kind) {
-        TaskKind.balance => workout == null ? null : (addSet ? '+1 Satz' : 'Hinzufügen'),
+        TaskKind.balance => switch (fix) { Fix.moveUp => 'Vorziehen', Fix.dropSet => '−1 Satz', null => null },
         TaskKind.bodyWeight => 'Eintragen',
         TaskKind.muscles => 'Festlegen',
         TaskKind.week => null,
       };
 }
 
-/// What helps a muscle group that falls behind: exercises that already train it specifically (then one
-/// more set of the one in the plan), else the exercise to add. Picked to need little equipment and to
-/// target the gap: knee flexion for the hamstrings (Nordic curls also cut strains), rows for the
-/// upper back, pulling from above for the lats.
+/// What trains a muscle group that falls behind: exercises that do it specifically, and the one to
+/// suggest when none is planned. Picked to need little equipment and to target the gap: knee flexion
+/// for the hamstrings (Nordic curls also cut strains), rows for the upper back, pulling from above for
+/// the lats.
 const _remedies = <String, (List<String>, String)>{
   'Oberer Rücken': (['Langhantelrudern', 'Kurzhantelrudern', 'Kabelrudern'], 'Kurzhantelrudern'),
   'Brust': (['Bankdrücken', 'Kurzhantel-Bankdrücken', 'Dips'], 'Kurzhantel-Bankdrücken'),
@@ -59,9 +67,11 @@ bool _isAdvice(String id) => id.startsWith('balance:');
 
 /// Open tasks, situational and few. Training advice comes only from opposing muscles: once there's a
 /// baseline and the last advice is a week old, the pair furthest off its guide range in the last four
-/// weeks, with a fix for the workout up next. So whoever trains chest but never the back gets told to
-/// row; muscles left out on both sides (no legs at all, no calves) are the program's choice. Besides it only what's due right now: the
-/// weekly goal when the days get tight, own exercises without muscles, a body weight that's gone stale.
+/// weeks, as a hint where to focus. It never adds work; by cause (see [_balanceTip]) it suggests moving
+/// an exercise that got skipped up, or dropping a set of an accessory on the side that's ahead.
+/// Muscles left out on both sides (no legs at all, no calves) are the program's choice. Besides it only
+/// what's due right now: the weekly goal when the days get tight, own exercises without muscles, a body
+/// weight that's gone stale.
 /// [sessions] newest first; [snoozed]: id → put off until.
 List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
     {int perWeek = 3, Map<String, DateTime> snoozed = const {}, DateTime? lastAdvice}) {
@@ -73,19 +83,6 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
   DateTime lastOf(Workout w) => sessions.where((s) => s.workoutId == w.id).firstOrNull?.date ?? DateTime(0);
   final upNext = [...workouts]..sort((a, b) => lastOf(a).compareTo(lastOf(b)));
 
-  // The fix for a group: one more set of an exercise already planned for it, else add the remedy.
-  Task fix(String id, TaskKind kind, String title, String why, List<String> specific, String add) {
-    for (final w in upNext) {
-      for (final name in specific) {
-        if (w.exercises.any((e) => e.name == name)) {
-          return Task(id, kind, title, '1 Satz $name mehr in ${w.name}. $why', workout: w, exercise: name, addSet: true);
-        }
-      }
-    }
-    final w = upNext.first;
-    return Task(id, kind, title, '$add in ${w.name} aufnehmen. $why', workout: w, exercise: add);
-  }
-
   final baseline = sessions.length >= baselineTrainings && now.difference(sessions.last.date).inDays >= 14;
   if (baseline && (lastAdvice == null || now.difference(lastAdvice) >= advicePause)) {
     // Candidates with how far off they are; the worst one not put off becomes the advice.
@@ -94,14 +91,8 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
     for (final b in balances(recent, weeks: 4)) {
       final lagging = b.lagging;
       if (lagging == null || !_remedies.containsKey(lagging)) continue;
-      final (specific, add) = _remedies[lagging]!;
       final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
-      final range = b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %';
-      candidates.add((
-        gap,
-        () => fix('balance:${b.pair.name}', TaskKind.balance, '$lagging stärken',
-            '${b.title}: ${b.b} bei ${(b.ratio * 100).floor()} %, Richtwert $range.', specific, add),
-      ));
+      candidates.add((gap, () => _balanceTip(b, recent, upNext)));
     }
     // Worst first; on a tie the order of the pairs stays.
     final ranked = [for (final (i, c) in candidates.indexed) (i, c)]
@@ -146,6 +137,80 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
     result.add(Task('bodyweight', TaskKind.bodyWeight, 'Körpergewicht eintragen', 'Zuletzt vor ${now.difference(last.date).inDays} Tagen.'));
   }
   return [for (final t in result) if (!off(t.id)) t];
+}
+
+/// "6", "6,5": a number with at most one decimal, German style.
+String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1).replaceAll('.', ',');
+
+/// The advice for a pair off balance: the numbers, then a tip by cause.
+/// - By strength (1RM): keep raising the side behind, it catches up; no button, more sets won't fix it.
+/// - By sets, planned but skipped or broken off (the usual reason: no time left at the end): move it
+///   up in the plan.
+/// - By sets and planned that way, with an accessory on the side ahead: one set less there.
+/// - Else the main lifts stay as planned, and the side behind (or what to add, if nothing trains it)
+///   is named without touching the plan.
+Task _balanceTip(Balance b, List<Session> recent, List<Workout> upNext) {
+  final lagging = b.lagging!;
+  final behindB = lagging == b.bGroup;
+  final id = 'balance:${b.pair.name}', title = 'Fokus $lagging';
+  final range = b.high.isFinite ? '${(b.low * 100).round()}–${(b.high * 100).round()} %' : 'ab ${(b.low * 100).round()} %';
+  final unit = b.strength ? ' kg 1RM' : ' Sätze/Woche';
+  final numbers = '${b.a} ${_num(b.aValue)} : ${b.b} ${_num(b.bValue)}$unit (${(b.ratio * 100).floor()} %, Richtwert $range).';
+  Task hint(String tip) => Task(id, TaskKind.balance, title, '$numbers $tip');
+
+  if (b.strength) {
+    return hint('${behindB ? b.b : b.a} weiter steigern, das holt auf.');
+  }
+
+  // Planned on the side behind, but sets left out: done against planned, per exercise.
+  final behind = behindB ? 1 : 0;
+  final skipped = <String, int>{};
+  var planned = [0.0, 0.0];
+  for (final s in recent) {
+    for (final e in s.exercises) {
+      if (e.cardio) continue;
+      final side = sideOf(b.pair, e.name);
+      if (side == null) continue;
+      planned[side] += e.reps.length;
+      if (side == behind && e.setsDone < e.reps.length) skipped[e.name] = (skipped[e.name] ?? 0) + 1;
+    }
+  }
+  final plannedRatio = planned[0] == 0 ? double.infinity : planned[1] / planned[0];
+  if (skipped.isNotEmpty && plannedRatio >= b.low && plannedRatio <= b.high) {
+    final name = (skipped.entries.toList()..sort((x, y) => y.value.compareTo(x.value))).first.key;
+    final n = skipped[name]!;
+    final tip = '$name in 4 Wochen ${n == 1 ? 'einmal' : '$n×'} ausgelassen oder abgebrochen.';
+    for (final w in upNext) {
+      final i = w.exercises.indexWhere((e) => e.name == name);
+      if (i >= 0 && _earlierSlot(w) < i) {
+        return Task(id, TaskKind.balance, title, '$numbers $tip Vor die Zusatzübungen ziehen?',
+            workout: w, exercise: name, fix: Fix.moveUp);
+      }
+    }
+    return hint('$tip Lieber früher im Training einplanen.');
+  }
+
+  // Planned that way: an accessory ahead can give up a set.
+  final ahead = 1 - behind;
+  for (final w in upNext) {
+    for (final e in w.exercises) {
+      if (!e.cardio && e.sets > 1 && !heavyLifts.contains(e.name) && sideOf(b.pair, e.name) == ahead) {
+        return Task(id, TaskKind.balance, title, '$numbers Ein Satz weniger ${e.name} in ${w.name} gleicht aus.',
+            workout: w, exercise: e.name, fix: Fix.dropSet);
+      }
+    }
+  }
+  final (specific, suggest) = _remedies[lagging]!;
+  final trains = [for (final w in upNext) for (final e in w.exercises) if (sideOf(b.pair, e.name) == behind || specific.contains(e.name)) e.name];
+  return hint(trains.isEmpty
+      ? 'Nichts im Plan trainiert das, zum Beispiel $suggest.'
+      : 'Grundübungen bleiben wie geplant, ${trains.first} nicht auslassen und weiter steigern.');
+}
+
+/// Where an exercise moved up goes: right after the main lifts at the start, before the first accessory.
+int _earlierSlot(Workout w) {
+  final i = w.exercises.indexWhere((e) => !heavyLifts.contains(e.name));
+  return i < 0 ? w.exercises.length : i;
 }
 
 /// Tasks put off: id → until when, kept in the preferences.
@@ -195,21 +260,29 @@ Future<void> runTask(BuildContext context, Task t) async {
       final w = t.workout!, name = t.exercise!;
       final before = w.copy();
       final changed = w.copy();
-      if (t.addSet) {
-        final e = changed.exercises.firstWhere((e) => e.name == name);
-        e
-          ..sets += 1
-          ..setWeights = e.setWeights == null ? null : [...e.setWeights!, e.setWeights!.last]
-          ..setReps = e.setReps == null ? null : [...e.setReps!, e.setReps!.last];
-      } else {
-        changed.exercises.add(knownExercise(name));
+      final i = changed.exercises.indexWhere((e) => e.name == name);
+      if (i < 0) return;
+      final e = changed.exercises[i];
+      switch (t.fix) {
+        case Fix.moveUp:
+          changed.exercises
+            ..removeAt(i)
+            ..insert(_earlierSlot(changed), e);
+        case Fix.dropSet:
+          e
+            ..sets -= 1
+            ..setWeights = e.setWeights?.sublist(0, e.sets)
+            ..setReps = e.setReps?.sublist(0, e.sets);
+        case null:
+          return;
       }
       await store.saveWorkout(changed);
       // The numbers only move after a few trainings: until then the advice is done.
       await snoozeTask(t.id, days: 28);
       messenger.showSnackBar(SnackBar(
-        content: Text(t.addSet ? '$name in ${w.name}: jetzt ${changed.exercises.firstWhere((e) => e.name == name).sets} Sätze'
-            : '$name zu ${w.name} hinzugefügt'),
+        content: Text(t.fix == Fix.moveUp
+            ? '$name in ${w.name} vorgezogen'
+            : '$name in ${w.name}: jetzt ${e.sets} ${e.sets == 1 ? 'Satz' : 'Sätze'}'),
         action: SnackBarAction(
           label: 'Rückgängig',
           onPressed: () async {

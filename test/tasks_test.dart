@@ -43,9 +43,10 @@ void main() {
     final s = starting(8); // 15 days, no pulling at all
     final t = tasks(s, [a, b], now);
     expect(t, hasLength(1), reason: 'one piece of advice, never a list');
-    expect((t.single.id, t.single.title), ('balance:pushPullFlat', 'Oberer Rücken stärken'));
-    expect((t.single.workout, t.single.exercise, t.single.addSet), (b, 'Kurzhantelrudern', false), reason: 'B is up next');
-    expect(t.single.why, startsWith('Kurzhantelrudern in B aufnehmen. '));
+    expect((t.single.id, t.single.title), ('balance:pushPullFlat', 'Fokus Oberer Rücken'));
+    expect((t.single.fix, t.single.action), (null, null), reason: 'a hint, the plan stays as it is');
+    expect(t.single.why, 'Drücken 3 : Rudern 0 Sätze/Woche (0 %, Richtwert ab 100 %). '
+        'Nichts im Plan trainiert das, zum Beispiel Kurzhantelrudern.');
 
     expect(tasks(s, [a, b], now, lastAdvice: now.subtract(const Duration(days: 3))), isEmpty, reason: 'pause after advice');
     final next = tasks(s, [a, b], now,
@@ -58,7 +59,7 @@ void main() {
     expect(tasks(dropped, [a, b], now, snoozed: both), isEmpty, reason: 'calves dropped: no antagonist, no advice');
     final chestOnly = Workout(name: 'Brust', exercises: [Exercise(name: 'Bankdrücken', weight: 80, sets: 5, reps: 5)]);
     final chest = [for (var i = 0; i < 8; i++) at(chestOnly, 1 + 2 * i)];
-    expect(tasks(chest, [chestOnly], now).single.title, 'Oberer Rücken stärken', reason: 'chest without back: row');
+    expect(tasks(chest, [chestOnly], now).single.title, 'Fokus Oberer Rücken', reason: 'chest without back: row');
 
     // Situational: own exercise without muscles; body weight only if tracked and gone stale.
     final own = Workout(name: 'C', exercises: [Exercise(name: 'Meditation', weight: 0, sets: 1, reps: 10)]);
@@ -78,34 +79,89 @@ void main() {
     expect(tasks([at(a, -2)], [a, b], sunday, perWeek: 2), isEmpty, reason: 'first week of training');
   });
 
-  testWidgets('task card: Hinzufügen changes the plan, puts the advice away, undo brings both back', (tester) async {
+  test('balance advice by cause: never more work', () {
+    // Eight trainings over 15 days; [change] edits each one.
+    List<Session> eight(Workout w, [void Function(Session s, int i)? change]) => [
+          for (var i = 0; i < 8; i++) at(w, 1 + 2 * i),
+        ]..indexed.forEach((x) => change?.call(x.$2, x.$1));
+
+    // Pull-ups planned as often as the press, but left out at the end: move them up.
+    final ohp = Workout(name: 'O', exercises: [
+      Exercise(name: 'Schulterdrücken', weight: 50, sets: 3, reps: 5),
+      Exercise(name: 'Bizepscurls', weight: 20, sets: 3, reps: 10),
+      Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 5),
+    ]);
+    final skipped = tasks(eight(ohp, (s, i) {
+      if (i.isEven) s.exercises.last.reps.fillRange(0, 3, null);
+    }), [ohp], now).single;
+    expect((skipped.title, skipped.fix, skipped.exercise, skipped.action), ('Fokus Latissimus', Fix.moveUp, 'Klimmzüge', 'Vorziehen'));
+    expect(skipped.why, endsWith('Klimmzüge in 4 Wochen 4× ausgelassen oder abgebrochen. Vor die Zusatzübungen ziehen?'));
+
+    // Planned uneven with an accessory ahead: one set less there.
+    final push = Workout(name: 'P', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Dips', weight: 0, sets: 3, reps: 10),
+      Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
+    ]);
+    final drop = tasks(eight(push), [push], now).single;
+    expect((drop.title, drop.fix, drop.exercise, drop.action), ('Fokus Oberer Rücken', Fix.dropSet, 'Dips', '−1 Satz'));
+    expect(drop.why, endsWith('Ein Satz weniger Dips in P gleicht aus.'));
+
+    // Uneven, but only main lifts ahead: they stay, a hint only.
+    final main = Workout(name: 'M', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 5, reps: 5),
+      Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
+    ]);
+    final hint = tasks(eight(main), [main], now).single;
+    expect((hint.fix, hint.why),
+        (null, 'Drücken 10 : Rudern 6 Sätze/Woche (60 %, Richtwert ab 100 %). Grundübungen bleiben wie geplant, '
+            'Langhantelrudern nicht auslassen und weiter steigern.'));
+
+    // By strength: rows far behind the bench press, same sets. Raising them is the fix, not more sets.
+    final weak = Workout(name: 'S', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Langhantelrudern', weight: 40, sets: 3, reps: 5),
+    ]);
+    final strength = tasks(eight(weak), [weak], now).single;
+    expect((strength.id, strength.fix), ('balance:chestBack', null));
+    expect(strength.why, endsWith('kg 1RM (50 %, Richtwert 75–120 %). Langhantelrudern weiter steigern, das holt auf.'));
+  });
+
+  testWidgets('task card: −1 Satz changes the plan, puts the advice away, undo brings both back', (tester) async {
     prefs = await SharedPreferences.getInstance();
     sync = GitHubSync(prefs);
+    final push = Workout(name: 'P', exercises: [
+      Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),
+      Exercise(name: 'Dips', weight: 0, sets: 3, reps: 10),
+      Exercise(name: 'Langhantelrudern', weight: 70, sets: 3, reps: 5),
+    ]);
     await tester.runAsync(() async {
-      await store.saveWorkout(a);
-      await store.saveWorkout(b);
+      for (final w in [...store.workouts]) {
+        await store.deleteWorkout(w);
+      }
+      await store.saveWorkout(push);
     });
     store.sessions
       ..clear()
-      ..addAll([for (var i = 0; i < 8; i++) at(i.isEven ? a : b, 1 + 2 * i)].map((s) =>
+      ..addAll([for (var i = 0; i < 8; i++) at(push, 1 + 2 * i)].map((s) =>
           Session.fromJson({...s.toJson(), 'date': s.date.add(DateTime.now().difference(now)).toIso8601String()})));
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: TasksCard()))));
-    expect(find.text('Oberer Rücken stärken'), findsOneWidget);
+    expect(find.text('Fokus Oberer Rücken'), findsOneWidget);
 
-    await tester.tap(find.text('Hinzufügen'));
+    await tester.tap(find.text('−1 Satz'));
     await tester.pumpAndSettle();
-    expect(store.workouts.firstWhere((w) => w.id == b.id).exercises.last.name, 'Kurzhantelrudern');
-    expect(find.text('Oberer Rücken stärken'), findsNothing, reason: 'done until the numbers can move');
-    expect(find.text('Latissimus stärken'), findsNothing, reason: 'the next advice waits a week');
+    Exercise dips() => store.workouts.single.exercises.firstWhere((e) => e.name == 'Dips');
+    expect(dips().sets, 2);
+    expect(find.text('Fokus Oberer Rücken'), findsNothing, reason: 'done until the numbers can move');
 
     await tester.tap(find.text('Rückgängig'));
     await tester.pumpAndSettle();
-    expect(store.workouts.firstWhere((w) => w.id == b.id).exercises.map((e) => e.name), isNot(contains('Kurzhantelrudern')));
-    expect(find.text('Oberer Rücken stärken'), findsOneWidget);
+    expect(dips().sets, 3);
+    expect(find.text('Fokus Oberer Rücken'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Später (2 Wochen ausblenden)'));
     await tester.pumpAndSettle();
-    expect(find.text('Oberer Rücken stärken'), findsNothing);
+    expect(find.text('Fokus Oberer Rücken'), findsNothing);
     expect(snoozedTasks.keys, contains('balance:pushPullFlat'));
   });
 }

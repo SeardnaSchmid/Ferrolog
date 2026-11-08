@@ -267,6 +267,27 @@ bool _odd(String k) => const ['kurzhantel', 'dumbbell', 'schraeg', 'incline', 's
       'negativ', 'decline', 'hack', 'maschine', 'machine', 'kabel', 'cable', 'tbar']
     .any(k.contains);
 
+/// Which side of a pair by sets an exercise counts on: 0 for side a, 1 for side b, null for neither.
+/// Pressing: chest (flat), or shoulders with the triceps helping (overhead). Pulling: rows train the
+/// middle back (flat), pull-ups and pulldowns only the lats (from above). Legs by the primary muscle.
+int? sideOf(Pair pair, String name) {
+  final (p, sec) = musclesOf(name) ?? (0, 0);
+  bool has(int bits, Muscle m) => bits & m.bit != 0;
+  final push = has(p, Muscle.middleBack) || has(p, Muscle.lats)
+      ? null
+      : has(p, Muscle.chest)
+          ? Pair.pushPullFlat
+          : has(p, Muscle.shoulders) && has(sec, Muscle.triceps)
+              ? Pair.pushPullOverhead
+              : null;
+  return switch (pair) {
+    Pair.pushPullFlat => has(p, Muscle.middleBack) ? 1 : push == Pair.pushPullFlat ? 0 : null,
+    Pair.pushPullOverhead => !has(p, Muscle.middleBack) && has(p, Muscle.lats) ? 1 : push == Pair.pushPullOverhead ? 0 : null,
+    Pair.quadsHamstrings => has(p, Muscle.quadriceps) ? 0 : has(p, Muscle.hamstrings) ? 1 : null,
+    Pair.chestBack || Pair.squatHinge => null,
+  };
+}
+
 /// Pairs that drift apart easily, from [sessions] (newest first) over [weeks]. Guide values:
 /// - Brust ↔ oberer Rücken by strength: barbell rows at 75–120 % of the bench press (coaching practice),
 /// - Quadrizeps ↔ hintere Kette by strength: the deadlift at 100–140 % of the squat (in powerlifting
@@ -312,22 +333,19 @@ List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
         ('Beinbeuger', 'Beinbeuger', hams / weeks), .6, double.infinity));
   }
 
-  // Pressing: chest (flat), or shoulders with the triceps helping (overhead). Pulling: rows train the
-  // middle back (flat), pull-ups and pulldowns only the lats (from above).
   var (pushFlat, pushUp, pullFlat, pullUp) = (0.0, 0.0, 0.0, 0.0);
   for (final s in sessions) {
     for (final e in s.exercises) {
       if (e.cardio || e.setsDone == 0) continue;
-      final (p, sec) = musclesOf(e.name) ?? (0, 0);
-      bool has(int bits, Muscle m) => bits & m.bit != 0;
-      if (has(p, Muscle.middleBack)) {
-        pullFlat += e.setsDone;
-      } else if (has(p, Muscle.lats)) {
-        pullUp += e.setsDone;
-      } else if (has(p, Muscle.chest)) {
-        pushFlat += e.setsDone;
-      } else if (has(p, Muscle.shoulders) && has(sec, Muscle.triceps)) {
-        pushUp += e.setsDone;
+      switch ((sideOf(Pair.pushPullFlat, e.name), sideOf(Pair.pushPullOverhead, e.name))) {
+        case (0, _):
+          pushFlat += e.setsDone;
+        case (1, _):
+          pullFlat += e.setsDone;
+        case (_, 0):
+          pushUp += e.setsDone;
+        case (_, 1):
+          pullUp += e.setsDone;
       }
     }
   }
