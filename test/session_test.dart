@@ -16,6 +16,7 @@ void main() {
 
   testWidgets('weight sheet applies to this set, open sets or all sets', (tester) async {
     SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance(); // settings: screen on, rest signal
     unit.value = WeightUnit.kg; // the test locale is en-US, which would default to lb
     store = await Store.open();
     final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5)]);
@@ -114,7 +115,6 @@ void main() {
   });
 
   testWidgets('timed set: a tap starts the countdown, at 0 the set is done and the rest starts', (tester) async {
-    prefs = await SharedPreferences.getInstance(); // the end signal reads its settings
     final w = Workout(name: 'Carry', exercises: [
       Exercise(name: 'Farmers Walk', weight: 24, sets: 2, reps: 1, restSeconds: 90, timed: true),
     ]);

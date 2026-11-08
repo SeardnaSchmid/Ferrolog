@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   testWidgets('logging a set at the bottom keeps its exercise above the rest timer', (tester) async {
     SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
     unit.value = WeightUnit.kg;
     store = await Store.open();
     final w = Workout(name: 'Lang', exercises: [

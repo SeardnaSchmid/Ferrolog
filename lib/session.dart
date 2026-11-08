@@ -79,11 +79,13 @@ class _SessionPageState extends State<SessionPage> {
   void initState() {
     super.initState();
     ticker; // start
+    if (prefs.getBool('session.keepScreenOn') ?? true) keepScreenOn(true);
   }
 
   @override
   void dispose() {
     ticker.cancel();
+    keepScreenOn(false);
     super.dispose();
   }
 
@@ -692,6 +694,15 @@ RestZone restZone(int left, int target) => left <= -30
 enum WeightScope { set, open, all }
 
 const _alert = MethodChannel('ferrolog/alert');
+
+/// Keeps the display on while [on] (Android, see MainActivity.kt); elsewhere nothing.
+Future<void> keepScreenOn(bool on) async {
+  try {
+    await _alert.invokeMethod('keepScreenOn', {'on': on});
+  } on MissingPluginException {
+    // web, tests
+  }
+}
 
 /// Plays the notification sound and/or vibrates (Android, see MainActivity.kt).
 Future<void> restAlert() async {

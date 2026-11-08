@@ -104,6 +104,8 @@ class _SyncSettingsState extends State<SyncSettings> {
             ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt'),
             ('session.autoFinish', Icons.timer_off_outlined, 'Automatisch beenden',
                 'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz'),
+            ('session.keepScreenOn', Icons.light_mode_outlined, 'Bildschirm anlassen',
+                'Während des Trainings geht das Display nicht aus'),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
