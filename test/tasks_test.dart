@@ -65,8 +65,17 @@ void main() {
     expect(tasks(starting(2), [a, own], now).map((x) => x.id), ['muscles:Meditation']);
     expect(tasks([at(a, 1), at(b, 40, bodyWeight: 80)], [a, b], now).single.why, 'Zuletzt vor 40 Tagen.');
     expect(tasks([at(a, 1, bodyWeight: 80)], [a, b], now), isEmpty);
-    final sunday = DateTime(2026, 11, 8, 12);
-    expect(tasks([at(a, -4)], [a, b], sunday).single.title, 'Noch 2 Trainings diese Woche');
+
+    // Weekly goal: only when tight and still doable one a day, not right after training, not in the first week.
+    final saturday = DateTime(2026, 11, 7, 12), sunday = DateTime(2026, 11, 8, 12);
+    final lastWeek = [at(a, 6), at(b, 8)];
+    final due = tasks(lastWeek, [a, b], sunday, perWeek: 1).single;
+    expect((due.title, due.why), ('Noch 1 Training diese Woche', 'Für dein Wochenziel von 1, heute ist der letzte Tag.'));
+    expect(tasks(lastWeek, [a, b], sunday, perWeek: 3), isEmpty, reason: 'three on the last day: not doable');
+    expect(tasks([at(a, -4), ...lastWeek], [a, b], sunday, perWeek: 2), isEmpty, reason: 'trained today: no second one');
+    expect(tasks([at(a, -3), ...lastWeek], [a, b], saturday, perWeek: 2).single.why,
+        'Für dein Wochenziel von 2, morgen ist der letzte Tag.');
+    expect(tasks([at(a, -2)], [a, b], sunday, perWeek: 2), isEmpty, reason: 'first week of training');
   });
 
   testWidgets('task card: Hinzufügen changes the plan, puts the advice away, undo brings both back', (tester) async {

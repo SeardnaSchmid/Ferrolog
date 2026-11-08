@@ -114,14 +114,22 @@ List<Task> tasks(List<Session> sessions, List<Workout> workouts, DateTime now,
     }
   }
 
-  // Weekly goal, only when the days left get tight.
+  // Weekly goal, only when the days left get tight and it can still be made, one training a day. Not in
+  // the week of the very first training, and today counts no more once trained.
   final monday = mondayOf(now);
   final needed = perWeek - sessions.where((s) => !s.date.isBefore(monday)).length;
-  final daysLeft = 8 - now.weekday; // today included
-  if (sessions.isNotEmpty && needed > 0 && needed >= daysLeft - 1) {
+  final trainedToday = sessions.any((s) => !s.date.isBefore(DateTime(now.year, now.month, now.day)));
+  final daysLeft = 8 - now.weekday - (trainedToday ? 1 : 0); // today included unless trained
+  final firstWeek = sessions.isNotEmpty && !sessions.last.date.isBefore(monday);
+  if (sessions.isNotEmpty && !firstWeek && needed > 0 && needed <= daysLeft && needed >= daysLeft - 1) {
     final week = '${monday.year}-${monday.month}-${monday.day}';
+    final when = daysLeft > 1
+        ? 'noch $daysLeft Tage'
+        : trainedToday
+            ? 'morgen ist der letzte Tag'
+            : 'heute ist der letzte Tag';
     result.add(Task('week:$week', TaskKind.week, needed == 1 ? 'Noch 1 Training diese Woche' : 'Noch $needed Trainings diese Woche',
-        'Für dein Wochenziel von $perWeek, ${daysLeft == 1 ? 'heute ist der letzte Tag' : 'noch $daysLeft Tage'}.'));
+        'Für dein Wochenziel von $perWeek, $when.'));
   }
 
   // Own exercises without known muscles don't count in the muscle map and the balance.
