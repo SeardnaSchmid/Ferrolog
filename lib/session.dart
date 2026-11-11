@@ -22,7 +22,14 @@ class SessionPage extends StatefulWidget {
 
 class _SessionPageState extends State<SessionPage> {
   Session get s => widget.session;
-  DateTime? lastSetAt, pausedAt;
+
+  // The rest lives in the session, so it survives leaving the page and the app being killed.
+  DateTime? get lastSetAt => s.restStartedAt;
+  set lastSetAt(DateTime? t) => s.restStartedAt = t;
+  DateTime? get pausedAt => s.restPausedAt;
+  set pausedAt(DateTime? t) => s.restPausedAt = t;
+  int get restTarget => s.restSeconds ?? 0;
+  set restTarget(int seconds) => s.restSeconds = seconds;
   ExerciseLog? touched; // highlighted: the exercise last logged or edited
 
   /// Estimates from the trainings before this one; they don't change while training.
@@ -46,7 +53,6 @@ class _SessionPageState extends State<SessionPage> {
 
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
-  int restTarget = 0;
   bool alerted = false;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
     // Ended elsewhere (finished automatically after a long break, see Store.autoFinish): close.
@@ -82,28 +88,36 @@ class _SessionPageState extends State<SessionPage> {
   });
 
   /// Seconds of rest left; negative once the rest is over.
-  int get restLeft => restTarget - (pausedAt ?? DateTime.now()).difference(lastSetAt!).inSeconds;
+  int get restLeft => s.restLeft(DateTime.now())!;
 
-  void restartRest() => setState(() {
-        lastSetAt = DateTime.now();
-        if (pausedAt != null) pausedAt = lastSetAt;
-        alerted = false;
-      });
+  void restartRest() {
+    setState(() {
+      lastSetAt = DateTime.now();
+      if (pausedAt != null) pausedAt = lastSetAt;
+      alerted = false;
+    });
+    store.saveActive(s);
+  }
 
-  void toggleRestPause() => setState(() {
-        final now = DateTime.now();
-        if (pausedAt == null) {
-          pausedAt = now;
-        } else {
-          lastSetAt = lastSetAt!.add(now.difference(pausedAt!));
-          pausedAt = null;
-        }
-      });
+  void toggleRestPause() {
+    setState(() {
+      final now = DateTime.now();
+      if (pausedAt == null) {
+        pausedAt = now;
+      } else {
+        lastSetAt = lastSetAt!.add(now.difference(pausedAt!));
+        pausedAt = null;
+      }
+    });
+    store.saveActive(s);
+  }
 
   @override
   void initState() {
     super.initState();
     ticker; // start
+    // Reopened after the rest ran out: it already signalled (or the app was away), not again.
+    alerted = lastSetAt != null && restLeft <= 0;
     // A timed set running when the app was closed carries on.
     for (final log in s.exercises) {
       if (log.timed && log.startedAt != null) {
@@ -178,7 +192,7 @@ class _SessionPageState extends State<SessionPage> {
           log.startedAt = start;
           holdGo = leadIn == 0;
           holdLow = false;
-          lastSetAt = null; // the rest is over once the next hold starts
+          lastSetAt = pausedAt = null; // the rest is over once the next hold starts
         }
       });
       store.saveActive(s);

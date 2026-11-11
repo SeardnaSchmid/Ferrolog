@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/session.dart';
@@ -196,5 +198,60 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     expect(calls, ['false'], reason: 'switching off is harmless and covers a setting changed mid-training');
     await prefs.remove('session.showWhenLocked');
+  });
+
+  testWidgets('the rest survives leaving the page and the app being killed, paused too', (tester) async {
+    final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5, restSeconds: 120)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.tap(find.text('–/5', findRichText: true).first);
+    await tester.pump();
+    expect(find.text('von 2:00'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); // back to the home screen
+
+    // Reopened 30 s later, after the app was killed: read back from the stored training.
+    s.restStartedAt = s.restStartedAt!.subtract(const Duration(seconds: 30));
+    await store.saveActive(s);
+    final reloaded = (await Store.open()).active!;
+    expect((reloaded.restSeconds, reloaded.restPausedAt), (120, null));
+    store.active = reloaded; // the page closes when its training isn't the running one
+    await tester.pumpWidget(MaterialApp(home: SessionPage(reloaded)));
+    expect(find.text('1:30'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Anhalten'));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    final paused = (await Store.open()).active!;
+    expect(paused.restPausedAt, isNotNull, reason: 'the pause is saved right away');
+    store.active = paused;
+    await tester.pumpWidget(MaterialApp(home: SessionPage(paused)));
+    expect(find.text('ANGEHALTEN'), findsOneWidget);
+    expect(find.text('1:30'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+
+    await store.finishSession(paused);
+    expect((paused.restStartedAt, paused.restSeconds, paused.restPausedAt), (null, null, null));
+    expect(jsonEncode(paused.toJson()), isNot(contains('rest')), reason: 'never in the history or the export');
+  });
+
+  test('rest fields: JSON round trip, omitted when unset', () {
+    final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5)]);
+    final s = Session.start(w);
+    expect(s.toJson().keys.where((k) => k.startsWith('rest')), isEmpty);
+    expect(s.restLeft(DateTime.now()), isNull);
+    final t = DateTime(2026, 11, 11, 18);
+    s
+      ..restStartedAt = t
+      ..restSeconds = 90
+      ..restPausedAt = t.add(const Duration(seconds: 20));
+    final back = Session.fromJson(jsonDecode(jsonEncode(s.toJson())));
+    expect((back.restStartedAt, back.restSeconds, back.restPausedAt), (t, 90, t.add(const Duration(seconds: 20))));
+    expect(back.restLeft(t.add(const Duration(hours: 1))), 70, reason: 'paused: the clock stands');
+    expect((back..restPausedAt = null).restLeft(t.add(const Duration(seconds: 100))), -10);
   });
 }

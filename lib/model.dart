@@ -425,6 +425,12 @@ class Session {
   /// Circumstances picked after it instead of typing, e.g. "Schlecht geschlafen"; see [noteTags].
   List<String> tags;
 
+  /// The rest between sets while training: when it started (shifted forward by pauses), its length
+  /// in seconds and, while paused, since when. Stored with the running training so leaving the page
+  /// or the app being killed doesn't lose it; cleared on finish, so never in the history.
+  DateTime? restStartedAt, restPausedAt;
+  int? restSeconds;
+
   Session({
     String? id,
     required this.workoutId,
@@ -437,6 +443,9 @@ class Session {
     this.note,
     this.mood,
     List<String>? tags,
+    this.restStartedAt,
+    this.restSeconds,
+    this.restPausedAt,
   })  : id = id ?? newId(),
         tags = tags ?? [],
         date = date ?? DateTime.now();
@@ -444,6 +453,11 @@ class Session {
   int get setsDone => exercises.fold(0, (n, e) => n + e.setsDone);
 
   Duration? get duration => finishedAt?.difference(date);
+
+  /// Seconds of rest left at [now]; negative once it's over, null without a rest.
+  int? restLeft(DateTime now) => restStartedAt == null
+      ? null
+      : (restSeconds ?? 0) - (restPausedAt ?? now).difference(restStartedAt!).inSeconds;
 
   factory Session.start(Workout w) => Session(
         workoutId: w.id,
@@ -476,6 +490,9 @@ class Session {
         if (note != null) 'note': note,
         if (mood != null) 'mood': mood,
         if (tags.isNotEmpty) 'tags': tags,
+        if (restStartedAt != null) 'restStartedAt': restStartedAt!.toIso8601String(),
+        if (restSeconds != null) 'restSeconds': restSeconds,
+        if (restPausedAt != null) 'restPausedAt': restPausedAt!.toIso8601String(),
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 
@@ -490,6 +507,9 @@ class Session {
         note: j['note'],
         mood: j['mood'],
         tags: j['tags'] == null ? null : List<String>.from(j['tags']),
+        restStartedAt: j['restStartedAt'] == null ? null : DateTime.parse(j['restStartedAt']),
+        restSeconds: j['restSeconds'],
+        restPausedAt: j['restPausedAt'] == null ? null : DateTime.parse(j['restPausedAt']),
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
@@ -624,6 +644,7 @@ class Store extends ChangeNotifier {
 
   Future<void> finishSession(Session s, {DateTime? at}) {
     s.finishedAt = at ?? DateTime.now();
+    s.restStartedAt = s.restPausedAt = s.restSeconds = null; // only for the running training
     active = null;
     _prefs.remove('$_key.active');
     sessions.insert(0, s);

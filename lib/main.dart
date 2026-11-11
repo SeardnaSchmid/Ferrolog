@@ -384,6 +384,26 @@ class _RemainingState extends State<Remaining> {
       );
 }
 
+/// The rest of a running training, "Pause 1:23" or "Pause angehalten", ticking every second;
+/// nothing once it's over, the training page has the signal for that.
+class RestLeft extends StatelessWidget {
+  final Session session;
+  final TextStyle? style;
+  const RestLeft(this.session, {super.key, this.style});
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder(
+        stream: Stream.periodic(const Duration(seconds: 1)),
+        builder: (context, _) {
+          final left = session.restLeft(DateTime.now());
+          if (left == null) return const SizedBox();
+          if (session.restPausedAt != null) return Text(' · Pause angehalten', style: style);
+          if (left <= 0) return const SizedBox();
+          return Text(' · Pause ${clock(left)}', style: style);
+        },
+      );
+}
+
 /// Dashed "+ Workout" button at the end of the workout list.
 class AddWorkoutButton extends StatelessWidget {
   const AddWorkoutButton({super.key});
@@ -486,6 +506,9 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
                     Text('Training läuft',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.onPrimaryContainer)),
                     Icon(Icons.expand_more, size: 18, color: c.onPrimaryContainer.withValues(alpha: .7)),
+                    RestLeft(s,
+                        style: TextStyle(
+                            fontSize: 15, fontFeatures: const [FontFeature.tabularFigures()], color: c.onPrimaryContainer)),
                   ]),
                   Text.rich(
                     TextSpan(children: [
