@@ -28,17 +28,21 @@ double shown(double kg) => switch (unit.value) {
 /// Displayed number → kg, unrounded so a typed 225 lb shows as 225 lb again.
 double toKg(double value) => unit.value == WeightUnit.lb ? value / lbPerKg : value;
 
-/// Weight without unit, German decimal comma: 82.5 kg → "82,5" (or "181,9" in lb).
+/// Weight without unit, German decimal comma: 82.5 kg → "82,5" (or "181,9" in lb). Assistance (a
+/// machine taking weight off, e.g. for pull-ups) is negative: "−10".
 String weightNum(double kg) {
   final v = shown(kg);
-  return (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString()).replaceAll('.', ',');
+  return (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString()).replaceAll('.', ',').replaceAll('-', '−');
 }
 
 /// Weight with unit, e.g. "82,5 kg".
+
+/// The lowest weight there is: this much assistance, in kg.
+const minWeight = -200.0;
 String weightLabel(double kg) => '${weightNum(kg)} $unitLabel';
 
-/// Parses a typed weight ("102,5" or "102.5") in the current unit and returns kg.
-double? parseWeight(String s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
+/// Parses a typed weight ("102,5", "102.5", "−10" for assistance) in the current unit and returns kg.
+double? parseWeight(String s) => switch (double.tryParse(s.trim().replaceAll(',', '.').replaceAll('−', '-'))) {
       final v? => toKg(v),
       null => null,
     };

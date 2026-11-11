@@ -456,7 +456,7 @@ List<(String, double, double)> strengthTrends(List<Session> sessions) {
     final four = <String, List<double>>{};
     for (final s in ordered) {
       for (final e in s.exercises) {
-        if (e.cardio || e.weight == 0 || e.setsDone == 0 || !family(searchKey(e.name))) continue;
+        if (e.cardio || e.weight <= 0 || e.setsDone == 0 || !family(searchKey(e.name))) continue;
         final list = four.putIfAbsent(e.name, () => []);
         if (list.length < 4) list.add(estimated1rm(e));
       }

@@ -729,7 +729,7 @@ class OverviewCard extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (up && i == 0) Icon(Icons.arrow_upward, size: 16, color: c.primary),
-                                  if (weight > 0) Text.rich(
+                                  if (weight != 0) Text.rich(
                                     TextSpan(
                                       children: [
                                         TextSpan(text: weightNum(weight)),
@@ -851,7 +851,7 @@ class MiniSetTile extends StatelessWidget {
             child: Text(r == null ? '–' : '$r$unit',
                 style: TextStyle(fontSize: 15, fontWeight: r == null ? FontWeight.w400 : FontWeight.w600, color: fg)),
           ),
-          if (weight > 0) ...[
+          if (weight != 0) ...[
             const SizedBox(height: 1),
             Container(
               height: 18,

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
+import 'package:ferrolog/units.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -170,6 +171,29 @@ void main() {
 
     final old = Exercise.fromJson({'name': 'X', 'weight': 50, 'sets': 3, 'reps': 5, 'increment': 0, 'decrement': 5});
     expect((old.up, old.increment, old.down, old.decrement), (false, 2.5, true, 5.0));
+  });
+
+  test('assistance: negative weight, up means less help, through 0 into added weight; no 1RM or volume', () {
+    unit.value = WeightUnit.kg;
+    final e = Exercise(name: 'Klimmzüge', weight: -20, sets: 3, reps: 5, up: true, down: true, failsToDeload: 1);
+    ExerciseLog log(double kg, List<int?> reps) => ExerciseLog(name: 'Klimmzüge', weight: kg, reps: reps, targetReps: 5);
+    e.applyResult(log(-20, [5, 5, 5]));
+    expect(e.weight, -17.5, reason: 'done: a step less help');
+    e.applyResult(log(-17.5, [5, 4, 3]));
+    expect(e.weight, -20, reason: 'deload: more help');
+    final near = Exercise(name: 'Klimmzüge', weight: -2.5, sets: 1, reps: 5, up: true);
+    near.applyResult(log(-2.5, [5]));
+    near.applyResult(log(0, [5]));
+    expect(near.weight, 2.5, reason: 'past 0 into added weight');
+    final light = Exercise(name: 'Dips', weight: 2.5, sets: 1, reps: 5, down: true, failsToDeload: 1, decrement: 5);
+    light.applyResult(ExerciseLog(name: 'Dips', weight: 2.5, reps: [2], targetReps: 5));
+    expect(light.weight, 0, reason: 'added weight never turns into assistance by itself');
+
+    expect((estimated1rm(log(-10, [5, 5, 5])), log(-10, [5, 5, 5]).volume), (0, 0));
+    expect((weightLabel(-10), weightNum(-12.5)), ('−10 kg', '−12,5'));
+    expect((parseWeight('−10'), parseWeight('-7,5')), (-10, -7.5));
+    final back = Exercise.fromJson(jsonDecode(jsonEncode(e.toJson())));
+    expect(back.weight, -20);
   });
 
   test('rep range: weight goes up only when every set reaches the top; custom reps per set', () {

@@ -46,7 +46,7 @@ List<(DateTime, int, int)> weeklySummary(List<Session> sessions, DateTime now, {
 /// Estimated one-rep max (Epley) from all sets: the average reps at the working weight, skipped
 /// sets counting 0. Missed reps lower it, so it shows how a training went, not just the plan.
 double estimated1rm(ExerciseLog log) {
-  if (log.cardio || log.timed || log.weight == 0 || log.reps.isEmpty) return 0;
+  if (log.cardio || log.timed || log.weight <= 0 || log.reps.isEmpty) return 0; // no 1RM with assistance
   final avg = log.reps.fold(0, (n, r) => n + (r ?? 0)) / log.reps.length;
   return avg == 0 ? 0 : log.weight * (1 + avg / 30);
 }
@@ -195,12 +195,16 @@ class Exercise {
     if (setWeights != null) {
       // Keep the per-set shape; take what was actually lifted when the set count still matches.
       final base = log.weights.length == sets ? log.weights : setWeights!;
-      setWeights = [for (final w in base) max(0.0, w + delta)];
+      setWeights = [for (final w in base) _next(w, delta)];
       weight = setWeights!.reduce(max);
     } else {
-      weight = max(0.0, log.weight + delta);
+      weight = _next(log.weight, delta);
     }
   }
+
+  /// [w] moved by [delta]: added weight never drops below none, assistance (negative) moves freely, so
+  /// "more weight" means less help: −20 → −17,5.
+  static double _next(double w, double delta) => w < 0 ? w + delta : max(0.0, w + delta);
 
   /// The planned weight of each set.
   List<double> get weights => setWeights ?? List.filled(sets, weight);
@@ -334,14 +338,14 @@ class ExerciseLog {
   int get targetReps => targets.first;
 
   /// Working weight: the heaviest set. Progression and stats build on it.
-  double get weight => weights.fold(0, max);
+  double get weight => weights.isEmpty ? 0 : weights.reduce(max); // negative: assistance
 
   bool get succeeded => cardio && targetKm != null
       ? reps.first != null && (km ?? 0) >= targetKm!
       : [for (final (i, r) in reps.indexed) r != null && r >= targets[i]].every((ok) => ok);
   int get setsDone => reps.where((r) => r != null).length;
   /// Weight × reps; nothing for holds, whose seconds aren't reps.
-  double get volume => timed ? 0 : [for (final (i, r) in reps.indexed) (r ?? 0) * weights[i]].fold(0, (a, b) => a + b);
+  double get volume => timed ? 0 : [for (final (i, r) in reps.indexed) (r ?? 0) * max(0.0, weights[i])].fold(0, (a, b) => a + b);
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -921,7 +925,7 @@ PeriodStats periodStats(List<Session> sessions, DateTime now, {int? days}) {
   for (final s in sessions.reversed) {
     final inside = from == null || s.date.isAfter(from);
     for (final e in s.exercises) {
-      if (e.cardio || e.weight == 0 || e.setsDone == 0) continue;
+      if (e.cardio || e.weight <= 0 || e.setsDone == 0) continue;
       if (inside) lifts.add(e.name);
       final b = best[e.name];
       if (b != null && e.weight > b && inside) {

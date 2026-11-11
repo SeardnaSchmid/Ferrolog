@@ -328,7 +328,7 @@ class _SessionPageState extends State<SessionPage> {
     final field = TextEditingController(text: weightNum(log.weights[i]));
     var scope = WeightScope.open;
     double? parse() => switch (parseWeight(field.text)) {
-          final kg? when kg >= 0 && kg <= 1000 => kg,
+          final kg? when kg >= minWeight && kg <= 1000 => kg,
           _ => null,
         };
     final result = await showModalBottomSheet<(double, WeightScope)>(
@@ -340,7 +340,7 @@ class _SessionPageState extends State<SessionPage> {
           final c = Theme.of(context).colorScheme;
           final w = parse();
           void nudge(int dir) {
-            final next = (shown(w ?? log.weights[i]) + dir * step).clamp(0, shown(1000)).toDouble();
+            final next = (shown(w ?? log.weights[i]) + dir * step).clamp(shown(minWeight), shown(1000)).toDouble();
             setSheet(() => field.text = weightNum(toKg(next)));
           }
 
@@ -370,13 +370,13 @@ class _SessionPageState extends State<SessionPage> {
                   Expanded(
                     child: TextField(
                       controller: field,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                           fontSize: 40, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
                       decoration: InputDecoration(
                         suffixText: unitLabel,
-                        errorText: w == null ? 'Gewicht zwischen 0 und ${weightLabel(1000)}' : null,
+                        errorText: w == null ? 'Gewicht zwischen ${weightLabel(minWeight)} und ${weightLabel(1000)}' : null,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                       onChanged: (_) => setSheet(() {}),

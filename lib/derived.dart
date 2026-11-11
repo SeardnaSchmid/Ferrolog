@@ -12,7 +12,7 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     '(perWeek = trainings per week, volume = kg × reps, volumeBefore = the same span before, recordLifts = lifts '
     'heavier than ever before, an exercise\'s first training sets no record). Per week everywhere (perWeek, '
     'setsPerMuscleWeek, balance) divides by the weeks of the period, or since the first training in it when that is '
-    'later, at least 1. exercises: per strength exercise (timed = held for seconds; bodyweight = no added weight; '
+    'later, at least 1. exercises: per strength exercise (timed = held for seconds; bodyweight = no added weight; assisted = negative weights, a machine taking weight off, more is less help, no 1RM; '
     'both without 1RM, with repsLast / repsBest = reps or seconds of all sets of a training) e1rm = estimated one-rep '
     'max (Epley, from the average reps of all sets), e1rmNow = best of the latest 4 trainings, trend over 28 days, '
     'only from 2 trainings on (up = 1RM, or reps × weight without one, +2 % or more, stuck = reps missed in 2 of the '
@@ -63,6 +63,7 @@ Map<String, dynamic> derivedStats(DateTime now) {
         () {
           final e1rm = [for (final (_, l) in h) estimated1rm(l)];
           final bodyweight = h.every((x) => x.$2.weight == 0);
+          final assisted = h.any((x) => x.$2.weight < 0);
           final total = [for (final (_, l) in h) l.reps.fold(0, (n, r) => n + (r ?? 0))];
           final out = setbacks(h);
           final trend = trendOf(h, now);
@@ -76,6 +77,7 @@ Map<String, dynamic> derivedStats(DateTime now) {
             'name': name,
             if (h.last.$2.timed) 'timed': true,
             if (bodyweight) 'bodyweight': true,
+            if (assisted) 'assisted': true,
             'trainings': h.length,
             'first': day(h.first.$1),
             'last': day(h.last.$1),

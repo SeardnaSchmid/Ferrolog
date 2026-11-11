@@ -383,7 +383,7 @@ List<Finding> _positives(List<Session> sessions, DateTime now) {
   // A record: heavier than ever before (not on an exercise's first training); the heaviest one.
   (String, double)? record;
   for (final l in last.exercises) {
-    if (l.cardio || l.setsDone == 0 || l.weight == 0) continue;
+    if (l.cardio || l.setsDone == 0 || l.weight <= 0) continue;
     final before = logsOf(l.name, sessions.skip(1));
     if (before.isNotEmpty && l.weight > before.map((x) => x.$2.weight).reduce(max) && l.weight > (record?.$2 ?? 0)) {
       record = (l.name, l.weight);
@@ -399,7 +399,7 @@ List<Finding> _positives(List<Session> sessions, DateTime now) {
   final window = [for (final s in sessions) if (now.difference(s.date).inDays <= 90) s];
   (String, double, double, DateTime)? gain;
   for (final l in last.exercises) {
-    if (l.cardio || l.weight == 0 || l.setsDone == 0 || l.name == record?.$1) continue;
+    if (l.cardio || l.weight <= 0 || l.setsDone == 0 || l.name == record?.$1) continue;
     final logs = logsOf(l.name, window);
     final (since, first) = logs.last;
     if (l.weight > first.weight && (gain == null || l.weight / first.weight > gain.$3 / gain.$2)) {

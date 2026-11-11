@@ -393,7 +393,7 @@ class _StatsPageState extends State<StatsPage> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name, style: const TextStyle(fontSize: 15)),
                   Text(
-                    logs.last.cardio || logs.last.timed || logs.last.weight == 0
+                    logs.last.cardio || logs.last.timed || logs.last.weight <= 0
                         ? exerciseLine(logs)
                         : '${logs.length}× · 1RM ${weightLabel(roundedKg(logs.map(estimated1rm).reduce(max)))}',
                     style: small,
@@ -521,7 +521,7 @@ class _StatsPageState extends State<StatsPage> {
       final best = <String, double>{};
       for (final s in sessions.reversed) {
         for (final e in s.exercises) {
-          if (e.cardio || e.weight == 0 || e.setsDone == 0) continue;
+          if (e.cardio || e.weight <= 0 || e.setsDone == 0) continue;
           if (best[e.name] case final b? when e.weight > b) records.add(s.date);
           if (e.weight > (best[e.name] ?? 0)) best[e.name] = e.weight;
         }
@@ -780,6 +780,7 @@ class _StatsPageState extends State<StatsPage> {
       final best = logs.map((l) => l.weight).reduce(max);
       return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze${best > 0 ? ' · bis ${weightLabel(best)}' : ''}';
     }
+    if (logs.last.weight < 0) return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze · zuletzt ${weightLabel(logs.last.weight)}';
     if (logs.last.weight == 0) return '$n · ${logs.fold(0, (s, l) => s + l.setsDone)} Sätze';
     return '$n · Gesamt ${volumeLabel(logs.fold(0.0, (v, l) => v + l.volume))}';
   }
@@ -934,7 +935,7 @@ class _ExerciseStatsState extends State<ExerciseStats> {
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: Text('Bestes 1RM ${weightLabel(roundedKg(best))}', style: const TextStyle(fontWeight: FontWeight.w600))),
-            if (!(history.lastOrNull?.$2.weight == 0)) TrendChip(trend),
+            if ((history.lastOrNull?.$2.weight ?? 0) > 0) TrendChip(trend),
           ]),
           const SizedBox(height: 12),
           if (shownHistory.isEmpty)
@@ -979,7 +980,7 @@ class _ExerciseStatsState extends State<ExerciseStats> {
               contentPadding: EdgeInsets.symmetric(horizontal: isMarked(date) ? 8 : 0),
               tileColor: isMarked(date) ? c.tertiaryContainer.withValues(alpha: .35) : null,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              title: Text('${log.weight > 0 ? '${weightLabel(log.weight)} × ' : ''}${log.reps.map((r) => r ?? '–').join('/')}'),
+              title: Text('${log.weight != 0 ? '${weightLabel(log.weight)} × ' : ''}${log.reps.map((r) => r ?? '–').join('/')}'),
               subtitle: Text(dateLabel(date)),
               trailing: out.contains(i)
                   ? Icon(Icons.change_history, color: c.tertiary)

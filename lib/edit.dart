@@ -295,7 +295,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     });
   }
 
-  /// Weight steps: 2,5 kg (5 lb), snapped to that grid and never below 0.
+  /// Weight steps: 2,5 kg (5 lb), snapped to that grid; below 0 is assistance (e.g. −10 kg on a pull-up machine).
   double get step => unit.value == WeightUnit.kg ? 2.5 : 5; // in the shown unit
 
   /// Distance goal ± 0,5 (km or mi), never below 0,5.
@@ -305,7 +305,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
   }
 
   double nudged(double kg, int dir) =>
-      toKg((((shown(kg) + dir * step) / step).round() * step).clamp(0, shown(1000)).toDouble());
+      toKg((((shown(kg) + dir * step) / step).round() * step).clamp(shown(minWeight), shown(1000)).toDouble());
 
   Exercise result() {
     e.name = e.name.trim();
@@ -376,13 +376,19 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                   child: BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
                       () => setSheet(() => w = nudged(w, 1)),
                       decimal: true,
+                      signed: true,
                       onTyped: (v) => w = switch (parseWeight(v)) {
-                            final kg? when kg >= 0 && kg <= 1000 => kg,
+                            final kg? when kg >= minWeight && kg <= 1000 => kg,
                             _ => w,
                           }),
                 ),
               ],
             ]),
+            if (!noWeight && w < 0) ...[
+              const SizedBox(height: 8),
+              Text('Unter 0: Unterstützung, z. B. am Klimmzug-Gerät. Steigern heißt weniger Hilfe, Richtung 0.',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
             const SizedBox(height: 16),
             SegmentedButton<bool>(
               showSelectedIcon: false,
@@ -959,10 +965,13 @@ class BigStepper extends StatelessWidget {
   final void Function(String)? onTyped;
   final bool decimal;
 
+  /// Typeable below zero too (assistance).
+  final bool signed;
+
   /// Shown greyed while [value] is empty, e.g. the last body weight.
   final String? hint;
   const BigStepper(this.label, this.value, this.onMinus, this.onPlus,
-      {super.key, this.onTyped, this.decimal = false, this.hint});
+      {super.key, this.onTyped, this.decimal = false, this.signed = false, this.hint});
 
   @override
   Widget build(BuildContext context) {
@@ -996,8 +1005,8 @@ class BigStepper extends StatelessWidget {
               key: ValueKey(value),
               initialValue: value,
               textAlign: TextAlign.center,
-              keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(decimal ? r'[0-9.,]' : r'[0-9]'))],
+              keyboardType: TextInputType.numberWithOptions(decimal: decimal, signed: signed),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9${decimal ? '.,' : ''}${signed ? '−-' : ''}]'))],
               style: style,
               decoration: InputDecoration.collapsed(
                   hintText: hint ?? '', hintStyle: style.copyWith(color: c.onSurfaceVariant.withValues(alpha: .45))),
