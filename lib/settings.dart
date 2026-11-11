@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'main.dart';
+import 'plan_import_page.dart';
 import 'sync.dart';
 import 'units.dart';
 
@@ -197,12 +198,23 @@ class _SyncSettingsState extends State<SyncSettings> {
               style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const Divider(height: 32),
           Text('Daten', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          const ListTile(
+          ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.share_outlined),
-            title: Text('An KI senden / exportieren'),
-            subtitle: Text('Alle Daten als JSON, mit fertigem Analyse-Prompt'),
-            onTap: export,
+            leading: const Icon(Icons.share_outlined),
+            title: const Text('An KI senden / exportieren'),
+            subtitle: const Text('Alle Daten als JSON, der Analyse-Prompt kommt in die Zwischenablage'),
+            onTap: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              await export();
+              messenger.showSnackBar(const SnackBar(content: Text('Prompt kopiert: im Chat einfügen, falls er fehlt')));
+            },
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Plan von KI übernehmen'),
+            subtitle: const Text('JSON-Block aus dem Chat einfügen, mit Vorschau vor dem Speichern'),
+            onTap: () => openPlanImport(context),
           ),
           // CC-BY-SA asks for the source to be named, MIT for its notice to ship (on the licence page).
           InkWell(

@@ -561,8 +561,11 @@ class Store extends ChangeNotifier {
   /// A failure there must not stop the export or sync of the data itself.
   Map<String, dynamic> Function()? exportExtras;
 
+  /// The extras come right after the header, before the raw data: an AI reads the instructions in them
+  /// first instead of finding them after hundreds of sessions.
   String exportJson() {
-    final j = toJson();
+    final data = toJson();
+    final j = {for (final k in const ['app', 'version', 'exportedAt', 'units']) k: data.remove(k)};
     if (exportExtras case final extras?) {
       try {
         j.addAll(extras());
@@ -570,7 +573,7 @@ class Store extends ChangeNotifier {
         j['derivedError'] = '$e';
       }
     }
-    return const JsonEncoder.withIndent('  ').convert(j);
+    return const JsonEncoder.withIndent('  ').convert({...j, ...data});
   }
 
   /// Called after every saved change (used for GitHub sync, which then builds the export).
@@ -585,6 +588,13 @@ class Store extends ChangeNotifier {
   Future<void> saveWorkout(Workout w) {
     final i = workouts.indexWhere((x) => x.id == w.id);
     i < 0 ? workouts.add(w) : workouts[i] = w;
+    return _save();
+  }
+
+  /// Replaces all plans at once (a plan from the AI, or undoing one); the trainings stay.
+  Future<void> replacePlans(List<Workout> plans, {required Map<String, dynamic> muscles}) {
+    workouts = plans;
+    this.muscles = muscles;
     return _save();
   }
 

@@ -5,6 +5,7 @@ import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/sync.dart';
 import 'package:ferrolog/units.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,10 +31,16 @@ void main() {
     }
     expect(jsonDecode(store.exportJson()).containsKey('derived'), isFalse, reason: 'only with the hook, as in main');
 
-    store.exportExtras = () => {'prompt': analysisPrompt, 'derived': derivedStats(DateTime.now())};
+    store.exportExtras = analysisExtras;
     final j = jsonDecode(store.exportJson()) as Map<String, dynamic>;
     expect(j['sessions'], hasLength(2));
-    expect(j['prompt'], contains('"derived"'));
+    expect(j.keys.take(5), ['app', 'version', 'exportedAt', 'units', 'instructions'], reason: 'instructions before the data');
+    expect(j.keys.last, 'sessions', reason: 'the raw data at the end');
+    expect(j['instructions'], allOf(contains('"derived"'), contains('"capabilities"'), contains('"planImport"')));
+    expect((j['capabilities']['cannot'] as List).first, contains('Supersets'));
+    final example = j['planImport']['example'] as Map<String, dynamic>;
+    expect((example['app'], example['kind']), ('ferrolog', 'plan'));
+    expect(Exercise.fromJson(example['workouts'][0]['exercises'][1]).timed, isTrue, reason: 'the example reads as a plan');
     final d = j['derived'] as Map<String, dynamic>;
     expect(d['about'], derivedFormat);
     expect(d['periods']['all']['trainings'], 2);
@@ -51,6 +58,9 @@ void main() {
     final record = found.singleWhere((f) => f['type'] == 'record');
     expect((record['kind'], record['title'], record['source']['view'], record['source']['exercise']),
         ('positive', 'Rekord: Bankdrücken 82,5 kg', 'exercise', 'Bankdrücken'));
+    expect(analysisPrompt(const Locale('de', 'AT')), contains('Antworte auf Deutsch'));
+    expect(analysisPrompt(const Locale('fr', 'FR')), allOf(startsWith('Here is'), contains('"planImport"'), contains('(fr-FR)')),
+        reason: 'other systems get English, asking for an answer in their language');
     expect(store.toJson().containsKey('derived'), isFalse, reason: 'never stored, only exported');
 
     store.exportExtras = () => throw StateError('kaputt');

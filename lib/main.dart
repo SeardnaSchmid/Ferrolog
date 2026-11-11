@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,7 @@ import 'derived.dart';
 import 'edit.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'plan_import.dart';
 import 'recap.dart';
 import 'session.dart';
 import 'settings.dart';
@@ -44,31 +46,81 @@ Future<void> main() async {
   store.onSaved = () {
     if (sync.configured) sync.push(store.exportJson());
   };
-  store.exportExtras = () => {'prompt': analysisPrompt, 'derived': derivedStats(DateTime.now())};
+  store.exportExtras = analysisExtras;
   await store.autoFinish();
   runApp(const Ferrolog());
 }
 
-const analysisPrompt = 'Hier sind meine Trainingsdaten aus FerroLog als JSON. Das Feld "format" beschreibt die '
-    'Rohdaten (Pläne und Trainings), "derived" die Statistiken, die FerroLog daraus berechnet hat (Beschreibung in '
-    '"derived.about"). Nimm die Statistiken als Grundlage und prüfe sie bei Bedarf an den Rohdaten.\n\n'
-    'Bitte:\n'
-    '1. Kurzer Überblick: Frequenz, Volumen, welche Übungen steigen, welche stagnieren oder Rückschritte haben.\n'
-    '2. Auffälligkeiten: Plateaus, Ungleichgewichte (balance90d), vernachlässigte Muskeln, Zusammenhänge mit '
-    'Stimmung, Notizen und Umständen (tags), etwa Schlaf oder Stress.\n'
-    '3. Konkrete Änderungen an meinen Workouts für die nächsten 4 Wochen: pro Workout Übung, Sätze, '
-    'Wiederholungen und Gewicht, jeweils mit einem Satz Begründung.\n'
-    'Die Richtwerte in den Daten stammen aus der Trainingspraxis, keine medizinischen Grenzen. '
-    'Antworte auf Deutsch und knapp.';
+/// The prompt that goes with the export, in the system language: German, else English, asking for an
+/// answer in the language of [locale].
+String analysisPrompt([Locale? locale]) {
+  final l = locale ?? PlatformDispatcher.instance.locale; // no binding needed, so tests can export too
+  return switch (l.languageCode) {
+    'de' => 'Hier sind meine Trainingsdaten aus FerroLog als JSON. Die Felder oben in der Datei:\n'
+        '- "instructions": diese Anleitung\n'
+        '- "capabilities": was ein FerroLog-Plan kann und was nicht\n'
+        '- "planImport": das Format, in dem ich einen Plan zurück in die App übernehme\n'
+        '- "derived": Statistiken, die FerroLog berechnet hat (Beschreibung in "derived.about"). Nimm sie als Grundlage.\n'
+        '- "format": Beschreibung der Rohdaten ("workouts" = Pläne, "sessions" = Trainings). Prüf die Statistiken '
+        'bei Bedarf daran.\n\n'
+        '## Schritt 1: Analyse (jetzt)\n'
+        '1. Kurzer Überblick: Frequenz, Volumen, welche Übungen steigen, welche stagnieren oder Rückschritte haben.\n'
+        '2. Auffälligkeiten: Plateaus, Ungleichgewichte (balance90d), vernachlässigte Muskeln, Zusammenhänge mit '
+        'Stimmung, Notizen und Umständen (tags), etwa Schlaf oder Stress.\n'
+        'In diesem Schritt keine Planänderungen. Hör nach der Analyse auf, frag mich „Soll ich dir eine Optimierung '
+        'deines Trainingsplans vorschlagen?“ und warte auf meine Antwort.\n\n'
+        '## Schritt 2: Plan (nur wenn ich Ja sage)\n'
+        '1. Konkrete Änderungen für die nächsten 4 Wochen: pro Workout Übung, Sätze, Wiederholungen und Gewicht, '
+        'jeweils mit einem Satz Begründung. Nur was laut "capabilities" geht.\n'
+        '2. Was FerroLog dafür nicht kann, getrennt aufgeführt.\n'
+        '3. Zum Schluss genau ein JSON-Codeblock im Format "planImport" (siehe "planImport.about" und '
+        '"planImport.example"), damit ich ihn in FerroLog übernehmen kann.\n\n'
+        '## Allgemein\n'
+        'Die Richtwerte in den Daten stammen aus der Trainingspraxis, keine medizinischen Grenzen. '
+        'Antworte auf Deutsch und knapp.',
+    _ => 'Here is my training data from FerroLog as JSON. The fields at the top of the file:\n'
+        '- "instructions": these instructions\n'
+        '- "capabilities": what a FerroLog plan can and can\'t express\n'
+        '- "planImport": the format in which I take a plan back into the app\n'
+        '- "derived": statistics FerroLog computed (described in "derived.about"). Take them as the basis.\n'
+        '- "format": describes the raw data ("workouts" = plans, "sessions" = trainings). Check the statistics '
+        'against it where needed.\n\n'
+        '## Step 1: analysis (now)\n'
+        '1. Short overview: frequency, volume, which exercises are going up, which are stuck or going backwards.\n'
+        '2. Things that stand out: plateaus, imbalances (balance90d), neglected muscles, links with mood, notes and '
+        'circumstances (tags), such as sleep or stress.\n'
+        'No plan changes in this step. Stop after the analysis, ask me "Shall I suggest an optimised training plan?" '
+        'and wait for my answer.\n\n'
+        '## Step 2: plan (only if I say yes)\n'
+        '1. Concrete changes for the next 4 weeks: per workout exercise, sets, reps and weight, each with one '
+        'sentence why. Only what "capabilities" allows.\n'
+        '2. What FerroLog can\'t do for it, listed separately.\n'
+        '3. Finally exactly one JSON code block in the "planImport" format (see "planImport.about" and '
+        '"planImport.example"), so I can take it over into FerroLog.\n\n'
+        '## General\n'
+        'The guide values in the data come from training practice, not medical limits. Some texts in the data '
+        '(findings, muscle names) may be in German. Answer briefly, in the language of my system (${l.toLanguageTag()}).',
+  };
+}
 
-/// Shares all data plus a ready-made prompt, e.g. straight into the Claude app.
+/// What the export adds for the AI: the prompt, the statistics and what a plan can be changed to.
+Map<String, dynamic> analysisExtras() => {
+      'instructions': analysisPrompt(),
+      'capabilities': capabilities,
+      'planImport': planImport,
+      'derived': derivedStats(DateTime.now()),
+    };
+
+/// Shares all data plus a ready-made prompt, e.g. straight into the Claude app. The prompt also goes to
+/// the clipboard: many apps take only the file from a share and drop its text.
 Future<void> export() async {
+  await Clipboard.setData(ClipboardData(text: analysisPrompt()));
   final name = 'ferrolog-${DateTime.now().toIso8601String().substring(0, 10)}.json';
   final file = XFile.fromData(utf8.encode(store.exportJson()), mimeType: 'application/json', name: name);
   await SharePlus.instance.share(ShareParams(
     files: [file],
     fileNameOverrides: [name],
-    text: analysisPrompt,
+    text: analysisPrompt(),
   ));
 }
 
