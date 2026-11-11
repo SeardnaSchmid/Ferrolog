@@ -107,6 +107,8 @@ class _SyncSettingsState extends State<SyncSettings> {
                 'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz'),
             ('session.keepScreenOn', Icons.light_mode_outlined, 'Bildschirm anlassen',
                 'Während des Trainings geht das Display nicht aus'),
+            ('session.showWhenLocked', Icons.lock_open_outlined, 'Über dem Sperrbildschirm zeigen',
+                'Während des Trainings ohne Entsperren auf die Pause schauen'),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

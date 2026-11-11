@@ -114,12 +114,14 @@ class _SessionPageState extends State<SessionPage> {
       }
     }
     if (prefs.getBool('session.keepScreenOn') ?? true) keepScreenOn(true);
+    if (prefs.getBool('session.showWhenLocked') ?? true) showWhenLocked(true);
   }
 
   @override
   void dispose() {
     ticker.cancel();
     keepScreenOn(false);
+    showWhenLocked(false);
     super.dispose();
   }
 
@@ -917,6 +919,16 @@ const _alert = MethodChannel('ferrolog/alert');
 Future<void> keepScreenOn(bool on) async {
   try {
     await _alert.invokeMethod('keepScreenOn', {'on': on});
+  } on MissingPluginException {
+    // web, tests
+  }
+}
+
+/// Shows the app over the lock screen while [on] (Android, see MainActivity.kt), so a glance
+/// at the rest timer doesn't need an unlock. Leaving the page clears it again.
+Future<void> showWhenLocked(bool on) async {
+  try {
+    await _alert.invokeMethod('showWhenLocked', {'on': on});
   } on MissingPluginException {
     // web, tests
   }

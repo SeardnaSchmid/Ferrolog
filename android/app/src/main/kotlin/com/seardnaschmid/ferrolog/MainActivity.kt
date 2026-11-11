@@ -24,6 +24,22 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
                 return@setMethodCallHandler
             }
+            if (call.method == "showWhenLocked") {
+                // While training: power twice shows the session without unlocking. No setTurnScreenOn,
+                // the screen stays off until the user wakes it.
+                val on = call.argument<Boolean>("on") == true
+                if (Build.VERSION.SDK_INT >= 27) {
+                    setShowWhenLocked(on)
+                } else if (on) {
+                    @Suppress("DEPRECATION")
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+                } else {
+                    @Suppress("DEPRECATION")
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+                }
+                result.success(null)
+                return@setMethodCallHandler
+            }
             // Rest timer hit 0: play the notification sound and/or vibrate twice.
             if (call.argument<Boolean>("sound") == true) {
                 RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()

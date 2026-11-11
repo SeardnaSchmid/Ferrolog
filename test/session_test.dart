@@ -3,6 +3,7 @@ import 'package:ferrolog/model.dart';
 import 'package:ferrolog/session.dart';
 import 'package:ferrolog/units.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -170,5 +171,30 @@ void main() {
     expect(log.reps.last, isNull);
     await prefs.remove('timed.leadIn');
   });
-}
 
+  testWidgets('the page shows over the lock screen while open, unless switched off', (tester) async {
+    final calls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), (call) async {
+      if (call.method == 'showWhenLocked') calls.add('${call.arguments['on']}');
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), null));
+    final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    expect(calls, ['true']);
+    await tester.pumpWidget(const SizedBox()); // leaving the page
+    expect(calls, ['true', 'false']);
+
+    await prefs.setBool('session.showWhenLocked', false);
+    calls.clear();
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    expect(calls, isEmpty, reason: 'setting off: never switched on');
+    await tester.pumpWidget(const SizedBox());
+    expect(calls, ['false'], reason: 'switching off is harmless and covers a setting changed mid-training');
+    await prefs.remove('session.showWhenLocked');
+  });
+}
