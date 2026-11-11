@@ -24,6 +24,6 @@ Außerdem schlägt die KI Dinge vor, die FerroLog nicht abbilden kann (z. B. Sup
 
 ## Phasen
 
-1. **Erledigt:** Export erklärt sich selbst, Prompt fragt nach einem `planImport`-Block.
-2. **Erledigt:** Einstellungen → Daten → „Plan von KI übernehmen“. Dialog zum Einfügen (aus der Zwischenablage vorbefüllt, Codeblock und Text drumherum werden ignoriert) oder „Datei öffnen“ (jede Textdatei: .json, .txt; `file_picker`; ein kompletter Export wird erkannt und abgelehnt), Prüfung mit deutscher Fehlermeldung, Vorschau pro Workout (neu, fällt weg, geänderte Werte, neue Reihenfolge, Begründung der KI), Warnung bei Training seit dem Export, Übernehmen mit Rückgängig in der Snackbar. Gesperrt, solange ein Training läuft. Muskeln der KI nur für Übungen, die die App nicht kennt.
+1. **Erledigt** (`f51ab0c`): Export erklärt sich selbst, Prompt fragt nach einem `planImport`-Block.
+2. **Erledigt** (`f51ab0c`): Einstellungen → Daten → „Plan von KI übernehmen“. Dialog zum Einfügen (aus der Zwischenablage vorbefüllt, Codeblock und Text drumherum werden ignoriert) oder „Datei öffnen“ (jede Textdatei: .json, .txt; `file_picker`; ein kompletter Export wird erkannt und abgelehnt), Prüfung mit deutscher Fehlermeldung, Vorschau pro Workout (neu, fällt weg, geänderte Werte, neue Reihenfolge, Begründung der KI), Warnung bei Training seit dem Export, Übernehmen mit Rückgängig in der Snackbar. Gesperrt, solange ein Training läuft. Muskeln der KI nur für Übungen, die die App nicht kennt.
 3. Später, falls nötig: Remote-MCP über die GitHub-Synchronisierung (`propose_plan`, das auf dem Server prüft).
