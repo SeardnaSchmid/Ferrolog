@@ -58,15 +58,26 @@ class _EditWorkoutState extends State<EditWorkout> {
     });
   }
 
+  /// Histories to take along on "Speichern": old name → new name.
+  final renames = <String, String>{};
+
   Future<void> editExercise([int? index]) async {
     final result = await Navigator.push<Exercise>(
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => ExerciseEditor(index == null ? null : w.exercises[index].copy()),
+        builder: (_) => ExerciseEditor(index == null ? null : w.exercises[index].copy(),
+            taken: {for (final (i, e) in w.exercises.indexed) if (i != index) e.name}),
       ),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
+    if (index != null) {
+      final before = w.exercises[index].name;
+      // Renamed twice before saving: the history still sits under the first name.
+      final from = renames.entries.where((r) => r.value == before).firstOrNull?.key ?? before;
+      renames.remove(from);
+      if (from != result.name && await transferHistory(context, w, from, result.name)) renames[from] = result.name;
+    }
     setState(() {
       index == null ? w.exercises.add(result) : w.exercises[index] = result;
       changedByHand = true;
@@ -92,10 +103,14 @@ class _EditWorkoutState extends State<EditWorkout> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: () {
+              onPressed: () async {
                 if (w.name.trim().isEmpty) w.name = 'Neues Workout';
-                store.saveWorkout(w);
-                Navigator.pop(context);
+                final names = {for (final e in w.exercises) e.name};
+                for (final MapEntry(key: from, value: to) in renames.entries) {
+                  if (names.contains(to)) await store.renameExercise(from, to);
+                }
+                await store.saveWorkout(w);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Speichern'),
             ),
@@ -225,12 +240,40 @@ class _EditWorkoutState extends State<EditWorkout> {
   }
 }
 
+/// Asks, when an exercise of [w] was renamed from [from] to [to], whether its history goes along; true =
+/// take it along (see [Store.renameExercise]). Not asked (false) with no history to take, for a swap ([to]
+/// has its own history and [from] stays in another workout), or when the two can't become one.
+Future<bool> transferHistory(BuildContext context, Workout w, String from, String to) async {
+  if (from == to || store.historyOf(from).isEmpty) return false;
+  final elsewhere = store.workouts.where((x) => x.id != w.id);
+  bool has(Workout x, String name) => x.exercises.any((e) => e.name == name);
+  if (store.historyOf(to).isNotEmpty && elsewhere.any((x) => has(x, from))) return false;
+  if (elsewhere.any((x) => has(x, from) && has(x, to))) return false;
+  return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Verlauf von „$from“ auf „$to“ übertragen?'),
+          content: Text('Übertragen: Statistik, Rekorde und Trainings laufen unter „$to“ weiter, auch in anderen '
+              'Workouts. Neue Übung: „$to“ beginnt ohne Verlauf, „$from“ bleibt im Verlauf, wie es war.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Neue Übung')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Übertragen')),
+          ],
+        ),
+      ) ??
+      false;
+}
+
 /// Full-screen add/edit of one exercise (design screen 07): search in German or English,
 /// steppers for sets and reps, one weight or one per set, rest time and automatic adjustment.
 /// Works on a copy; returns it on "Hinzufügen"/"Übernehmen", null on close.
 class ExerciseEditor extends StatefulWidget {
   final Exercise? initial;
-  const ExerciseEditor(this.initial, {super.key});
+
+  /// Names of the workout's other exercises: the same name twice in one workout isn't allowed.
+  final Set<String> taken;
+  const ExerciseEditor(this.initial, {super.key, this.taken = const {}});
 
   @override
   State<ExerciseEditor> createState() => _ExerciseEditorState();
@@ -514,6 +557,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     final muted = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     final isNew = widget.initial == null;
     final sugg = suggestions;
+    final duplicate = widget.taken.any((t) => searchKey(t) == searchKey(e.name));
     final card = BoxDecoration(
       color: c.surfaceContainerLow,
       borderRadius: BorderRadius.circular(16),
@@ -527,7 +571,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: e.name.trim().isEmpty ? null : () => Navigator.pop(context, result()),
+              onPressed: e.name.trim().isEmpty || duplicate ? null : () => Navigator.pop(context, result()),
               child: Text(isNew ? 'Hinzufügen' : 'Speichern'),
             ),
           ),
@@ -542,6 +586,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               hintText: 'Übung suchen oder eigene eingeben',
+              errorText: duplicate
+                  ? 'Steht schon in diesem Workout. Für mehr Sätze oder andere Gewichte pro Satz die vorhandene bearbeiten.'
+                  : null,
+              errorMaxLines: 3,
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: c.surfaceContainerHigh,

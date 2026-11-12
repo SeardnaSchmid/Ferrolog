@@ -192,6 +192,11 @@ PlanImport parsePlanImport(String text) {
     final exercises = [
       for (final (k, e) in list.indexed) _exercise(e, '„$name“, Übung ${k + 1}', old, why, muscles),
     ];
+    for (final (k, e) in exercises.indexed) {
+      if (exercises.take(k).any((x) => searchKey(x.name) == searchKey(e.name))) {
+        throw FormatException('„$name“ hat „${e.name}“ zweimal. Mehr Sätze oder setWeights statt einer zweiten Übung.');
+      }
+    }
     final w = Workout(id: old?.id, name: name.trim(), exercises: exercises);
     old == null ? added.add(w) : replaced[old.id] = w;
     diff.add(_diff(old, w, why));

@@ -639,6 +639,13 @@ Map<String, dynamic> migrate(Object? j) {
   return j;
 }
 
+/// The plan entry [log] trains in [w]: the n-th entry of its name for the n-th log of that name in
+/// [logs], so a name that is in the plan twice (only in older data) gives each entry its own result.
+Exercise? planEntryOf(Workout? w, List<ExerciseLog> logs, ExerciseLog log) {
+  final n = logs.takeWhile((l) => !identical(l, log)).where((l) => l.name == log.name).length;
+  return w?.exercises.where((e) => e.name == log.name).elementAtOrNull(n);
+}
+
 /// All app data, persisted as one JSON blob. The same JSON is what gets exported for AI analysis.
 // ponytail: whole-blob save on every change, move to a DB if history grows past a few MB.
 class Store extends ChangeNotifier {
@@ -842,7 +849,7 @@ class Store extends ChangeNotifier {
 
   void _progress(Workout w, Session s) {
     for (final log in s.exercises) {
-      final e = w.exercises.where((x) => x.name == log.name).firstOrNull;
+      final e = planEntryOf(w, s.exercises, log);
       // Skipped entirely (no time, no bar): not a miss, the plan stays.
       if (e == null || log.setsDone == 0) continue;
       e.applyResult(log);
@@ -907,6 +914,60 @@ class Store extends ChangeNotifier {
     revertProgression(s);
     sessions.removeWhere((x) => x.id == s.id);
     return _save();
+  }
+
+  /// Names that can't merge into each other: both in one workout, which would then hold one twice.
+  bool shareAWorkout(String a, String b) =>
+      workouts.any((w) => w.exercises.any((e) => e.name == a) && w.exercises.any((e) => e.name == b));
+
+  /// Renames an exercise everywhere in one save: plans, trainings (also where it was swapped out), the
+  /// running training, its muscles and the findings put off for it. If [to] has a history already, the two
+  /// become one, ordered by date as before; that's how a split history is repaired.
+  Future<void> renameExercise(String from, String to) async {
+    if (from == to) return;
+    if (shareAWorkout(from, to)) throw StateError('„$from“ und „$to“ stehen im selben Workout.');
+    for (final w in workouts) {
+      for (final e in w.exercises) {
+        if (e.name == from) e.name = to;
+      }
+    }
+    void renameIn(Session s) {
+      for (var i = 0; i < s.exercises.length; i++) {
+        final log = s.exercises[i];
+        if (log.name != from && log.replaces != from) continue;
+        // The name is final: rebuilt through JSON. Swapped in for itself is no swap.
+        final j = log.toJson();
+        if (log.name == from) j['name'] = to;
+        if (log.replaces == from) j['replaces'] = to;
+        if (j['replaces'] == j['name']) j.remove('replaces');
+        s.exercises[i] = ExerciseLog.fromJson(j);
+      }
+      if (s.planBefore?.remove(from) case final before?) s.planBefore![to] = before;
+    }
+
+    sessions.forEach(renameIn);
+    if (active case final a?) {
+      renameIn(a);
+      await saveActive(a);
+    }
+    final fromKey = searchKey(from), toKey = searchKey(to);
+    final own = muscles.keys.where((k) => searchKey(k) == fromKey).toList();
+    for (final k in own) {
+      final m = muscles.remove(k);
+      if (!muscles.keys.any((x) => searchKey(x) == toKey)) muscles[to] = m;
+    }
+    // Finding ids are "kind:exercise[:date]", see findings.dart; stored by training_card.dart.
+    if (_prefs.getString('tasks.snoozed') case final raw?) {
+      final snoozed = jsonDecode(raw) as Map<String, dynamic>;
+      await _prefs.setString('tasks.snoozed', jsonEncode({
+        for (final MapEntry(:key, :value) in snoozed.entries)
+          switch (key.split(':')) {
+            [final kind, final name, ...final rest] when name == from => [kind, to, ...rest].join(':'),
+            _ => key,
+          }: value,
+      }));
+    }
+    await _save();
   }
 
   Session? lastSessionOf(Workout w) => sessions.where((s) => s.workoutId == w.id).firstOrNull;

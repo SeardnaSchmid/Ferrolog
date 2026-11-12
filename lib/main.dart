@@ -591,9 +591,14 @@ Future<void> editExerciseIn(BuildContext context, Workout w, String name) async 
   if (i < 0) return;
   final result = await Navigator.push<Exercise>(
     context,
-    MaterialPageRoute(fullscreenDialog: true, builder: (_) => ExerciseEditor(w.exercises[i].copy())),
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => ExerciseEditor(w.exercises[i].copy(), taken: {for (final (j, e) in w.exercises.indexed) if (j != i) e.name}),
+    ),
   );
-  if (result != null) await store.saveWorkout(w.copy()..exercises[i] = result);
+  if (result == null || !context.mounted) return;
+  if (await transferHistory(context, w, name, result.name)) await store.renameExercise(name, result.name);
+  await store.saveWorkout(w.copy()..exercises[i] = result);
 }
 
 class WorkoutCard extends StatelessWidget {

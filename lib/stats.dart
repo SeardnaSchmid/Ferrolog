@@ -870,6 +870,32 @@ class _ExerciseStatsState extends State<ExerciseStats> {
       ? const []
       : ([for (final d in widget.marked) if (!history.any((h) => h.$1 == d)) d]..sort());
 
+  /// Repairs a history split by a rename: every training of this exercise goes under another name.
+  Future<void> merge() async {
+    final candidates = [
+      for (final n in store.loggedExercises)
+        if (n != name && !store.shareAWorkout(name, n)) n,
+    ];
+    final target = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('„$name“ zusammenführen mit'),
+        children: [
+          for (final n in candidates) SimpleDialogOption(onPressed: () => Navigator.pop(context, n), child: Text(n)),
+          if (candidates.isEmpty)
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Text('Keine andere Übung mit Verlauf.')),
+        ],
+      ),
+    );
+    if (target == null || !mounted) return;
+    if (!await confirm(context,
+        'Alle Trainings von „$name“ heißen danach „$target“, auch in den Workouts. Das lässt sich nicht rückgängig machen.')) {
+      return;
+    }
+    await store.renameExercise(name, target);
+    if (mounted) setState(() => name = target);
+  }
+
   @override
   Widget build(BuildContext context) {
     final history = store.historyOf(name);
@@ -890,7 +916,12 @@ class _ExerciseStatsState extends State<ExerciseStats> {
     final trend = trendOf(history, DateTime.now());
     final best = history.isEmpty ? 0.0 : history.map((h) => estimated1rm(h.$2)).reduce(max);
     return Scaffold(
-      appBar: AppBar(title: Text(name)),
+      appBar: AppBar(title: Text(name), actions: [
+        PopupMenuButton<void>(
+          tooltip: 'Mehr',
+          itemBuilder: (_) => [PopupMenuItem(onTap: merge, child: const Text('Mit anderer Übung zusammenführen'))],
+        ),
+      ]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

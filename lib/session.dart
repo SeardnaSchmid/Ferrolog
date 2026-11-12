@@ -140,12 +140,8 @@ class _SessionPageState extends State<SessionPage> {
     super.dispose();
   }
 
-  Exercise? planOf(ExerciseLog log) => store.workouts
-      .where((w) => w.id == s.workoutId)
-      .firstOrNull
-      ?.exercises
-      .where((e) => e.name == log.name)
-      .firstOrNull;
+  Exercise? planOf(ExerciseLog log) =>
+      planEntryOf(store.workouts.where((w) => w.id == s.workoutId).firstOrNull, s.exercises, log);
 
   /// Rest after a set of [log]: the plan's, else what came with a swapped-in or added exercise.
   int restAfter(ExerciseLog log, {required bool missed}) {
