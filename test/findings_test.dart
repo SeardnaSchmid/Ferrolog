@@ -97,6 +97,18 @@ void main() {
     expect(once.where((f) => f.type == FindingType.skipped), isEmpty, reason: dump(once));
   });
 
+  test('a swapped exercise is not skipped: it isn\'t in the training any more', () {
+    final a = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5),
+      Exercise(name: 'Bizepscurls', weight: 20, sets: 3, reps: 10),
+      Exercise(name: 'Wadenheben', weight: 40, sets: 3, reps: 12),
+    ]);
+    final all = findings(eight(a, (s, i) {
+      if (i < 3) s.exercises[1] = ExerciseLog(name: 'Hammercurls', weight: 16, targetReps: 10, reps: [10, 10, 10], replaces: 'Bizepscurls');
+    }), [a], now);
+    expect(all.where((f) => f.type == FindingType.skipped), isEmpty, reason: dump(all));
+  });
+
   test('balance by cause: one set less of an accessory ahead, never more work; else name what trains it', () {
     final push = Workout(name: 'P', exercises: [
       Exercise(name: 'Bankdrücken', weight: 80, sets: 3, reps: 5),

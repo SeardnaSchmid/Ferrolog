@@ -315,4 +315,39 @@ void main() {
     expect(reopened.sessions.first.mood, 3);
     expect(reopened.sessions.first.tags, ['Alkohol', 'Stress']);
   });
+
+  test('changed during the training: swapped and added exercises and other set counts leave the plan as it is', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final w = Workout(name: 'A', exercises: [
+      Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5, increment: 2.5),
+      Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5, increment: 2.5),
+      Exercise(name: 'Rudern', weight: 50, sets: 3, reps: 5, increment: 2.5),
+      Exercise(name: 'Dips', weight: 10, sets: 3, reps: 8, increment: 2.5, setWeights: [10, 10, 5]),
+    ]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    final [squat, bench, row, dips] = s.exercises;
+    // Kniebeuge: four sets instead of three, all hit. Bankdrücken: two of three, all hit.
+    s.exercises[0] = squat.withSets(reps: [5, 5, 5, 5], targets: [5, 5, 5, 5], weights: [100, 100, 100, 100], doneAt: List.filled(4, null));
+    s.exercises[1] = bench.withSets(reps: [5, 5], targets: [5, 5], weights: [60, 60], doneAt: [null, null]);
+    // Rudern swapped for Kabelrudern before the first set; Dips four sets with their own per-set weights.
+    s.exercises[2] = ExerciseLog.fromPlan(Exercise(name: 'Kabelrudern', weight: 45, sets: 3, reps: 10, restSeconds: 90), replaces: 'Rudern')
+      ..reps.setAll(0, [10, 10, 10]);
+    s.exercises[3] = dips.withSets(reps: [8, 8, 8, 8], targets: [8, 8, 8, 8], weights: [10, 10, 5, 5], doneAt: List.filled(4, null));
+    s.exercises.add(ExerciseLog.fromPlan(Exercise(name: 'Facepulls', weight: 15, sets: 2, reps: 12), added: true)..reps.setAll(0, [12, 12]));
+    await store.finishSession(s);
+
+    expect([for (final e in w.exercises) (e.name, e.sets, e.weight)],
+        [('Kniebeuge', 3, 102.5), ('Bankdrücken', 3, 60.0), ('Rudern', 3, 50.0), ('Dips', 3, 12.5)],
+        reason: 'more sets: normal progression; fewer: weight holds; swapped out: untouched; no new plan entries');
+    expect(w.exercises[3].setWeights, [12.5, 12.5, 7.5], reason: 'the plan keeps its three per-set weights');
+    expect(w.exercises[1].fails, 0, reason: 'fewer sets is no miss');
+
+    final j = jsonDecode(jsonEncode(s.toJson()))['exercises'] as List;
+    expect((j[0]['replaces'], j[0]['restSeconds']), (null, null), reason: 'planned: rest lives in the plan');
+    expect((j[2]['replaces'], j[2]['restSeconds'], j[4]['added']), ('Rudern', 90, true));
+    final back = Session.fromJson(jsonDecode(jsonEncode(s.toJson())));
+    expect((back.exercises[2].replaces, back.exercises[2].restSeconds, back.exercises[4].added), ('Rudern', 90, true));
+  });
 }

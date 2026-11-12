@@ -180,7 +180,8 @@ class Exercise {
       for (final (i, r) in log.reps.indexed)
         if (r != null && i < planned.length && log.weights[i] < planned[i]) i,
     ].isNotEmpty;
-    if (lighter) return;
+    // Fewer sets than planned (taken off or swapped during the training): the plan holds, no miss.
+    if (lighter || log.reps.length < sets) return;
     var delta = 0.0;
     final top = maxReps;
     if (top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top)) {
@@ -316,6 +317,16 @@ class ExerciseLog {
   /// recorded. The base for how long an exercise takes, see timing.dart.
   final List<DateTime?> doneAt;
 
+  /// Rest, rest after a missed set and weight step, copied from the exercise it was made from. The
+  /// page prefers the plan; these count for an exercise that isn't in it (swapped in or added).
+  final int? restSeconds, failRestSeconds;
+  final double? increment;
+
+  /// Changed during the training: the planned exercise this one stood in for, or added on top of
+  /// the plan. Only for the export, the logic doesn't read them.
+  final String? replaces;
+  final bool added;
+
   ExerciseLog({
     required this.name,
     required double weight,
@@ -330,9 +341,61 @@ class ExerciseLog {
     this.timed = false,
     this.startedAt,
     List<DateTime?>? doneAt,
+    this.restSeconds,
+    this.failRestSeconds,
+    this.increment,
+    this.replaces,
+    this.added = false,
   })  : weights = weights ?? List.filled(reps.length, weight),
         doneAt = doneAt ?? List.filled(reps.length, null),
         targets = targets ?? List.filled(reps.length, targetReps);
+
+  /// A fresh log for training [e]: every set open.
+  factory ExerciseLog.fromPlan(Exercise e, {String? replaces, bool added = false}) => ExerciseLog(
+        name: e.name,
+        weight: e.weight,
+        weights: List.of(e.weights),
+        targetReps: e.reps,
+        targets: e.repsPerSet,
+        maxReps: e.maxReps,
+        reps: List.filled(e.sets, null, growable: true),
+        cardio: e.cardio,
+        targetKm: e.km,
+        timed: e.timed,
+        restSeconds: e.restSeconds,
+        failRestSeconds: e.failRestSeconds,
+        increment: e.increment,
+        replaces: replaces,
+        added: added,
+      );
+
+  /// The same exercise with other sets; the lists are final, so a set more or less is a new log.
+  ExerciseLog withSets({
+    required List<int?> reps,
+    required List<int> targets,
+    required List<double> weights,
+    required List<DateTime?> doneAt,
+  }) =>
+      ExerciseLog(
+        name: name,
+        weight: weight,
+        targetReps: targets.first,
+        reps: reps,
+        targets: targets,
+        maxReps: maxReps,
+        weights: weights,
+        cardio: cardio,
+        km: km,
+        targetKm: targetKm,
+        timed: timed,
+        startedAt: startedAt,
+        doneAt: doneAt,
+        restSeconds: restSeconds,
+        failRestSeconds: failRestSeconds,
+        increment: increment,
+        replaces: replaces,
+        added: added,
+      );
 
   /// Target reps of the first set; for cardio the planned minutes.
   int get targetReps => targets.first;
@@ -361,6 +424,14 @@ class ExerciseLog {
         if (targetKm != null) 'targetKm': targetKm,
         if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
         if (doneAt.any((t) => t != null)) 'doneAt': [for (final t in doneAt) t?.toIso8601String()],
+        if (replaces != null) 'replaces': replaces,
+        if (added) 'added': true,
+        // A planned exercise has these in the plan; one from outside it keeps them for the running training.
+        if (replaces != null || added) ...{
+          if (restSeconds != null) 'restSeconds': restSeconds,
+          if (failRestSeconds != null) 'failRestSeconds': failRestSeconds,
+          if (increment != null) 'increment': increment,
+        },
       };
 
   // Older data has only "weight"; it then applies to every set.
@@ -378,6 +449,11 @@ class ExerciseLog {
         timed: j['type'] == 'timed',
         startedAt: j['startedAt'] == null ? null : DateTime.parse(j['startedAt']),
         doneAt: j['doneAt'] == null ? null : [for (final t in j['doneAt']) t == null ? null : DateTime.parse(t)],
+        restSeconds: j['restSeconds'],
+        failRestSeconds: j['failRestSeconds'],
+        increment: (j['increment'] as num?)?.toDouble(),
+        replaces: j['replaces'],
+        added: j['added'] == true,
       );
 }
 
@@ -462,21 +538,7 @@ class Session {
   factory Session.start(Workout w) => Session(
         workoutId: w.id,
         workoutName: w.name,
-        exercises: [
-          for (final e in w.exercises)
-            ExerciseLog(
-              name: e.name,
-              weight: e.weight,
-              weights: List.of(e.weights),
-              targetReps: e.reps,
-              targets: e.repsPerSet,
-              maxReps: e.maxReps,
-              reps: List.filled(e.sets, null),
-              cardio: e.cardio,
-              targetKm: e.km,
-              timed: e.timed,
-            ),
-        ],
+        exercises: [for (final e in w.exercises) ExerciseLog.fromPlan(e)],
       );
 
   Map<String, dynamic> toJson() => {
@@ -565,7 +627,10 @@ class Store extends ChangeNotifier {
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true; a set done lighter than '
             'planned holds the weight (no increase, no miss), an exercise skipped entirely changes nothing. sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
-            'they differ); "failRestSeconds" = rest after a missed set; finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
+            'they differ); "failRestSeconds" = rest after a missed set; exercises[].replaces = the planned exercise this '
+            'one was swapped in for during the training, exercises[].added = added on top of the plan (both change '
+            'nothing in the plan; sets added or taken off during a training neither: fewer sets than planned hold the weight, '
+            'no increase, no miss); finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
             'type "timed" (held or carried, e.g. plank, farmer\'s walk): reps and targets are seconds, weight optional. '

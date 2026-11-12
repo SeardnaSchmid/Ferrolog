@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/session.dart';
+import 'package:ferrolog/timing.dart';
 import 'package:ferrolog/units.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -253,5 +254,93 @@ void main() {
     expect((back.restStartedAt, back.restSeconds, back.restPausedAt), (t, 90, t.add(const Duration(seconds: 20))));
     expect(back.restLeft(t.add(const Duration(hours: 1))), 70, reason: 'paused: the clock stands');
     expect((back..restPausedAt = null).restLeft(t.add(const Duration(seconds: 100))), -10);
+  });
+
+  testWidgets('change the training: swap, add, sets, order; saved each time, the plan stays', (tester) async {
+    final w = Workout(name: 'Pull', exercises: [
+      Exercise(name: 'Rudern', weight: 50, sets: 3, reps: 8, restSeconds: 120),
+      Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 6, restSeconds: 150),
+    ]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    Future<void> settle() async {
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    Future<void> menu(int card, String action) async {
+      await tester.tap(find.byTooltip('Übung ändern').at(card));
+      await settle();
+      await tester.tap(find.text(action));
+      await settle();
+    }
+
+    Future<void> pick(String name) async {
+      await tester.enterText(find.byType(TextField).first, name);
+      await tester.pump();
+      await tester.tap(find.text('Hinzufügen'));
+      await settle();
+    }
+
+    List<String> names() => [for (final l in store.active!.exercises) '${l.name} ${l.reps.length}'];
+
+    // Machine taken before the first set: swapped in place, with its own rest.
+    await menu(0, 'Übung ersetzen');
+    await pick('Kabelrudern');
+    expect(names(), ['Kabelrudern 3', 'Klimmzüge 3']);
+    expect(find.text('statt Rudern'), findsOneWidget);
+    expect(s.exercises.first.replaces, 'Rudern');
+
+    // A set more on the pull-ups, then off again; the last open set only.
+    await menu(1, 'Satz hinzufügen');
+    expect(names(), ['Kabelrudern 3', 'Klimmzüge 4']);
+    await menu(1, 'Letzten Satz entfernen');
+    await menu(1, 'Letzten Satz entfernen');
+    expect(names(), ['Kabelrudern 3', 'Klimmzüge 2']);
+
+    // Order: pull-ups first.
+    await menu(1, 'Nach oben');
+    expect(names(), ['Klimmzüge 2', 'Kabelrudern 3']);
+
+    // Added at the end; the same name again is refused.
+    await tester.tap(find.text('Übung'));
+    await settle();
+    await pick('Facepulls');
+    expect(names(), ['Klimmzüge 2', 'Kabelrudern 3', 'Facepulls 3']);
+    expect(s.exercises.last.added, isTrue);
+    await tester.tap(find.text('Übung'));
+    await settle();
+    await pick('Facepulls');
+    expect(find.text('Schon im Training'), findsOneWidget);
+    expect(names(), hasLength(3));
+
+    // One set of pull-ups done, then the rest swapped: the done set stays, the new one follows.
+    await tester.tap(find.text('–/6', findRichText: true).first);
+    await tester.pump();
+    await menu(0, 'Rest ersetzen');
+    await pick('Latziehen');
+    expect(names(), ['Klimmzüge 1', 'Latziehen 3', 'Kabelrudern 3', 'Facepulls 3']);
+    expect(s.exercises[0].reps, [6]);
+    expect(s.exercises[1].replaces, 'Klimmzüge');
+
+    // An added exercise can go again while nothing is logged; a planned one can't.
+    await menu(3, 'Entfernen');
+    expect(names(), hasLength(3));
+    await tester.tap(find.byTooltip('Übung ändern').at(1));
+    await settle();
+    expect(find.text('Entfernen'), findsNothing);
+    await tester.tapAt(const Offset(10, 10)); // closes the menu
+    await settle();
+
+    // All of it survives a restart, and the time estimate still shows.
+    expect([for (final l in (await Store.open()).active!.exercises) l.name], ['Klimmzüge', 'Latziehen', 'Kabelrudern']);
+    expect(leftLabel(s, currentPace(), DateTime.now()), startsWith('noch ≈'), reason: 'the strip shows the rest now');
+    expect((w.exercises.map((e) => '${e.name} ${e.sets}')), ['Rudern 3', 'Klimmzüge 3'], reason: 'the plan is untouched');
+    await tester.pumpWidget(const SizedBox());
   });
 }

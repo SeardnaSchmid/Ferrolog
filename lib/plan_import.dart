@@ -28,6 +28,8 @@ final capabilities = {
         'unless weight should be added.',
     'Rest per exercise in seconds (restSeconds), optionally a different rest after a missed set (failRestSeconds).',
     'Own exercises with their muscles (muscles: primary, secondary), for names the app doesn\'t know.',
+    'During a training the user can swap an exercise (machine taken), add one, add or take off sets and change '
+        'the order; that changes only that training, not the plan (see replaces, added in the sessions).',
   ],
   'cannot': [
     'Supersets, circuits or giant sets: exercises are done one after the other; the rest timer runs per exercise.',

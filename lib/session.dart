@@ -8,6 +8,7 @@ import 'main.dart';
 import 'model.dart';
 import 'recap.dart';
 import 'timing.dart';
+import 'edit.dart';
 import 'units.dart';
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
@@ -146,6 +147,139 @@ class _SessionPageState extends State<SessionPage> {
       .where((e) => e.name == log.name)
       .firstOrNull;
 
+  /// Rest after a set of [log]: the plan's, else what came with a swapped-in or added exercise.
+  int restAfter(ExerciseLog log, {required bool missed}) {
+    final plan = planOf(log);
+    final rest = plan?.restSeconds ?? log.restSeconds ?? 120;
+    final fail = plan != null ? plan.failRestSeconds : log.failRestSeconds;
+    return missed ? fail ?? rest : rest;
+  }
+
+  /// Puts [next] where [old] was. Logs are replaced, never resized in place, and the page keys its
+  /// state by log, so the highlight, a running hold and the card's scroll key move along.
+  void replaceLog(ExerciseLog old, List<ExerciseLog> next) {
+    final i = s.exercises.indexOf(old);
+    s.exercises.replaceRange(i, i + 1, next);
+    final same = next.where((l) => l.name == old.name).firstOrNull;
+    if (touched == old) touched = same ?? next.firstOrNull;
+    if (cardKeys.remove(old) case final key? when same != null) cardKeys[same] = key;
+    if (hold case final h? when h.log == old) hold = same == null ? null : (log: same, set: h.set, start: h.start);
+  }
+
+  /// An exercise picked in the editor, or null when cancelled or already in the training.
+  Future<Exercise?> pickExercise() async {
+    final e = await Navigator.push<Exercise>(
+        context, MaterialPageRoute(fullscreenDialog: true, builder: (_) => const ExerciseEditor(null)));
+    if (e == null || !mounted) return null;
+    if (s.exercises.any((l) => l.name == e.name)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Schon im Training')));
+      return null;
+    }
+    return e;
+  }
+
+  /// Machine taken: another exercise in its place. With sets already logged those stay, and the
+  /// new exercise follows for the rest.
+  Future<void> swapExercise(ExerciseLog log) async {
+    final e = await pickExercise();
+    if (e == null) return;
+    final next = ExerciseLog.fromPlan(e, replaces: log.added ? null : log.replaces ?? log.name, added: log.added);
+    setState(() {
+      touched = next;
+      if (log.setsDone == 0) {
+        replaceLog(log, [next]);
+      } else {
+        final done = [for (final (i, r) in log.reps.indexed) if (r != null) i];
+        replaceLog(log, [
+          log.withSets(
+            reps: [for (final i in done) log.reps[i]],
+            targets: [for (final i in done) log.targets[i]],
+            weights: [for (final i in done) log.weights[i]],
+            doneAt: [for (final i in done) log.doneAt[i]],
+          ),
+          next,
+        ]);
+      }
+    });
+    store.saveActive(s);
+  }
+
+  Future<void> addExercise() async {
+    final e = await pickExercise();
+    if (e == null) return;
+    final next = ExerciseLog.fromPlan(e, added: true);
+    setState(() {
+      s.exercises.add(next);
+      touched = next;
+    });
+    store.saveActive(s);
+    reveal(next);
+  }
+
+  /// One set more, like the last one, or the last open set off.
+  void changeSets(ExerciseLog log, {required bool add}) {
+    setState(() {
+      final keep = add ? log.reps.length : log.reps.length - 1;
+      replaceLog(log, [
+        log.withSets(
+          reps: [...log.reps.take(keep), if (add) null],
+          targets: [...log.targets.take(keep), if (add) log.targets.last],
+          weights: [...log.weights.take(keep), if (add) log.weights.last],
+          doneAt: [...log.doneAt.take(keep), if (add) null],
+        ),
+      ]);
+    });
+    store.saveActive(s);
+  }
+
+  void moveExercise(ExerciseLog log, int by) {
+    setState(() {
+      final i = s.exercises.indexOf(log);
+      s.exercises
+        ..removeAt(i)
+        ..insert(i + by, log);
+    });
+    store.saveActive(s);
+  }
+
+  void removeExercise(ExerciseLog log) {
+    setState(() => replaceLog(log, []));
+    store.saveActive(s);
+  }
+
+  /// The card's menu: change the training, never the plan.
+  Widget _exerciseMenu(ExerciseLog log) {
+    final i = s.exercises.indexOf(log);
+    final running = hold?.log == log || log.startedAt != null; // a hold or stopwatch on it
+    final actions = <(String, IconData, VoidCallback)>[
+      if (log.setsDone == 0)
+        ('Übung ersetzen', Icons.swap_horiz, () => swapExercise(log))
+      else if (log.setsDone < log.reps.length)
+        ('Rest ersetzen', Icons.swap_horiz, () => swapExercise(log)),
+      if (!log.cardio) ...[
+        ('Satz hinzufügen', Icons.add, () => changeSets(log, add: true)),
+        if (log.reps.length > 1 && log.reps.last == null)
+          ('Letzten Satz entfernen', Icons.remove, () => changeSets(log, add: false)),
+      ],
+      if (i > 0) ('Nach oben', Icons.arrow_upward, () => moveExercise(log, -1)),
+      if (i < s.exercises.length - 1) ('Nach unten', Icons.arrow_downward, () => moveExercise(log, 1)),
+      if (log.added && log.setsDone == 0) ('Entfernen', Icons.delete_outline, () => removeExercise(log)),
+    ];
+    return PopupMenuButton<VoidCallback>(
+      tooltip: 'Übung ändern',
+      enabled: !running,
+      icon: const Icon(Icons.more_vert),
+      onSelected: (action) => action(),
+      itemBuilder: (_) => [
+        for (final (label, icon, action) in actions)
+          PopupMenuItem(
+            value: action,
+            child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(label)),
+          ),
+      ],
+    );
+  }
+
   /// Keeps [log]'s card in view once the next frame is laid out, so a set logged near the bottom
   /// edge doesn't stay half hidden.
   void reveal(ExerciseLog log) => WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -171,8 +305,7 @@ class _SessionPageState extends State<SessionPage> {
     lastSetAt = DateTime.now();
     pausedAt = null;
     alerted = false;
-    final plan = planOf(h.log);
-    restTarget = (held < target ? plan?.failRestSeconds : null) ?? plan?.restSeconds ?? 120;
+    restTarget = restAfter(h.log, missed: held < target);
   }
 
   void tapSet(ExerciseLog log, int i) {
@@ -230,8 +363,7 @@ class _SessionPageState extends State<SessionPage> {
         lastSetAt = DateTime.now();
         pausedAt = null;
         alerted = false;
-        final plan = planOf(log);
-        restTarget = (done < target ? plan?.failRestSeconds : null) ?? plan?.restSeconds ?? 120;
+        restTarget = restAfter(log, missed: done < target);
       }
     });
     store.saveActive(s);
@@ -340,7 +472,7 @@ class _SessionPageState extends State<SessionPage> {
   Future<void> pickWeight(ExerciseLog log, int i) async {
     setState(() => touched = log);
     // The sheet works in the shown unit (kg or lb) and converts to kg on save.
-    final step = stepShown(planOf(log)?.increment ?? 0);
+    final step = stepShown(planOf(log)?.increment ?? log.increment ?? 0);
     final field = TextEditingController(text: weightNum(log.weights[i]));
     var scope = WeightScope.open;
     double? parse() => switch (parseWeight(field.text)) {
@@ -579,6 +711,8 @@ class _SessionPageState extends State<SessionPage> {
                     key: cardKeys.putIfAbsent(log, GlobalKey.new),
                     child: _exerciseCard(log, log == current, c, muted),
                   ),
+                const SizedBox(height: 4),
+                DashedAddButton('Übung', addExercise),
               ],
             ),
           ),
@@ -713,7 +847,7 @@ class _SessionPageState extends State<SessionPage> {
                           ? 'Cardio · Ziel ${cardioLabel(log.targetReps, log.targetKm)}'
                           : [
                               setsLabel(log.targets, log.maxReps, seconds: log.timed),
-                              if (planOf(log) case final p?) 'Pause ${clock(p.restSeconds)}',
+                              if (planOf(log)?.restSeconds ?? log.restSeconds case final rest?) 'Pause ${clock(rest)}',
                               if (log.setsDone == log.reps.length ? measured(s, log) : null case final m?)
                                 takenLabel(m.total)
                               else if (log.setsDone == 0)
@@ -722,8 +856,10 @@ class _SessionPageState extends State<SessionPage> {
                       style: muted,
                     ),
                     if (log.cardio ? null : rangeProgress(log) case final p?) Text(p, style: muted),
+                    if (log.replaces case final r?) Text('statt $r', style: muted),
                   ]),
                 ),
+                _exerciseMenu(log),
                 if (log.setsDone == log.reps.length)
                   Icon(Icons.check_circle, color: log.succeeded ? c.primary : c.tertiary)
                 else if (current)

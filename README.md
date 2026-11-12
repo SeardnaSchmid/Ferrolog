@@ -51,7 +51,9 @@ Die App schreibt nach jedem Training `ferrolog.json` in ein GitHub-Repo
     "id": "…", "workoutId": "…", "workoutName": "Push/Pull A",
     "date": "2026-10-30T18:12:00.000",
     "exercises": [{ "name": "Bankdrücken", "weight": 77.5, "targetReps": 5,
-                    "reps": [5, 5, 3] }]  // null = Satz nicht gemacht
+                    "reps": [5, 5, 3] },  // null = Satz nicht gemacht
+                  { "name": "Kabelrudern", "weight": 45, "targetReps": 10,
+                    "reps": [10, 10, 9], "replaces": "Rudern" }]  // im Training getauscht; "added": true = dazugenommen
   }]
 }
 ```

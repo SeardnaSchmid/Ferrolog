@@ -68,13 +68,13 @@ Shape shapeOf(Exercise e) => (
       timed: e.timed,
     );
 
-/// The same for an exercise of a training, with the rest from its plan [p] (or the catalogue).
+/// The same for an exercise of a training, with the rest from its plan [p] (else its own, or the catalogue).
 Shape shapeOfLog(ExerciseLog log, Exercise? p) => (
       name: log.name,
       sets: log.reps.length,
       reps: log.targets.fold(0, max),
       kg: log.weights.fold(0.0, max),
-      rest: p?.restSeconds ?? exerciseCatalogue[log.name]?.$5 ?? 120,
+      rest: p?.restSeconds ?? log.restSeconds ?? exerciseCatalogue[log.name]?.$5 ?? 120,
       cardio: log.cardio,
       minutes: log.targetReps,
       km: log.targetKm,

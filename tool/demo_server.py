@@ -84,6 +84,10 @@ def demo_data():
             if not is_a and 0 < (end - day).days < 28:
                 late_b += 1
             no_pullups = not is_a and 0 < (end - day).days < 28 and late_b in (1, 3)
+            # Changed during the training, now and then: curl station taken (swapped), calves added on
+            # top. Own generator, so the rest of the data stays the same.
+            rng = random.Random(1000 + n)
+            swap_curls, add_calves = rng.random() < .06, rng.random() < .07 and not rushed and not no_pullups
             for name in names:
                 if name == 'Klimmzüge' and no_pullups:
                     exercises.append({'name': name, 'weight': 0.0, 'weights': [0.0] * 3, 'targetReps': 8, 'reps': [None] * 3})
@@ -153,6 +157,10 @@ def demo_data():
                     if fails[name] >= 3:
                         weight[name] = round(w * .9 / 2.5) * 2.5
                         fails[name] = 0
+            if add_calves:
+                exercises.append({'name': 'Wadenheben', 'weight': 40.0, 'weights': [40.0] * 3, 'targetReps': 12,
+                                  'reps': [rng.choice([12, 12, 14, 15]) for _ in range(3)], 'added': True,
+                                  'restSeconds': 60, 'increment': 2.5})
             bw += random.uniform(-.3, .3) + (80.5 - bw) * .02
             # Today's training was in the morning, the others in the evening.
             date = day.replace(hour=6 if day == end else 18, minute=random.choice([0, 10, 25, 40]))
@@ -163,13 +171,14 @@ def demo_data():
             if (end - day).days <= 60:
                 clock = date
                 for e in exercises:
+                    rnd = rng if e.get('added') else random  # an added exercise leaves the shared generator alone
                     if e.get('type') == 'cardio':
-                        clock += dt.timedelta(minutes=e['reps'][0] + random.uniform(1, 3))
+                        clock += dt.timedelta(minutes=e['reps'][0] + rnd.uniform(1, 3))
                         e['doneAt'] = [clock.isoformat()]
                         continue
                     heavy = e['weight'] > 30
-                    clock += dt.timedelta(seconds=random.uniform(60, 120) + (e['weight'] / 25) * random.uniform(50, 80)
-                                          if heavy else random.uniform(40, 100))
+                    clock += dt.timedelta(seconds=rnd.uniform(60, 120) + (e['weight'] / 25) * rnd.uniform(50, 80)
+                                          if heavy else rnd.uniform(40, 100))
                     rest = 180 if len(e['reps']) == 5 else 90
                     if all(r is None for r in e['reps']):
                         continue  # skipped: nothing logged
@@ -177,10 +186,19 @@ def demo_data():
                     for i in range(len(e['reps'])):
                         if i:
                             work = e['reps'][i] if e.get('type') == 'timed' else e['targetReps'] * 4
-                            clock += dt.timedelta(seconds=rest * random.uniform(1.0, 1.45) + work)
+                            clock += dt.timedelta(seconds=rest * rnd.uniform(1.0, 1.45) + work)
                         done.append(clock.isoformat())
                     e['doneAt'] = done
                 finished = clock + dt.timedelta(minutes=random.uniform(1, 3))
+            # Swapped after the fact, with the curls' set times, so the shared generator runs as without it.
+            # (The curls' progression in the plan runs on as if trained; close enough for a demo.)
+            if swap_curls and 'Bizepscurls' in names:
+                i = next(i for i, e in enumerate(exercises) if e['name'] == 'Bizepscurls')
+                if any(r is not None for r in exercises[i]['reps']):
+                    exercises[i] = {'name': 'Hammercurls', 'weight': 16.0, 'weights': [16.0] * 3, 'targetReps': 10,
+                                    'reps': [rng.choice([9, 10, 10]) for _ in range(3)], 'replaces': 'Bizepscurls',
+                                    'restSeconds': 90, 'increment': 2.0,
+                                    **({'doneAt': exercises[i]['doneAt']} if 'doneAt' in exercises[i] else {})}
             s = {'id': f'demo{n}', 'workoutId': 'wA' if is_a else 'wB',
                  'workoutName': 'StrongLifts A' if is_a else 'StrongLifts B',
                  'date': date.isoformat(), 'finishedAt': finished.isoformat(),
