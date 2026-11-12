@@ -27,7 +27,7 @@ void main() {
       stored = utf8.decode(base64Decode(body['content']));
       final created = fileSha == null;
       fileSha = 'sha${puts.length}';
-      return http.Response('{}', created ? 201 : 200);
+      return http.Response(jsonEncode({'content': {'sha': fileSha}}), created ? 201 : 200);
     });
 
     final sync = GitHubSync(await SharedPreferences.getInstance(), client);
@@ -50,6 +50,104 @@ void main() {
     fail = true;
     await sync.push('{}');
     expect(sync.status.value, contains('neu anmelden'));
+  });
+
+  group('overwrite guard', () {
+    late String? fileSha;
+    late String content;
+    late List<Map<String, dynamic>> puts;
+    late List<http.Request> gets;
+    late GitHubSync sync;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({'sync.token': 't0k', 'sync.repo': 'me/data'});
+      fileSha = 'elsewhere';
+      content = '{"app":"ferrolog"}';
+      puts = [];
+      gets = [];
+      final client = MockClient((req) async {
+        if (req.method == 'GET') {
+          gets.add(req);
+          if (fileSha == null) return http.Response('', 404);
+          if (req.headers['Accept'] == 'application/vnd.github.raw+json') return http.Response.bytes(utf8.encode(content), 200);
+          return http.Response(jsonEncode({'sha': fileSha}), 200);
+        }
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        if (body['sha'] != fileSha) return http.Response('', 409);
+        puts.add(body);
+        fileSha = 'mine${puts.length}';
+        return http.Response(jsonEncode({'content': {'sha': fileSha}}), 200);
+      });
+      sync = GitHubSync(await SharedPreferences.getInstance(), client);
+    });
+
+    test('a foreign file is not overwritten until adopted', () async {
+      await sync.push('{"a":1}');
+      expect(puts, isEmpty);
+      expect(sync.conflict.value, isTrue);
+      expect(sync.status.value, 'Konflikt: Daten auf GitHub sind neuer oder fremd');
+
+      gets.clear();
+      await sync.push('{"a":2}');
+      expect(gets, isEmpty, reason: 'paused while in conflict');
+
+      await sync.adopt('elsewhere'); // "GitHub überschreiben"
+      await sync.push('{"a":3}');
+      expect(puts.single['sha'], 'elsewhere');
+      expect(sync.lastSha, 'mine1');
+      await sync.push('{"a":4}'); // this install pushed last: silent
+      expect(puts, hasLength(2));
+
+      fileSha = 'edited by hand';
+      await sync.push('{"a":5}');
+      expect(puts, hasLength(2));
+      expect(sync.conflict.value, isTrue);
+    });
+
+    test('a missing file is created without asking', () async {
+      fileSha = null;
+      await sync.push('{"a":1}');
+      expect(puts.single.containsKey('sha'), isFalse);
+      expect(sync.conflict.value, isFalse);
+    });
+
+    test('without a known sha, a file holding nothing new is overwritten', () async {
+      final seen = <String>[];
+      sync.remoteCovered = (remote) {
+        seen.add(remote);
+        return true;
+      };
+      await sync.push('{"a":1}');
+      expect(seen, [content]);
+      expect(puts, hasLength(1));
+
+      sync.remoteCovered = (_) => fail('only asked without a known sha');
+      fileSha = 'elsewhere';
+      await sync.push('{"a":2}');
+      expect(sync.conflict.value, isTrue);
+    });
+
+    test('fetchRemote reads the raw file and its sha', () async {
+      content = '{"app":"ferrolog","ä":1}';
+      final remote = await sync.fetchRemote();
+      expect(remote?.json, content);
+      expect(remote?.sha, 'elsewhere');
+      expect(gets.last.headers['Accept'], 'application/vnd.github.raw+json');
+      expect(gets.last.headers['Authorization'], 'Bearer t0k');
+      fileSha = null;
+      expect(await sync.fetchRemote(), isNull);
+    });
+
+    test('logout and another repo forget the sha', () async {
+      await sync.adopt('x');
+      await sync.selectRepo('me/data');
+      expect(sync.lastSha, 'x');
+      await sync.selectRepo('me/other');
+      expect(sync.lastSha, isNull);
+      await sync.adopt('y');
+      await sync.logout();
+      expect(sync.lastSha, isNull);
+    });
   });
 
   test('device flow login polls until the token arrives', () async {

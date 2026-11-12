@@ -576,6 +576,26 @@ class Session {
       );
 }
 
+/// Version of the stored JSON (and of the export) this app writes and reads.
+const dataVersion = 1;
+
+/// The one entry point for reading FerroLog JSON that didn't come from this install's own save: checks
+/// it's ours and brings an older version up to [dataVersion], step by step as versions are added.
+/// Throws a [FormatException] with a message for the user, before anything is changed.
+Map<String, dynamic> migrate(Object? j) {
+  if (j is! Map<String, dynamic> || j['app'] != 'ferrolog') {
+    throw const FormatException('Das ist keine FerroLog-Datei (app "ferrolog" fehlt).');
+  }
+  final version = j['version'];
+  if (version is! int || version < 1) throw const FormatException('Die Datei hat keine gültige Version.');
+  if (version > dataVersion) {
+    throw FormatException('Die Datei hat Version $version, diese App kennt nur bis $dataVersion. Bitte die App aktualisieren.');
+  }
+  // Steps go here: if (j['version'] == 1) j = _v1to2(j); ...
+  if (j['workouts'] is! List || j['sessions'] is! List) throw const FormatException('Workouts oder Trainings fehlen in der Datei.');
+  return j;
+}
+
 /// All app data, persisted as one JSON blob. The same JSON is what gets exported for AI analysis.
 // ponytail: whole-blob save on every change, move to a DB if history grows past a few MB.
 class Store extends ChangeNotifier {
@@ -591,9 +611,14 @@ class Store extends ChangeNotifier {
   /// The session currently being trained, persisted so it survives the app being killed.
   Session? active;
 
+  Store._empty(this._prefs);
+
   Store(this._prefs) {
     final raw = _prefs.getString(_key);
-    if (raw != null) _load(jsonDecode(raw));
+    if (raw != null) {
+      final j = jsonDecode(raw);
+      _load(j['version'] == dataVersion ? j : migrate(j)); // an update may find data of an older version
+    }
     final a = _prefs.getString('$_key.active');
     if (a != null) active = Session.fromJson(jsonDecode(a));
   }
@@ -613,12 +638,53 @@ class Store extends ChangeNotifier {
     muscles = Map.of(j['muscles'] ?? const {});
   }
 
+  /// Takes the data of a file from elsewhere (the GitHub copy): only plans, trainings and muscles, never
+  /// the export-only blocks or the running training. [merge] keeps what's only here: trainings join by id
+  /// (ours win, they're the same training), plans by id (theirs win, their weights carry the progression of
+  /// the newer trainings), muscles by name (theirs win). Without [merge] the three are replaced.
+  /// Nothing changes if the file is refused. [beforeSave] runs once the file is accepted, before the save
+  /// triggers [onSaved]: sync takes the file as its own there, so the push after it isn't a conflict.
+  Future<void> importJson(Object? json, {required bool merge, Future<void> Function()? beforeSave}) async {
+    final j = migrate(json);
+    final Store other;
+    try {
+      other = Store._empty(_prefs).._load(j);
+    } catch (e) {
+      throw FormatException('Die Datei ist beschädigt: $e');
+    }
+    if (merge) {
+      final ids = {for (final s in sessions) s.id};
+      sessions = [...sessions, ...other.sessions.where((s) => !ids.contains(s.id))]..sort((a, b) => b.date.compareTo(a.date));
+      final theirs = {for (final w in other.workouts) w.id};
+      workouts = [...other.workouts, ...workouts.where((w) => !theirs.contains(w.id))];
+      muscles = {...muscles, ...other.muscles};
+    } else {
+      workouts = other.workouts;
+      sessions = other.sessions;
+      muscles = other.muscles;
+    }
+    await beforeSave?.call();
+    await _save();
+  }
+
+  /// True if this device has trainings and [json] (a FerroLog file) holds no training or plan that isn't
+  /// here too, so overwriting it loses nothing. Unreadable counts as false.
+  bool covers(String json) {
+    try {
+      final j = migrate(jsonDecode(json));
+      bool all(String key, Iterable<String> mine) => {for (final x in j[key]) x['id']}.difference(mine.toSet()).isEmpty;
+      return sessions.isNotEmpty && all('sessions', sessions.map((s) => s.id)) && all('workouts', workouts.map((w) => w.id));
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Saves [muscles] after a change.
   Future<void> saveMuscles() => _save();
 
   Map<String, dynamic> toJson() => {
         'app': 'ferrolog',
-        'version': 1,
+        'version': dataVersion,
         'exportedAt': DateTime.now().toIso8601String(),
         'units': 'kg',
         'format': 'workouts = plans; exercise.weight is the weight for the NEXT session (setWeights, if '

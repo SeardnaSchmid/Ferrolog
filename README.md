@@ -33,6 +33,11 @@ nur die Repos, auf denen der Nutzer die App installiert hat.
    *Only select repositories* → `ferrolog-data`.
 3. In Ferrolog: Wolken-Symbol → *Mit GitHub anmelden* → Code eingeben → Repo wählen.
 
+Liegt im Repo schon eine `ferrolog.json`, die nicht von diesem Gerät stammt (Neuinstallation,
+zweites Handy, Änderung von Hand oder durch eine KI), schreibt die App nicht darüber, sondern
+fragt: *Von GitHub wiederherstellen* oder *GitHub überschreiben*. Wiederherstellen geht auch
+jederzeit unter *Daten*.
+
 ## Daten für die KI
 
 Die App schreibt nach jedem Training `ferrolog.json` in ein GitHub-Repo

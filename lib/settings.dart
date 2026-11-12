@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'main.dart';
+import 'model.dart';
 import 'plan_import_page.dart';
 import 'sync.dart';
 import 'units.dart';
@@ -30,6 +33,7 @@ class _SyncSettingsState extends State<SyncSettings> {
     super.initState();
     lifecycle;
     if (sync.loggedIn) loadRepos();
+    if (sync.conflict.value) WidgetsBinding.instance.addPostFrameCallback((_) => resolve());
   }
 
   @override
@@ -74,10 +78,57 @@ class _SyncSettingsState extends State<SyncSettings> {
         if (repos!.length == 1 && sync.repo != repos!.single) await select(repos!.single);
       });
 
+  /// The first push to a repo meets the guard: a file there that isn't ours waits for the user.
   Future<void> select(String repo) async {
     await sync.selectRepo(repo);
     setState(() {});
     await sync.push(store.exportJson());
+    if (sync.conflict.value && mounted) await resolve();
+  }
+
+  /// Shows both sides in numbers and lets the user restore from GitHub or overwrite it.
+  /// Only the network steps count as busy, not the time the dialog is open.
+  Future<void> resolve() async {
+    ({String json, String sha})? remote;
+    await run(() async {
+      remote = await sync.fetchRemote();
+      if (remote == null) {
+        sync.conflict.value = false; // gone meanwhile: the next push creates it
+        throw 'Auf GitHub liegt noch keine ${GitHubSync.path}.';
+      }
+    });
+    final sha = remote?.sha;
+    if (sha == null || !mounted) return;
+    Map<String, dynamic>? theirs;
+    String? problem;
+    try {
+      theirs = migrate(jsonDecode(remote!.json));
+    } on FormatException catch (e) {
+      problem = e.message;
+    }
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => _ResolveDialog(theirs: theirs, problem: problem),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'restore':
+        await run(() => store.importJson(theirs, merge: store.sessions.isNotEmpty, beforeSave: () => sync.adopt(sha)));
+        if (mounted && error == null) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Von GitHub wiederhergestellt')));
+        }
+      case 'overwrite':
+        final more = (theirs?['sessions'] as List?)?.length ?? 0;
+        if (more > store.sessions.length &&
+            !await confirm(context, 'Auf GitHub liegen mehr Trainings ($more) als hier (${store.sessions.length}). '
+                'Wirklich überschreiben? Der alte Stand bleibt nur in der Git-Historie des Repos.')) {
+          return;
+        }
+        await run(() async {
+          await sync.adopt(sha);
+          await sync.push(store.exportJson());
+        });
+    }
   }
 
   @override
@@ -213,6 +264,16 @@ class _SyncSettingsState extends State<SyncSettings> {
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.cloud_download_outlined),
+            title: const Text('Von GitHub wiederherstellen'),
+            subtitle: Text(sync.configured
+                ? 'Trainings und Pläne aus ${sync.repo} holen, nach einer Neuinstallation oder vom anderen Gerät'
+                : 'Erst unten GitHub-Sync einrichten'),
+            enabled: sync.configured && !busy,
+            onTap: resolve,
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.download_outlined),
             title: const Text('Plan von KI übernehmen'),
             subtitle: const Text('JSON-Block aus dem Chat einfügen, mit Vorschau vor dem Speichern'),
@@ -302,7 +363,56 @@ class _SyncSettingsState extends State<SyncSettings> {
           if (busy && code == null) const LinearProgressIndicator(),
           if (error != null) Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ValueListenableBuilder(valueListenable: sync.status, builder: (_, s, _) => Text(s)),
+          ValueListenableBuilder(
+            valueListenable: sync.conflict,
+            builder: (_, c, _) => c
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(onPressed: busy ? null : resolve, child: const Text('Konflikt lösen')),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
+    );
+  }
+}
+
+/// GitHub against this device, in numbers; pops 'restore', 'overwrite' or null.
+class _ResolveDialog extends StatelessWidget {
+  final Map<String, dynamic>? theirs;
+  final String? problem;
+  const _ResolveDialog({required this.theirs, required this.problem});
+
+  static String _count(int n, DateTime? last) =>
+      '$n ${n == 1 ? 'Training' : 'Trainings'}${last == null ? '' : ', letztes am ${dateLabel(last)}'}';
+
+  @override
+  Widget build(BuildContext context) {
+    final remote = theirs?['sessions'] as List?;
+    final dates = [for (final s in remote ?? const []) if (s case {'date': final String d}) DateTime.tryParse(d)].nonNulls;
+    final last = dates.isEmpty ? null : dates.reduce((a, b) => a.isAfter(b) ? a : b);
+    return AlertDialog(
+      title: const Text('Daten auf GitHub'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(remote == null ? 'Auf GitHub: nicht lesbar. $problem' : 'Auf GitHub: ${_count(remote.length, last)}'),
+        const SizedBox(height: 4),
+        Text('Auf diesem Gerät: ${_count(store.sessions.length, store.sessions.firstOrNull?.date)}'),
+        const SizedBox(height: 12),
+        Text(
+          store.sessions.isEmpty
+              ? 'Wiederherstellen holt Trainings und Pläne von GitHub.'
+              : 'Wiederherstellen holt Trainings und Pläne von GitHub und behält die Trainings, die nur hier sind.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+        TextButton(onPressed: () => Navigator.pop(context, 'overwrite'), child: const Text('GitHub überschreiben')),
+        FilledButton(
+          onPressed: remote == null ? null : () => Navigator.pop(context, 'restore'),
+          child: const Text('Von GitHub wiederherstellen'),
+        ),
+      ],
     );
   }
 }

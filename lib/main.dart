@@ -47,6 +47,9 @@ Future<void> main() async {
     if (sync.configured) sync.push(store.exportJson());
   };
   store.exportExtras = analysisExtras;
+  // Installs from before the overwrite guard know no sha yet: they keep pushing as long as GitHub holds
+  // nothing they lack, else the user decides.
+  sync.remoteCovered = store.covers;
   await store.autoFinish();
   runApp(const Ferrolog());
 }

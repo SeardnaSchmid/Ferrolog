@@ -13,6 +13,16 @@ const githubAppSlug = 'ferrolog-sync';
 /// A pending device-flow login: show [userCode], let the user enter it at [verificationUri].
 typedef DeviceCode = ({String deviceCode, String userCode, String verificationUri, int interval, DateTime expiresAt});
 
+/// The file on GitHub is not the one this install pushed last: another device, a hand edit or an AI
+/// changed it, or this is a fresh install. Pushing would overwrite it, so the user has to decide.
+class SyncConflict implements Exception {
+  final String sha;
+  const SyncConflict(this.sha);
+
+  @override
+  String toString() => 'Konflikt: Daten auf GitHub sind neuer oder fremd';
+}
+
 /// Pushes the full export JSON to a file in a GitHub repo via the Contents API,
 /// so an AI (or anything else) can read the training data from there.
 /// Every push is a full snapshot, so a failed push is fixed by the next one.
@@ -25,6 +35,13 @@ class GitHubSync {
   final http.Client _client;
   final status = ValueNotifier<String>('');
 
+  /// True after a push found a [SyncConflict]; pushes pause until the user restores or overwrites.
+  final conflict = ValueNotifier(false);
+
+  /// Asked only when this install has no [lastSha] yet (installs from before the guard): true if the
+  /// remote file (raw JSON) holds nothing this device lacks, so pushing over it loses nothing.
+  bool Function(String remote)? remoteCovered;
+
   GitHubSync(this._prefs, [http.Client? client]) : _client = client ?? http.Client() {
     status.value = _prefs.getString('sync.status') ?? '';
   }
@@ -36,7 +53,24 @@ class GitHubSync {
   bool get loggedIn => token.isNotEmpty;
   bool get configured => RegExp(r'^[\w.-]+/[\w.-]+$').hasMatch(repo) && loggedIn;
 
-  Future<void> selectRepo(String repo) => _prefs.setString('sync.repo', repo);
+  Future<void> selectRepo(String repo) async {
+    if (repo != this.repo) await _forget();
+    await _prefs.setString('sync.repo', repo);
+  }
+
+  /// Blob sha of the file as this install last wrote (or restored) it; a different sha on GitHub is a conflict.
+  String? get lastSha => _prefs.getString('sync.lastSha');
+
+  /// Takes the file with [sha] as ours: the next push overwrites it (after a restore, or "GitHub überschreiben").
+  Future<void> adopt(String sha) async {
+    await _prefs.setString('sync.lastSha', sha);
+    conflict.value = false;
+  }
+
+  Future<void> _forget() async {
+    await _prefs.remove('sync.lastSha');
+    conflict.value = false;
+  }
 
   Map<String, String> get _headers => {
         'Authorization': 'Bearer $token',
@@ -103,6 +137,7 @@ class GitHubSync {
 
   Future<void> logout() async {
     await _prefs.remove('sync.token');
+    await _forget();
     _setStatus('');
   }
 
@@ -127,7 +162,7 @@ class GitHubSync {
 
   /// Pushes [json]; if a push is already running, only the newest pending snapshot follows it.
   Future<void> push(String json) {
-    if (!configured) return Future.value();
+    if (!configured || conflict.value) return Future.value();
     if (_running != null) {
       _queued = json;
       return _running!;
@@ -142,6 +177,10 @@ class GitHubSync {
       try {
         await _put(next);
         _setStatus('Synchronisiert ${_time(DateTime.now())}');
+      } on SyncConflict catch (e) {
+        conflict.value = true;
+        _setStatus('$e');
+        break;
       } catch (e) {
         _setStatus('Fehler ${_time(DateTime.now())}: $e');
       }
@@ -150,16 +189,37 @@ class GitHubSync {
     _running = null;
   }
 
+  Uri get _url => Uri.https('api.github.com', '/repos/$repo/contents/$path');
+
+  /// Blob sha of the file on GitHub, null when it doesn't exist yet.
+  Future<String?> _remoteSha() async {
+    final res = await _client.get(_url, headers: _headers);
+    if (res.statusCode == 404) return null;
+    if (res.statusCode != 200) throw _error(res);
+    return jsonDecode(res.body)['sha'];
+  }
+
+  /// The file on GitHub as it is, null when there is none. The raw media type has no 1 MB limit,
+  /// unlike the JSON response with base64 content; the sha comes from a metadata request first.
+  Future<({String json, String sha})?> fetchRemote() async {
+    final sha = await _remoteSha();
+    if (sha == null) return null;
+    final res = await _client.get(_url, headers: {..._headers, 'Accept': 'application/vnd.github.raw+json'});
+    if (res.statusCode != 200) throw _error(res);
+    return (json: utf8.decode(res.bodyBytes), sha: sha);
+  }
+
   Future<void> _put(String json) async {
-    final url = Uri.https('api.github.com', '/repos/$repo/contents/$path');
     final headers = _headers;
-    // The API needs the current file's sha to overwrite it; 404 means it doesn't exist yet.
-    final current = await _client.get(url, headers: headers);
-    if (current.statusCode != 200 && current.statusCode != 404) throw _error(current);
-    final sha = current.statusCode == 200 ? jsonDecode(current.body)['sha'] : null;
+    // The API needs the current file's sha to overwrite it; none means it doesn't exist yet.
+    final sha = await _remoteSha();
+    if (sha != null && sha != lastSha) {
+      final covered = remoteCovered;
+      if (lastSha != null || covered == null || !covered((await fetchRemote())?.json ?? '')) throw SyncConflict(sha);
+    }
 
     final res = await _client.put(
-      url,
+      _url,
       headers: headers,
       body: jsonEncode({
         'message': 'FerroLog sync',
@@ -168,6 +228,7 @@ class GitHubSync {
       }),
     );
     if (res.statusCode != 200 && res.statusCode != 201) throw _error(res);
+    if (jsonDecode(res.body)['content']?['sha'] case final String written) await adopt(written);
   }
 
   static String _error(http.Response r) => switch (r.statusCode) {
