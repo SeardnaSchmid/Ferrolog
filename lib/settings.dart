@@ -152,22 +152,24 @@ class _SyncSettingsState extends State<SyncSettings> {
         padding: const EdgeInsets.all(16),
         children: [
           Text('Training', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          for (final (key, icon, title, subtitle) in const [
-            ('rest.sound', Icons.volume_up_outlined, 'Ton', 'Signalton, wenn die Pause bei 0 ankommt'),
-            ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt'),
+          for (final (key, icon, title, subtitle, on) in const [
+            ('rest.sound', Icons.volume_up_outlined, 'Ton', 'Signalton, wenn die Pause bei 0 ankommt', true),
+            ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt', true),
             ('session.autoFinish', Icons.timer_off_outlined, 'Automatisch beenden',
-                'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz'),
+                'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz', true),
             ('session.keepScreenOn', Icons.light_mode_outlined, 'Bildschirm anlassen',
-                'Während des Trainings geht das Display nicht aus'),
+                'Während des Trainings geht das Display nicht aus', true),
             ('session.showWhenLocked', Icons.lock_open_outlined, 'Über dem Sperrbildschirm zeigen',
-                'Während des Trainings ohne Entsperren auf die Pause schauen'),
+                'Während des Trainings ohne Entsperren auf die Pause schauen', true),
+            ('session.askRir', Icons.battery_5_bar_outlined, 'Reserve abfragen',
+                'Nach dem letzten Satz einer Übung: Wie viele Wiederholungen gingen noch? Hilft bei Plateaus', false),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: Icon(icon),
               title: Text(title),
               subtitle: Text(subtitle),
-              value: prefs.getBool(key) ?? true,
+              value: prefs.getBool(key) ?? on,
               onChanged: (v) async {
                 await prefs.setBool(key, v);
                 setState(() {});

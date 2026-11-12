@@ -204,6 +204,16 @@ def demo_data():
                                     'reps': [rng.choice([9, 10, 10]) for _ in range(3)], 'replaces': 'Bizepscurls',
                                     'restSeconds': 90, 'increment': 2.0,
                                     **({'doneAt': exercises[i]['doneAt']} if 'doneAt' in exercises[i] else {})}
+            # Reps in reserve, asked for the last two months (the setting came then): at the limit after missed
+            # reps, else one to three left; now and then not answered. Own generator, the rest stays the same.
+            if (end - day).days <= 60:
+                rr = random.Random(5000 + n)
+                for e in exercises:
+                    if e.get('type') or e['weight'] < 0 or None in e['reps'] or rr.random() < .15:
+                        continue
+                    top = e.get('maxReps', e['targetReps'])
+                    e['rir'] = 0 if any(r < e['targetReps'] for r in e['reps']) else \
+                        rr.choice([0, 1, 1]) if any(r < top for r in e['reps']) else rr.choice([1, 2, 2, 3, 4])
             s = {'id': f'demo{n}', 'workoutId': 'wA' if is_a else 'wB',
                  'workoutName': 'StrongLifts A' if is_a else 'StrongLifts B',
                  'date': date.isoformat(), 'finishedAt': finished.isoformat(),
@@ -268,6 +278,8 @@ def seed_script():
         '  localStorage.clear();\n'
         f"  localStorage.setItem('flutter.ferrolog', {json.dumps(value)});\n"
         "  localStorage.setItem('flutter.unit', '\"kg\"');\n"
+        # The demo has answered reps in reserve, so it asks for them too.
+        "  localStorage.setItem('flutter.session.askRir', 'true');\n"
         "  if (reset) history.replaceState(null, '', location.pathname);\n"
         '})();</script>\n'
     )

@@ -98,8 +98,11 @@ class _RecapPageState extends State<RecapPage> {
     Widget? detail(String name) {
       final record = records.contains(name);
       final next = nextOf[name];
-      final time = timeTaken(s, name, perSet: true);
-      if (!record && next == null && time == null) return null;
+      final time = [
+        ?timeTaken(s, name, perSet: true),
+        if (s.exercises.where((l) => l.name == name).firstOrNull?.rir case final r?) rirLabel(r),
+      ].join(' · ');
+      if (!record && next == null && time.isEmpty) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
       if (next case (final l, final kg)) {
         final (icon, color) = kg > l.weight
@@ -121,7 +124,7 @@ class _RecapPageState extends State<RecapPage> {
       // The time on a line of its own, so it never breaks in the middle.
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (parts.isNotEmpty) Text.rich(TextSpan(children: parts), style: small),
-        if (time != null) Text(time, style: small),
+        if (time.isNotEmpty) Text(time, style: small),
       ]);
     }
 

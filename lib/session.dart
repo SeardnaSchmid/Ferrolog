@@ -34,6 +34,27 @@ class _SessionPageState extends State<SessionPage> {
   set restTarget(int seconds) => s.restSeconds = seconds;
   ExerciseLog? touched; // highlighted: the exercise last logged or edited
 
+  /// The exercise whose last set was just logged, while its card asks how many reps were left; see
+  /// [askRir]. Only on this page: an answer or the next set tapped and the question is gone.
+  ExerciseLog? rirAsk;
+
+  /// Whether the reserve is asked after an exercise's last set: a setting, off unless switched on.
+  /// Strength sets only: no cardio, no holds, no assistance (the reps aren't the limit there).
+  bool askRir(ExerciseLog log) =>
+      (prefs.getBool('session.askRir') ?? false) &&
+      !log.cardio &&
+      !log.timed &&
+      log.weights.every((w) => w >= 0) &&
+      log.setsDone == log.reps.length;
+
+  void answerRir(ExerciseLog log, int rir) {
+    setState(() {
+      log.rir = rir;
+      rirAsk = null;
+    });
+    store.saveActive(s);
+  }
+
   /// Warm-up lines opened, and the warm-up sets ticked off: only on this page, they're never logged.
   final warmupOpen = <ExerciseLog>{};
   final warmupDone = <ExerciseLog, Set<int>>{};
@@ -390,6 +411,7 @@ class _SessionPageState extends State<SessionPage> {
     }
     setState(() {
       touched = log;
+      rirAsk = null; // the next set is on, the question is over
       final r = log.reps[i], target = log.targets[i];
       // First tap: the goal (top of the range, if any), then one rep less per tap, then empty again.
       log.reps[i] = r == null ? log.maxReps ?? target : (r > 1 ? r - 1 : null);
@@ -401,7 +423,11 @@ class _SessionPageState extends State<SessionPage> {
         pausedAt = null;
         alerted = false;
         restTarget = restAfter(log, missed: done < target);
+        if (r == null && askRir(log)) {
+          rirAsk = log;
+        }
       }
+      if (log.setsDone < log.reps.length) log.rir = null; // the last set undone takes the answer along
     });
     store.saveActive(s);
   }
@@ -692,6 +718,36 @@ class _SessionPageState extends State<SessionPage> {
     };
   }
 
+  /// On the card of the exercise whose last set was just logged, under its sets: one tap answers, the
+  /// next set tapped (or ignoring it) answers nothing.
+  Widget _rirQuestion(ExerciseLog log, ColorScheme c) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(children: [
+          Text('Wie viele gingen noch?', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+          const SizedBox(width: 10),
+          for (final n in const [0, 1, 2, 3, 4]) ...[
+            if (n > 0) const SizedBox(width: 6),
+            Expanded(
+              child: Material(
+                color: c.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => answerRir(log, n),
+                  child: SizedBox(
+                    height: 36,
+                    child: Center(
+                      child: Text(n == 4 ? '4+' : '$n',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.onSurface)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ]),
+      );
+
   /// A round 44 dp button for the live strip: tonal, or filled for the action that matters now.
   Widget _roundButton(IconData icon, String tooltip, VoidCallback onPressed, {bool filled = false}) {
     final style = IconButton.styleFrom(
@@ -733,6 +789,7 @@ class _SessionPageState extends State<SessionPage> {
                     ),
                     if (log.cardio ? null : rangeProgress(log) case final p?) Text(p, style: muted),
                     if (log.replaces case final r?) Text('statt $r', style: muted),
+                    if (log.rir case final r?) Text(rirLabel(r), style: muted),
                   ]),
                 ),
                 // On the title's line: the state, then the menu at the edge.
@@ -782,13 +839,15 @@ class _SessionPageState extends State<SessionPage> {
                   ],
                 ],
               ),
+              if (rirAsk == log) _rirQuestion(log, c),
             ],
           ),
         ),
       );
 
-  /// If switched on in the settings, before the first set of a barbell lift: the warm-up ramp to its first set, one line that opens into
-  /// sets to tick off, each with the plates per side. Not logged, no volume, no rest.
+  /// If switched on in the settings, before the first set of a barbell lift: the warm-up ramp to its first
+  /// set, one line that opens into sets to tick off, each with the plates per side. Not logged, no volume,
+  /// no rest.
   Widget? _warmup(ExerciseLog log, ColorScheme c, TextStyle muted) {
     if (!showWarmup || log.cardio || log.timed || log.setsDone > 0 || !isBarbell(log.name) || log.weights.isEmpty) {
       return null;

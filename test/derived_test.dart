@@ -27,6 +27,7 @@ void main() {
       s.exercises[0].reps.setAll(0, [5, 5, reps]);
       s.exercises[1].reps.setAll(0, [5, 5, 5]);
       s.exercises[2].reps.setAll(0, [5, 4, reps]);
+      s.exercises[0].rir = reps == 5 ? 2 : null; // answered once, the newer one not
       await store.finishSession(s);
     }
     expect(jsonDecode(store.exportJson()).containsKey('derived'), isFalse, reason: 'only with the hook, as in main');
@@ -46,6 +47,11 @@ void main() {
     expect(d['periods']['all']['trainings'], 2);
     final bench = (d['exercises'] as List).firstWhere((e) => e['name'] == 'Bankdrücken');
     expect((bench['trainings'], bench['bestWeight'], bench['next']), (2, 82.5, 82.5), reason: '80 done, so 82.5; missed a rep there');
+    expect(bench['rirLast'], 2, reason: 'the latest answered one');
+    expect(bench['rirLastDate'], isNotNull);
+    expect(j['sessions'].last['exercises'][0]['rir'], 2);
+    expect(j['format'], contains('exercises[].rir'));
+    expect((j['capabilities']['can'] as List).join(), contains('how many reps were left'));
     expect(d['setsPerMuscleWeek']['last28d']['Brust'], greaterThan(0));
     expect(d['setsPerMuscleWeek']['last90d'], d['setsPerMuscleWeek']['last28d'],
         reason: 'both trainings today: weeks since the first training, not the whole span');

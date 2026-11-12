@@ -348,6 +348,10 @@ List<Finding> _plateaus(List<Session> sessions, List<Workout> workouts) {
               r == null ? '–' : l.weights[i] < at ? '$r @ ${weightNum(l.weights[i])}' : '$r',
           ].join(' · ');
       final lighter = stuck.first.$2.weights.any((x) => x < at);
+      // The reserve answered after the last set, where asked: reps left means the weight isn't the limit;
+      // twice at the limit means it is.
+      final reserve = stuck.first.$2.rir;
+      final limit = stuck.take(2).every((x) => x.$2.rir == 0);
       final deload = e.down
           ? 'Automatischer Deload nach ${e.failsToDeload} Fehlschlägen in Folge (bisher ${e.fails}).'
           : 'Automatischer Deload ist aus.';
@@ -356,10 +360,17 @@ List<Finding> _plateaus(List<Session> sessions, List<Workout> workouts) {
           why: [
             for (final (d, l) in last3) '${_date(d)}: ${sets(l)}',
             if (lighter) 'Zuletzt einen Satz leichter gemacht, das hält das Gewicht.',
+            if (reserve != null && reserve >= 2) 'Zuletzt gingen noch ${reserve >= 4 ? '4 oder mehr' : reserve} Wiederholungen.',
+            if (limit) 'Die letzten 2 Trainings am Limit, keine Wiederholung mehr übrig.',
             deload,
           ].join('\n'),
-          advice: 'Gewicht halten, auf saubere Technik und genug Pause achten. Klappt es in 2 Trainings nicht, '
-              'kann ein Deload helfen.',
+          advice: reserve != null && reserve >= 2
+              ? 'Das Gewicht ist nicht die Grenze: Technik, Konzentration und genug Pause prüfen und die Sätze '
+                  'ausreizen. Ein Deload ist nicht nötig.'
+              : limit
+                  ? 'Zweimal am Limit: ein Deload um etwa 10 % hilft, danach wieder aufbauen.'
+                  : 'Gewicht halten, auf saubere Technik und genug Pause achten. Klappt es in 2 Trainings nicht, '
+                      'kann ein Deload helfen.',
           source: statsAt(StatsView.exercise, exercise: e.name, dates: [for (final (d, _) in stuck) d]),
           exercise: e.name,
           weight: stuck.length.toDouble()));

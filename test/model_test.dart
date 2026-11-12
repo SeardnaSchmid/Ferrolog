@@ -368,4 +368,15 @@ void main() {
     final run = ExerciseLog(name: 'Laufen', weight: 0, targetReps: 20, reps: [null], cardio: true);
     expect(run.reshaped(Exercise.cardio(name: 'Laufen', minutes: 0, km: 5)).targetKm, 5);
   });
+
+  test('reps in reserve: stored with the log, gone when its last set is open again', () {
+    final log = ExerciseLog(name: 'Bankdrücken', weight: 70, targetReps: 5, reps: [5, 5, 5], rir: 2);
+    expect(log.toJson()['rir'], 2);
+    expect(ExerciseLog.fromJson(log.toJson()).rir, 2);
+    expect(ExerciseLog(name: 'Bankdrücken', weight: 70, targetReps: 5, reps: [5]).toJson().containsKey('rir'), isFalse);
+    expect(log.reshaped(Exercise(name: 'Bankdrücken', weight: 70, sets: 3, reps: 5)).rir, 2);
+    expect(log.reshaped(Exercise(name: 'Bankdrücken', weight: 70, sets: 4, reps: 5)).rir, isNull, reason: 'a set more to do');
+    expect(rirLabel(0), 'am Limit');
+    expect([1, 4].map(rirLabel), ['noch 1 übrig', 'noch 4+ übrig']);
+  });
 }

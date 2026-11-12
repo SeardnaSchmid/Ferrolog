@@ -30,12 +30,15 @@ final capabilities = {
     'Own exercises with their muscles (muscles: primary, secondary), for names the app doesn\'t know.',
     'During a training the user can swap an exercise (machine taken), add one, add or take off sets and change '
         'the order; that changes only that training, not the plan (see replaces, added in the sessions).',
+    'If the user switched it on, the app asks after an exercise\'s last set how many reps were left '
+        '(sessions[].exercises[].rir, 0 = at the limit, 4 = four or more): a plateau with reps left is not the '
+        'weight\'s fault, twice at the limit calls for a deload. It is recorded, not planned.',
     'Barbell lifts show the plates per side for the user\'s bar and plates, and, if the user switched it on, a '
         'warm-up before the first set (empty bar × 8, then 50/70/85 % of the first set); nothing to plan for either.',
   ],
   'cannot': [
     'Supersets, circuits or giant sets: exercises are done one after the other; the rest timer runs per exercise.',
-    'RPE / RIR, percentages of the 1RM, tempo, notes per exercise.',
+    'Planned RPE / RIR targets, percentages of the 1RM, tempo, notes per exercise.',
     'Own warm-up sets, or warm-ups for dumbbell and machine exercises; warm-up sets are never logged.',
     'Periodisation over weeks (waves, deload weeks, blocks): only the automatic steps above; a planned change '
         'has to be made by hand when it is due.',

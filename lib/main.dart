@@ -1362,9 +1362,13 @@ class _HistoryListState extends State<HistoryList> {
             rows: [for (final l in s.exercises) (l.name, l.weights, l.reps, l.targets, false, l.cardio ? l.km ?? l.targetKm : null, l.cardio)],
             perSet: true,
             timed: {for (final l in s.exercises) if (l.timed) l.name},
-            detail: (name) => switch (timeTaken(s, name)) {
-              final t? => Text(t, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
-              null => null,
+            // Time taken and the reserve answered after the last set.
+            detail: (name) => switch ([
+              ?timeTaken(s, name),
+              if (s.exercises.where((l) => l.name == name).firstOrNull?.rir case final r?) rirLabel(r),
+            ]) {
+              [] => null,
+              final parts => Text(parts.join(' · '), style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
             },
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RecapPage(s))),
             footer: [

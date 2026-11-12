@@ -29,7 +29,8 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     'work), source = where the statistics show it (view balance with pair, exercise with the dates marked, weeks, history). minutesTypical / secondsSetToSet: median time an exercise took (setup and warm-ups '
     'included, from the set logged before it to its last set) and from one of its sets to the next (rest plus the set), '
     'from per-set timestamps (sessions[].exercises[].doneAt), latest 10 trainings. workoutMinutesEstimated: the app estimate '
-    'per workout. weeks: trainings per calendar week (Monday) against goalPerWeek.';
+    'per workout. weeks: trainings per calendar week (Monday) against goalPerWeek. rirLast / rirLastDate: the latest '
+    'reps in reserve answered for an exercise (sessions[].exercises[].rir) and when; missing = never asked.';
 
 /// Statistics for the export: the numbers behind the statistics page, balance and the findings,
 /// so an AI doesn't have to recompute them (and get them wrong).
@@ -96,6 +97,10 @@ Map<String, dynamic> derivedStats(DateTime now) {
             'next': ?plannedNext[name],
             if (times.isNotEmpty) 'minutesTypical': r1(median([for (final m in times) m.total.inSeconds / 60])),
             if (gaps.isNotEmpty) 'secondsSetToSet': median(gaps).round(),
+            if (h.where((x) => x.$2.rir != null).lastOrNull case (final d, final l)) ...{
+              'rirLast': l.rir,
+              'rirLastDate': day(d),
+            },
           };
         }(),
   ];

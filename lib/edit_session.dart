@@ -156,6 +156,29 @@ class _EditSessionPageState extends State<EditSessionPage> {
                           ),
                         ],
                       ]),
+                    if (!log.cardio &&
+                        !log.timed &&
+                        log.weights.every((w) => w >= 0) &&
+                        ((prefs.getBool('session.askRir') ?? false) || log.rir != null)) ...[
+                      const SizedBox(height: 10),
+                      // The reserve after the last set; the chosen one again takes it off.
+                      Row(children: [
+                        Text('Gingen noch', style: muted),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Wrap(spacing: 6, children: [
+                            for (final n in const [0, 1, 2, 3, 4])
+                              ChoiceChip(
+                                showCheckmark: false,
+                                visualDensity: VisualDensity.compact,
+                                label: Text(n == 4 ? '4+' : '$n'),
+                                selected: log.rir == n,
+                                onSelected: (on) => setState(() => log.rir = on ? n : null),
+                              ),
+                          ]),
+                        ),
+                      ]),
+                    ],
                   ]),
                 ),
               ),

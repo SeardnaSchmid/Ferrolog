@@ -327,6 +327,10 @@ class ExerciseLog {
   final String? replaces;
   final bool added;
 
+  /// Reps in reserve after the last set, as the user answered: 0 (at the limit) to 4 (four or more).
+  /// Null when not asked or not answered. Read by the plateau finding, never by the 1RM.
+  int? rir;
+
   ExerciseLog({
     required this.name,
     required double weight,
@@ -346,6 +350,7 @@ class ExerciseLog {
     this.increment,
     this.replaces,
     this.added = false,
+    this.rir,
   })  : weights = weights ?? List.filled(reps.length, weight),
         doneAt = doneAt ?? List.filled(reps.length, null),
         targets = targets ?? List.filled(reps.length, targetReps);
@@ -396,6 +401,7 @@ class ExerciseLog {
       increment: increment,
       replaces: replaces,
       added: added,
+      rir: n == done.length ? rir : null, // asked after the last set: open sets again, the answer goes
     );
   }
 
@@ -425,6 +431,7 @@ class ExerciseLog {
         increment: increment,
         replaces: replaces,
         added: added,
+        rir: reps.every((r) => r != null) ? rir : null, // asked after the last set
       );
 
   /// Target reps of the first set; for cardio the planned minutes.
@@ -456,6 +463,7 @@ class ExerciseLog {
         if (doneAt.any((t) => t != null)) 'doneAt': [for (final t in doneAt) t?.toIso8601String()],
         if (replaces != null) 'replaces': replaces,
         if (added) 'added': true,
+        'rir': ?rir,
         // A planned exercise has these in the plan; one from outside it keeps them for the running training.
         if (replaces != null || added) ...{
           if (restSeconds != null) 'restSeconds': restSeconds,
@@ -484,6 +492,7 @@ class ExerciseLog {
         increment: (j['increment'] as num?)?.toDouble(),
         replaces: j['replaces'],
         added: j['added'] == true,
+        rir: j['rir'],
       );
 }
 
@@ -781,6 +790,8 @@ class Store extends ChangeNotifier {
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
             'type "timed" (held or carried, e.g. plank, farmer\'s walk): reps and targets are seconds, weight optional. '
             'exercises[].doneAt = when each set was logged (null = not done or not recorded); date = start of the training. '
+            'exercises[].rir = reps in reserve after the last set as the user answered (0 = at the limit, 4 = four or more; '
+            'only asked if switched on, missing = not answered). '
             'muscles = muscle groups the user set for an exercise (primary; secondary count half); other exercises '
             'use a built-in list.',
         'workouts': workouts.map((w) => w.toJson()).toList(),
@@ -1261,6 +1272,9 @@ List<String> searchExercises(String query, Iterable<String> names) {
 }
 
 /// Planned sets and reps: "3×5", "3×5–8", "10/8/6"; with [seconds] "3×30 s".
+/// The answer to "Wie viele gingen noch?": "am Limit", "noch 2 übrig", "noch 4+ übrig".
+String rirLabel(int rir) => rir == 0 ? 'am Limit' : 'noch ${rir >= 4 ? '4+' : rir} übrig';
+
 String setsLabel(List<int> reps, int? maxReps, {bool seconds = false}) {
   final range = maxReps == null ? '' : '–$maxReps';
   final unit = seconds ? ' s' : '';

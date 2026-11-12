@@ -156,6 +156,33 @@ void main() {
     expect(findings(climbing, [curls], now).where((f) => f.kind == FindingKind.action), isEmpty);
   });
 
+  test('plateau with reps in reserve: reps left say technique, twice at the limit says deload', () {
+    final b = Workout(name: 'B', exercises: [Exercise(name: 'Schulterdrücken', weight: 42.5, sets: 3, reps: 5, down: false)]);
+    List<Session> stuck(int? newest, int? before) => [
+          at(b, 1)
+            ..exercises.single.reps.setAll(0, [5, 5, 4])
+            ..exercises.single.rir = newest,
+          at(b, 3)
+            ..exercises.single.reps.setAll(0, [5, 5, 4])
+            ..exercises.single.rir = before,
+          at(b, 5)..exercises.single.reps.setAll(0, [5, 5, 4]),
+        ];
+    Finding plateau(List<Session> s) => findings(s, [b], now).firstWhere((f) => f.type == FindingType.plateau);
+
+    final left = plateau(stuck(2, null));
+    expect(left.why, contains('Zuletzt gingen noch 2 Wiederholungen.'));
+    expect(left.advice, startsWith('Das Gewicht ist nicht die Grenze'));
+    expect(plateau(stuck(4, null)).why, contains('noch 4 oder mehr Wiederholungen'));
+
+    final limit = plateau(stuck(0, 0));
+    expect(limit.why, contains('Die letzten 2 Trainings am Limit'));
+    expect(limit.advice, startsWith('Zweimal am Limit: ein Deload um etwa 10 %'));
+
+    for (final s in [stuck(0, null), stuck(1, 1), stuck(null, null)]) {
+      expect(plateau(s).advice, startsWith('Gewicht halten'), reason: 'once at the limit, or not answered');
+    }
+  });
+
   test('weekly goal comes first; positives of the last training fill the lines below', () {
     final a = Workout(name: 'A', exercises: [Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5)]);
     final sunday = DateTime(2026, 11, 8, 12);
