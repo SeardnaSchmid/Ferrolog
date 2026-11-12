@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'edit.dart';
+import 'edit_session.dart';
 import 'main.dart';
 import 'model.dart';
 import 'timing.dart';
@@ -17,7 +18,8 @@ class RecapPage extends StatefulWidget {
 }
 
 class _RecapPageState extends State<RecapPage> {
-  Session get s => widget.session;
+  /// Replaced by the stored copy after an edit on [EditSessionPage].
+  late Session s = widget.session;
   late double? bodyWeight = s.bodyWeight;
   late final note = TextEditingController(text: s.note ?? '');
   late int? mood = s.mood;
@@ -179,7 +181,16 @@ class _RecapPageState extends State<RecapPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Zusammenfassung')),
+      appBar: AppBar(title: const Text('Zusammenfassung'), actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          tooltip: 'Training bearbeiten',
+          onPressed: () async {
+            final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EditSessionPage(s)));
+            if (saved == true && mounted) setState(() => s = store.sessions.where((x) => x.id == s.id).firstOrNull ?? s);
+          },
+        ),
+      ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         children: [

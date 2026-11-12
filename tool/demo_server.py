@@ -79,6 +79,7 @@ def demo_data():
             if good:
                 tags.append('Voller Energie')
             exercises = []
+            before = {}  # the plan before this training's progression, see planBefore below
             # Now and then no time left for the last accessory: skipped entirely, no miss.
             rushed = random.random() < .08
             if not is_a and 0 < (end - day).days < 28:
@@ -89,6 +90,8 @@ def demo_data():
             rng = random.Random(1000 + n)
             swap_curls, add_calves = rng.random() < .06, rng.random() < .07 and not rushed and not no_pullups
             for name in names:
+                if name == 'Klimmzüge':
+                    before[name] = {'weight': 0.0, 'fails': 0}
                 if name == 'Klimmzüge' and no_pullups:
                     exercises.append({'name': name, 'weight': 0.0, 'weights': [0.0] * 3, 'targetReps': 8, 'reps': [None] * 3})
                     continue
@@ -102,6 +105,7 @@ def demo_data():
                     exercises.append(e)
                     continue
                 if name == 'Farmers Walk':
+                    before[name] = {'weight': carry_kg, 'fails': 0}
                     held = [min(45, max(15, round(carry_base - 4 * i - (5 if bad else 0) + random.uniform(-3, 3)))) for i in range(2)]
                     exercises.append({'name': name, 'weight': carry_kg, 'weights': [carry_kg] * 2, 'targetReps': 30,
                                       'maxReps': 45, 'reps': held, 'type': 'timed'})
@@ -129,6 +133,7 @@ def demo_data():
                 capacity *= .91 if bad else 1.04 if good else 1
                 capacity *= random.uniform(.97, 1.03)
                 w = weight[name]
+                before[name] = {'weight': w, 'fails': fails[name]}
                 top = tops.get(name, target)
                 reps, weights = [], [w] * sets
                 for i in range(sets):
@@ -202,7 +207,7 @@ def demo_data():
             s = {'id': f'demo{n}', 'workoutId': 'wA' if is_a else 'wB',
                  'workoutName': 'StrongLifts A' if is_a else 'StrongLifts B',
                  'date': date.isoformat(), 'finishedAt': finished.isoformat(),
-                 'exercises': exercises}
+                 'exercises': exercises, 'planBefore': before}
             # Body weight now and then, but not for the last 40 days: the recap asks for it.
             if random.random() < .45 and (end - day).days > 40:
                 s['bodyWeight'] = round(bw, 1)
@@ -241,6 +246,15 @@ def demo_data():
             plan('Laufen', 1, 20, 0.0, 0.0, cardio=True)]},
     ]
     sessions.reverse()  # newest first
+    # Only the newest training of a workout keeps the plan before it (editing it recomputes the plan). The
+    # squat is shared by A and B here, unlike in the app: it goes to the newer one only.
+    seen_workouts, seen_lifts = set(), set()
+    for s in sessions:
+        before = s.pop('planBefore')
+        if s['workoutId'] not in seen_workouts:
+            seen_workouts.add(s['workoutId'])
+            s['planBefore'] = {k: v for k, v in before.items() if k not in seen_lifts}
+        seen_lifts.update(e['name'] for e in s['exercises'])
     return {'app': 'ferrolog', 'version': 1, 'units': 'kg', 'workouts': workouts, 'sessions': sessions}
 
 

@@ -371,16 +371,7 @@ class _SessionPageState extends State<SessionPage> {
 
   /// Sets the weight of set [i], and depending on [scope] of other sets of the exercise too.
   void applyWeight(ExerciseLog log, int i, double w, WeightScope scope) {
-    setState(() {
-      for (var j = 0; j < log.weights.length; j++) {
-        final hit = switch (scope) {
-          WeightScope.set => j == i,
-          WeightScope.open => j == i || log.reps[j] == null,
-          WeightScope.all => true,
-        };
-        if (hit) log.weights[j] = w;
-      }
-    });
+    setState(() => applyWeightScope(log, i, w, scope));
     store.saveActive(s);
   }
 
@@ -406,172 +397,20 @@ class _SessionPageState extends State<SessionPage> {
   Future<void> editCardio(ExerciseLog log) async {
     setState(() => touched = log);
     final running = switch (log.startedAt) { final t? => (DateTime.now().difference(t).inSeconds / 60).round(), null => null };
-    final minutes = TextEditingController(text: '${log.reps[0] ?? running ?? (log.targetReps > 0 ? log.targetReps : '')}');
-    final distance = TextEditingController(text: switch (log.km ?? log.targetKm) { final km? => distanceNum(km), null => '' });
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: minutes,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Dauer', suffixText: 'Min', border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: distance,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                    labelText: 'Distanz (optional)', suffixText: distanceLabel, border: const OutlineInputBorder()),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 20),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Schließen'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Speichern'),
-              ),
-            ),
-          ]),
-        ]),
-      ),
-    );
-    if (saved != true) return;
-    final m = int.tryParse(minutes.text.trim());
+    final result = await showCardioSheet(context, log, running: running);
+    if (result == null) return;
     setState(() {
-      log.reps[0] = m != null && m > 0 ? m : null;
-      log.km = log.reps[0] == null ? null : parseDistance(distance.text);
+      applyCardio(log, result);
       if (log.reps[0] != null) log.startedAt = null;
       log.doneAt[0] = log.reps[0] == null ? null : log.doneAt[0] ?? DateTime.now();
     });
     store.saveActive(s);
   }
 
-  /// Sheet to edit a set's weight: type it or step it, choose which sets it applies to, then save.
+  /// Sheet to edit a set's weight, see [showWeightSheet].
   Future<void> pickWeight(ExerciseLog log, int i) async {
     setState(() => touched = log);
-    // The sheet works in the shown unit (kg or lb) and converts to kg on save.
-    final step = stepShown(planOf(log)?.increment ?? log.increment ?? 0);
-    final field = TextEditingController(text: weightNum(log.weights[i]));
-    var scope = WeightScope.open;
-    double? parse() => switch (parseWeight(field.text)) {
-          final kg? when kg >= minWeight && kg <= 1000 => kg,
-          _ => null,
-        };
-    final result = await showModalBottomSheet<(double, WeightScope)>(
-      context: context,
-      isScrollControlled: true, // lets the sheet move above the keyboard
-      showDragHandle: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheet) {
-          final c = Theme.of(context).colorScheme;
-          final w = parse();
-          void nudge(int dir) {
-            final next = (shown(w ?? log.weights[i]) + dir * step).clamp(shown(minWeight), shown(1000)).toDouble();
-            setSheet(() => field.text = weightNum(toKg(next)));
-          }
-
-          Widget stepButton(IconData icon, int dir) => IconButton.filledTonal(
-                iconSize: 28,
-                style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
-                icon: Icon(icon),
-                tooltip: '${dir < 0 ? '−' : '+'}${weightNum(toKg(step))} $unitLabel',
-                onPressed: () => nudge(dir),
-              );
-          return Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                  ),
-                  Text('Satz ${i + 1} von ${log.reps.length}', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                ]),
-                const SizedBox(height: 16),
-                Row(children: [
-                  stepButton(Icons.remove, -1),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: field,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 40, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
-                      decoration: InputDecoration(
-                        suffixText: unitLabel,
-                        errorText: w == null ? 'Gewicht zwischen ${weightLabel(minWeight)} und ${weightLabel(1000)}' : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onChanged: (_) => setSheet(() {}),
-                      onTap: () => field.selection = TextSelection(baseOffset: 0, extentOffset: field.text.length),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  stepButton(Icons.add, 1),
-                ]),
-                const SizedBox(height: 16),
-                Text('Übernehmen für', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                SegmentedButton<WeightScope>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: WeightScope.set, label: Text('Dieser Satz')),
-                    ButtonSegment(value: WeightScope.open, label: Text('Offene Sätze')),
-                    ButtonSegment(value: WeightScope.all, label: Text('Alle Sätze')),
-                  ],
-                  selected: {scope},
-                  onSelectionChanged: (v) => setSheet(() => scope = v.single),
-                ),
-                const SizedBox(height: 20),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Schließen'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                      onPressed: w == null ? null : () => Navigator.pop(context, (w, scope)),
-                      child: const Text('Speichern'),
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-    // No field.dispose() here: the sheet's closing animation still rebuilds the TextField.
+    final result = await showWeightSheet(context, log, i, increment: planOf(log)?.increment ?? log.increment ?? 0);
     if (result case (final w, final scope)) applyWeight(log, i, w, scope);
   }
 
@@ -1062,6 +901,190 @@ RestZone restZone(int left, int target) => left <= -30
 
 /// Which sets a weight change in the sheet applies to.
 enum WeightScope { set, open, all }
+
+/// Sheet to edit the weight of set [i]: type it or step it by [increment], choose which sets it applies
+/// to ([scope] preselected), then save. Null when closed without saving.
+Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog log, int i,
+    {required double increment, WeightScope scope = WeightScope.open}) async {
+  // The sheet works in the shown unit (kg or lb) and converts to kg on save.
+  final step = stepShown(increment);
+  final field = TextEditingController(text: weightNum(log.weights[i]));
+  double? parse() => switch (parseWeight(field.text)) {
+        final kg? when kg >= minWeight && kg <= 1000 => kg,
+        _ => null,
+      };
+  final result = await showModalBottomSheet<(double, WeightScope)>(
+    context: context,
+    isScrollControlled: true, // lets the sheet move above the keyboard
+    showDragHandle: true,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setSheet) {
+        final c = Theme.of(context).colorScheme;
+        final w = parse();
+        void nudge(int dir) {
+          final next = (shown(w ?? log.weights[i]) + dir * step).clamp(shown(minWeight), shown(1000)).toDouble();
+          setSheet(() => field.text = weightNum(toKg(next)));
+        }
+
+        Widget stepButton(IconData icon, int dir) => IconButton.filledTonal(
+              iconSize: 28,
+              style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
+              icon: Icon(icon),
+              tooltip: '${dir < 0 ? '−' : '+'}${weightNum(toKg(step))} $unitLabel',
+              onPressed: () => nudge(dir),
+            );
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                ),
+                Text('Satz ${i + 1} von ${log.reps.length}', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+              ]),
+              const SizedBox(height: 16),
+              Row(children: [
+                stepButton(Icons.remove, -1),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: field,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 40, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
+                    decoration: InputDecoration(
+                      suffixText: unitLabel,
+                      errorText: w == null ? 'Gewicht zwischen ${weightLabel(minWeight)} und ${weightLabel(1000)}' : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onChanged: (_) => setSheet(() {}),
+                    onTap: () => field.selection = TextSelection(baseOffset: 0, extentOffset: field.text.length),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                stepButton(Icons.add, 1),
+              ]),
+              const SizedBox(height: 16),
+              Text('Übernehmen für', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              SegmentedButton<WeightScope>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: WeightScope.set, label: Text('Dieser Satz')),
+                  ButtonSegment(value: WeightScope.open, label: Text('Offene Sätze')),
+                  ButtonSegment(value: WeightScope.all, label: Text('Alle Sätze')),
+                ],
+                selected: {scope},
+                onSelectionChanged: (v) => setSheet(() => scope = v.single),
+              ),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Schließen'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    onPressed: w == null ? null : () => Navigator.pop(context, (w, scope)),
+                    child: const Text('Speichern'),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+  // No field.dispose() here: the sheet's closing animation still rebuilds the TextField.
+  return result;
+}
+
+/// Sets the weight of set [i], and depending on [scope] of other sets of the exercise too.
+void applyWeightScope(ExerciseLog log, int i, double w, WeightScope scope) {
+  for (var j = 0; j < log.weights.length; j++) {
+    final hit = switch (scope) {
+      WeightScope.set => j == i,
+      WeightScope.open => j == i || log.reps[j] == null,
+      WeightScope.all => true,
+    };
+    if (hit) log.weights[j] = w;
+  }
+}
+
+/// Sheet to enter the minutes and distance of a cardio exercise; null when closed without saving.
+/// [running]: minutes on the stopwatch, the suggestion when nothing is entered yet.
+Future<({int? minutes, double? km})?> showCardioSheet(BuildContext context, ExerciseLog log, {int? running}) async {
+  final minutes = TextEditingController(text: '${log.reps[0] ?? running ?? (log.targetReps > 0 ? log.targetReps : '')}');
+  final distance = TextEditingController(text: switch (log.km ?? log.targetKm) { final km? => distanceNum(km), null => '' });
+  final saved = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: minutes,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Dauer', suffixText: 'Min', border: OutlineInputBorder()),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: distance,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                  labelText: 'Distanz (optional)', suffixText: distanceLabel, border: const OutlineInputBorder()),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Schließen'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Speichern'),
+            ),
+          ),
+        ]),
+      ]),
+    ),
+  );
+  if (saved != true) return null;
+  final m = int.tryParse(minutes.text.trim());
+  return (minutes: m != null && m > 0 ? m : null, km: parseDistance(distance.text));
+}
+
+/// What the cardio sheet returned, into the log; no minutes means not done, and then no distance either.
+void applyCardio(ExerciseLog log, ({int? minutes, double? km}) result) {
+  log.reps[0] = result.minutes;
+  log.km = result.minutes == null ? null : result.km;
+}
 
 const _alert = MethodChannel('ferrolog/alert');
 

@@ -477,11 +477,16 @@ const noteTags = {
   'Technik-Fokus': '🎯',
 };
 
+/// What progression changes on a planned exercise, as it was before a training.
+typedef PlanState = ({double weight, List<double>? setWeights, int fails});
+
 class Session {
   final String id;
   final String workoutId;
   final String workoutName;
-  final DateTime date;
+
+  /// Start of the training; changes only when a past training is edited.
+  DateTime date;
   final List<ExerciseLog> exercises;
 
   /// Last change while training (a set logged, a weight edited); decides when an abandoned
@@ -507,6 +512,11 @@ class Session {
   DateTime? restStartedAt, restPausedAt;
   int? restSeconds;
 
+  /// The plan of each exercise just before this training's progression, by name, so editing or deleting
+  /// the training can undo and redo it. Only on the newest training of a workout (an older one's plan has
+  /// moved on since); null on trainings from before this was recorded. Stored, not exported.
+  Map<String, PlanState>? planBefore;
+
   Session({
     String? id,
     required this.workoutId,
@@ -522,6 +532,7 @@ class Session {
     this.restStartedAt,
     this.restSeconds,
     this.restPausedAt,
+    this.planBefore,
   })  : id = id ?? newId(),
         tags = tags ?? [],
         date = date ?? DateTime.now();
@@ -534,6 +545,22 @@ class Session {
   int? restLeft(DateTime now) => restStartedAt == null
       ? null
       : (restSeconds ?? 0) - (restPausedAt ?? now).difference(restStartedAt!).inSeconds;
+
+  /// Moves the training in time; set times move along, so their gaps stay.
+  void shift(Duration d) {
+    DateTime? by(DateTime? t) => t?.add(d);
+    date = date.add(d);
+    finishedAt = by(finishedAt);
+    lastActivity = by(lastActivity);
+    for (final e in exercises) {
+      e.startedAt = by(e.startedAt);
+      for (var i = 0; i < e.doneAt.length; i++) {
+        e.doneAt[i] = by(e.doneAt[i]);
+      }
+    }
+  }
+
+  Session copy() => Session.fromJson(toJson());
 
   factory Session.start(Workout w) => Session(
         workoutId: w.id,
@@ -555,6 +582,11 @@ class Session {
         if (restStartedAt != null) 'restStartedAt': restStartedAt!.toIso8601String(),
         if (restSeconds != null) 'restSeconds': restSeconds,
         if (restPausedAt != null) 'restPausedAt': restPausedAt!.toIso8601String(),
+        if (planBefore case final p?)
+          'planBefore': {
+            for (final MapEntry(:key, :value) in p.entries)
+              key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails},
+          },
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 
@@ -572,6 +604,17 @@ class Session {
         restStartedAt: j['restStartedAt'] == null ? null : DateTime.parse(j['restStartedAt']),
         restSeconds: j['restSeconds'],
         restPausedAt: j['restPausedAt'] == null ? null : DateTime.parse(j['restPausedAt']),
+        planBefore: switch (j['planBefore']) {
+          final Map<String, dynamic> p => {
+              for (final MapEntry(:key, :value) in p.entries)
+                key: (
+                  weight: (value['weight'] as num).toDouble(),
+                  setWeights: value['setWeights'] == null ? null : [for (final w in value['setWeights']) (w as num).toDouble()],
+                  fails: value['fails'] as int? ?? 0,
+                ),
+            },
+          _ => null,
+        },
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
@@ -716,6 +759,9 @@ class Store extends ChangeNotifier {
   /// first instead of finding them after hundreds of sessions.
   String exportJson() {
     final data = toJson();
+    for (final s in data['sessions']) {
+      s.remove('planBefore'); // undo state of the app, not training data
+    }
     final j = {for (final k in const ['app', 'version', 'exportedAt', 'units']) k: data.remove(k)};
     if (exportExtras case final extras?) {
       try {
@@ -754,9 +800,6 @@ class Store extends ChangeNotifier {
     return _save();
   }
 
-  /// Stores the session and adjusts next time's weights: every exercise where all sets hit the
-  /// target gets `increment` added; after `failsToDeload` misses in a row it drops by `decrement`.
-  /// Exercises skipped entirely stay as they are.
   /// No activity for this long and the training counts as over.
   static const idleLimit = Duration(minutes: 30);
 
@@ -773,28 +816,95 @@ class Store extends ChangeNotifier {
     return true;
   }
 
+  /// Stores the session and adjusts next time's weights: every exercise where all sets hit the
+  /// target gets `increment` added; after `failsToDeload` misses in a row it drops by `decrement`.
+  /// Exercises skipped entirely stay as they are. The plan before is kept on the session, see [Session.planBefore].
   Future<void> finishSession(Session s, {DateTime? at}) {
     s.finishedAt = at ?? DateTime.now();
     s.restStartedAt = s.restPausedAt = s.restSeconds = null; // only for the running training
     active = null;
     _prefs.remove('$_key.active');
-    sessions.insert(0, s);
-    final w = workouts.where((x) => x.id == s.workoutId).firstOrNull;
+    final w = _workoutOf(s);
     if (w != null) {
-      for (final log in s.exercises) {
-        final e = w.exercises.where((x) => x.name == log.name).firstOrNull;
-        // Skipped entirely (no time, no bar): not a miss, the plan stays.
-        if (e == null || log.setsDone == 0) continue;
-        e.applyResult(log);
-      }
+      lastSessionOf(w)?.planBefore = null;
+      s.planBefore = {
+        for (final e in w.exercises)
+          if (s.exercises.any((log) => log.name == e.name))
+            e.name: (weight: e.weight, setWeights: e.setWeights == null ? null : List.of(e.setWeights!), fails: e.fails),
+      };
+      _progress(w, s);
     }
+    sessions.insert(0, s);
     return _save();
+  }
+
+  Workout? _workoutOf(Session s) => workouts.where((x) => x.id == s.workoutId).firstOrNull;
+
+  void _progress(Workout w, Session s) {
+    for (final log in s.exercises) {
+      final e = w.exercises.where((x) => x.name == log.name).firstOrNull;
+      // Skipped entirely (no time, no bar): not a miss, the plan stays.
+      if (e == null || log.setsDone == 0) continue;
+      e.applyResult(log);
+    }
+  }
+
+  /// True if editing or deleting [s] moves the plan: it's the newest training of its workout and knows
+  /// the plan before it.
+  bool movesPlan(Session s) => switch (_workoutOf(s)) {
+        final w? => s.planBefore != null && lastSessionOf(w)?.id == s.id,
+        null => false,
+      };
+
+  /// Puts the plan back to before [s] (see [movesPlan]). An exercise whose per-set weights were changed
+  /// in the plan since (another count, or uniform now) stays as it is. Doesn't save.
+  void revertProgression(Session s) {
+    final w = _workoutOf(s);
+    if (w == null || !movesPlan(s)) return;
+    for (final MapEntry(key: name, value: before) in s.planBefore!.entries) {
+      final e = w.exercises.where((x) => x.name == name).firstOrNull;
+      if (e == null || before.setWeights?.length != e.setWeights?.length) continue;
+      e
+        ..weight = before.weight
+        ..setWeights = before.setWeights == null ? null : List.of(before.setWeights!)
+        ..fails = before.fails;
+    }
+  }
+
+  /// The plan as if [s] had been finished as it is now: back to before it, then its progression again.
+  /// Doesn't save.
+  void reapplyProgression(Session s) {
+    if (!movesPlan(s)) return;
+    revertProgression(s);
+    _progress(_workoutOf(s)!, s);
   }
 
   /// Saves changes made in place to a stored session (body weight, note).
   Future<void> updateSession(Session s) => _save();
 
+  /// Takes an edited copy of a stored training (same id): the history re-sorted by date and, for the
+  /// newest training of its workout, the plan recomputed. A training moved behind another of its workout
+  /// leaves the plan as it is and no longer moves it.
+  Future<void> replaceSession(Session edited) {
+    final i = sessions.indexWhere((x) => x.id == edited.id);
+    if (i < 0) return Future.value();
+    final moves = movesPlan(sessions[i]);
+    sessions[i] = edited;
+    sessions.sort((a, b) => b.date.compareTo(a.date));
+    if (moves && movesPlan(edited)) {
+      reapplyProgression(edited);
+    } else {
+      // Only the newest training of a workout keeps the plan before it.
+      for (final s in sessions.where((x) => x.workoutId == edited.workoutId).skip(moves ? 0 : 1)) {
+        s.planBefore = null;
+      }
+    }
+    return _save();
+  }
+
+  /// Removes a training; the newest of its workout takes its progression back with it.
   Future<void> deleteSession(Session s) {
+    revertProgression(s);
     sessions.removeWhere((x) => x.id == s.id);
     return _save();
   }

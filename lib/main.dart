@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'body_shapes.dart';
 import 'derived.dart';
 import 'edit.dart';
+import 'edit_session.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'plan_import.dart';
@@ -1369,10 +1370,18 @@ class _HistoryListState extends State<HistoryList> {
             ].join(' · '),
             actions: [
               IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Bearbeiten',
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(s))),
+              ),
+              IconButton(
                 icon: const Icon(Icons.delete_outline),
                 tooltip: 'Löschen',
                 onPressed: () async {
-                  final ok = await confirm(context, 'Training vom ${dateLabel(s.date)} löschen?');
+                  final ok = await confirm(
+                      context,
+                      'Training vom ${dateLabel(s.date)} löschen?'
+                      '${store.movesPlan(s) ? ' Die Plan-Gewichte gehen auf den Stand davor zurück.' : ''}');
                   if (ok) store.deleteSession(s);
                 },
               ),
