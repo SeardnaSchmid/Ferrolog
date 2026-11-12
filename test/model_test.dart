@@ -350,4 +350,22 @@ void main() {
     final back = Session.fromJson(jsonDecode(jsonEncode(s.toJson())));
     expect((back.exercises[2].replaces, back.exercises[2].restSeconds, back.exercises[4].added), ('Rudern', 90, true));
   });
+
+  test('reshaped: open sets take the edit, logged ones stay where they are', () {
+    final log = ExerciseLog(name: 'Rudern', weight: 50, targetReps: 8, reps: [8, null, 7, null],
+        doneAt: [DateTime(2026, 11, 12, 18), null, DateTime(2026, 11, 12, 18, 4), null]);
+    final more = log.reshaped(Exercise(name: 'Rudern', weight: 55, sets: 5, reps: 10, maxReps: 12));
+    expect(more.reps, [8, null, 7, null, null]);
+    expect(more.targets, [8, 10, 8, 10, 10]);
+    expect(more.weights, [50, 55, 50, 55, 55]);
+    expect(more.doneAt, [DateTime(2026, 11, 12, 18), null, DateTime(2026, 11, 12, 18, 4), null, null]);
+    expect(more.maxReps, 12);
+    final fewer = log.reshaped(Exercise(name: 'Rudern', weight: 50, sets: 1, reps: 8));
+    expect(fewer.reps, [8, null, 7], reason: 'never below the last logged set');
+    final ramp = log.reshaped(Exercise(name: 'Rudern', sets: 4, reps: 8, setWeights: [40, 45, 50, 55], setReps: [10, 8, 8, 6]));
+    expect(ramp.weights, [50, 45, 50, 55]);
+    expect(ramp.targets, [8, 8, 8, 6]);
+    final run = ExerciseLog(name: 'Laufen', weight: 0, targetReps: 20, reps: [null], cardio: true);
+    expect(run.reshaped(Exercise.cardio(name: 'Laufen', minutes: 0, km: 5)).targetKm, 5);
+  });
 }

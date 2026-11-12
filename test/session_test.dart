@@ -274,7 +274,7 @@ void main() {
     }
 
     Future<void> menu(int card, String action) async {
-      await tester.tap(find.byTooltip('Übung ändern').at(card));
+      await tester.tap(find.byTooltip('Übung bearbeiten').at(card));
       await settle();
       await tester.tap(find.text(action));
       await settle();
@@ -287,31 +287,49 @@ void main() {
       await settle();
     }
 
+    /// "Bearbeiten" with another name: the editor opens with the exercise as it is.
+    Future<void> rename(String name) async {
+      await tester.enterText(find.byType(TextField).first, name);
+      await tester.pump();
+      await tester.tap(find.text('Übernehmen'));
+      await settle();
+    }
+
     List<String> names() => [for (final l in store.active!.exercises) '${l.name} ${l.reps.length}'];
 
     // Machine taken before the first set: swapped in place, with its own rest.
-    await menu(0, 'Übung ersetzen');
-    await pick('Kabelrudern');
+    await menu(0, 'Bearbeiten');
+    expect(find.text('Automatische Anpassung · optional'), findsNothing, reason: 'plan only');
+    expect(find.textContaining('Nur für dieses Training'), findsOneWidget);
+    await rename('Kabelrudern');
     expect(names(), ['Kabelrudern 3', 'Klimmzüge 3']);
     expect(find.text('statt Rudern'), findsOneWidget);
     expect(s.exercises.first.replaces, 'Rudern');
+    expect(s.exercises.first.weight, 50, reason: 'from the exercise it replaces');
 
-    // A set more on the pull-ups, then off again; the last open set only.
-    await menu(1, 'Satz hinzufügen');
+    // Same name: a set more on the pull-ups; another exercise's name is refused.
+    await menu(1, 'Bearbeiten');
+    await tester.enterText(find.byType(TextField).first, 'Kabelrudern');
+    await tester.pump();
+    expect(find.textContaining('Steht schon in diesem Workout'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Klimmzüge');
+    await tester.pump();
+    await tester.tap(find.text('Satz').last); // dashed "+ Satz"
+    await tester.pump();
+    await tester.tap(find.text('Übernehmen'));
+    await settle();
     expect(names(), ['Kabelrudern 3', 'Klimmzüge 4']);
-    await menu(1, 'Letzten Satz entfernen');
-    await menu(1, 'Letzten Satz entfernen');
-    expect(names(), ['Kabelrudern 3', 'Klimmzüge 2']);
+    expect(s.exercises[1].replaces, isNull);
 
     // Order: pull-ups first.
     await menu(1, 'Nach oben');
-    expect(names(), ['Klimmzüge 2', 'Kabelrudern 3']);
+    expect(names(), ['Klimmzüge 4', 'Kabelrudern 3']);
 
     // Added at the end; the same name again is refused.
     await tester.tap(find.text('Übung'));
     await settle();
     await pick('Facepulls');
-    expect(names(), ['Klimmzüge 2', 'Kabelrudern 3', 'Facepulls 3']);
+    expect(names(), ['Klimmzüge 4', 'Kabelrudern 3', 'Facepulls 3']);
     expect(s.exercises.last.added, isTrue);
     await tester.tap(find.text('Übung'));
     await settle();
@@ -322,8 +340,8 @@ void main() {
     // One set of pull-ups done, then the rest swapped: the done set stays, the new one follows.
     await tester.tap(find.text('–/6', findRichText: true).first);
     await tester.pump();
-    await menu(0, 'Rest ersetzen');
-    await pick('Latziehen');
+    await menu(0, 'Bearbeiten');
+    await rename('Latziehen');
     expect(names(), ['Klimmzüge 1', 'Latziehen 3', 'Kabelrudern 3', 'Facepulls 3']);
     expect(s.exercises[0].reps, [6]);
     expect(s.exercises[1].replaces, 'Klimmzüge');
@@ -331,7 +349,7 @@ void main() {
     // An added exercise can go again while nothing is logged; a planned one can't.
     await menu(3, 'Entfernen');
     expect(names(), hasLength(3));
-    await tester.tap(find.byTooltip('Übung ändern').at(1));
+    await tester.tap(find.byTooltip('Übung bearbeiten').at(1));
     await settle();
     expect(find.text('Entfernen'), findsNothing);
     await tester.tapAt(const Offset(10, 10)); // closes the menu

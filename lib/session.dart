@@ -179,11 +179,68 @@ class _SessionPageState extends State<SessionPage> {
     return e;
   }
 
-  /// Machine taken: another exercise in its place. With sets already logged those stay, and the
-  /// new exercise follows for the rest.
-  Future<void> swapExercise(ExerciseLog log) async {
-    final e = await pickExercise();
-    if (e == null) return;
+  /// The exercise as it stands in this training, for the editor: the plan's settings, this training's sets.
+  Exercise exerciseOf(ExerciseLog log) {
+    final plan = planOf(log)?.copy() ??
+        Exercise(name: log.name, increment: log.increment ?? 2.5, restSeconds: log.restSeconds ?? 120);
+    return plan
+      ..failRestSeconds = plan.failRestSeconds ?? log.failRestSeconds
+      ..cardio = log.cardio
+      ..timed = log.timed
+      ..km = log.cardio ? log.targetKm : null
+      ..sets = log.reps.length
+      ..reps = log.targetReps
+      ..setReps = log.targets.toSet().length == 1 ? null : List.of(log.targets)
+      ..maxReps = log.maxReps
+      ..weight = log.weight
+      ..setWeights = log.weights.toSet().length == 1 ? null : List.of(log.weights);
+  }
+
+  /// "Bearbeiten": the exercise in the editor as it stands in the training. Another name swaps it (machine
+  /// taken: logged sets stay, the new exercise follows for the rest); the same name reshapes its sets,
+  /// reps and weights. Only this training, never the plan.
+  Future<void> editExercise(ExerciseLog log) async {
+    final e = await Navigator.push<Exercise>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => ExerciseEditor(exerciseOf(log),
+            forTraining: true, taken: {for (final l in s.exercises) if (l != log) l.name}),
+      ),
+    );
+    if (e == null || !mounted) return;
+    if (e.name != log.name) return swapExercise(log, e);
+    if (e.cardio != log.cardio || e.timed != log.timed) {
+      if (log.setsDone > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nach dem ersten Satz bleibt die Art, wie sie ist')));
+        return;
+      }
+      final next = ExerciseLog.fromPlan(e, replaces: log.replaces, added: log.added);
+      setState(() {
+        replaceLog(log, [next]);
+        touched = next;
+      });
+    } else {
+      final next = log.reshaped(e);
+      setState(() {
+        replaceLog(log, [next]);
+        touched = next;
+      });
+    }
+    store.saveActive(s);
+  }
+
+  /// Machine taken: [e] in the place of [log]. With sets already logged those stay, and the new
+  /// exercise follows for the sets that are left (the last of [e]'s).
+  void swapExercise(ExerciseLog log, Exercise e) {
+    if (log.setsDone > 0) {
+      final left = max(1, e.sets - log.setsDone);
+      e = e.copy()
+        ..sets = left
+        ..setWeights = e.setWeights?.sublist(e.sets - left)
+        ..setReps = e.setReps?.sublist(e.sets - left);
+    }
     final next = ExerciseLog.fromPlan(e, replaces: log.added ? null : log.replaces ?? log.name, added: log.added);
     setState(() {
       touched = next;
@@ -217,22 +274,6 @@ class _SessionPageState extends State<SessionPage> {
     reveal(next);
   }
 
-  /// One set more, like the last one, or the last open set off.
-  void changeSets(ExerciseLog log, {required bool add}) {
-    setState(() {
-      final keep = add ? log.reps.length : log.reps.length - 1;
-      replaceLog(log, [
-        log.withSets(
-          reps: [...log.reps.take(keep), if (add) null],
-          targets: [...log.targets.take(keep), if (add) log.targets.last],
-          weights: [...log.weights.take(keep), if (add) log.weights.last],
-          doneAt: [...log.doneAt.take(keep), if (add) null],
-        ),
-      ]);
-    });
-    store.saveActive(s);
-  }
-
   void moveExercise(ExerciseLog log, int by) {
     setState(() {
       final i = s.exercises.indexOf(log);
@@ -248,35 +289,30 @@ class _SessionPageState extends State<SessionPage> {
     store.saveActive(s);
   }
 
-  /// The card's menu: change the training, never the plan.
+  /// The card's menu: change the training, never the plan. Small, so it sits at the card's edge.
   Widget _exerciseMenu(ExerciseLog log) {
     final i = s.exercises.indexOf(log);
     final running = hold?.log == log || log.startedAt != null; // a hold or stopwatch on it
-    final actions = <(String, IconData, VoidCallback)>[
-      if (log.setsDone == 0)
-        ('Übung ersetzen', Icons.swap_horiz, () => swapExercise(log))
-      else if (log.setsDone < log.reps.length)
-        ('Rest ersetzen', Icons.swap_horiz, () => swapExercise(log)),
-      if (!log.cardio) ...[
-        ('Satz hinzufügen', Icons.add, () => changeSets(log, add: true)),
-        if (log.reps.length > 1 && log.reps.last == null)
-          ('Letzten Satz entfernen', Icons.remove, () => changeSets(log, add: false)),
-      ],
-      if (i > 0) ('Nach oben', Icons.arrow_upward, () => moveExercise(log, -1)),
-      if (i < s.exercises.length - 1) ('Nach unten', Icons.arrow_downward, () => moveExercise(log, 1)),
-      if (log.added && log.setsDone == 0) ('Entfernen', Icons.delete_outline, () => removeExercise(log)),
-    ];
+    PopupMenuItem<VoidCallback> item(String label, IconData icon, VoidCallback action) => PopupMenuItem(
+          value: action,
+          child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(label)),
+        );
     return PopupMenuButton<VoidCallback>(
-      tooltip: 'Übung ändern',
+      tooltip: 'Übung bearbeiten',
       enabled: !running,
-      icon: const Icon(Icons.more_vert),
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+          minimumSize: const Size(32, 32), fixedSize: const Size(32, 32), padding: EdgeInsets.zero),
+      icon: const Icon(Icons.more_vert, size: 22),
       onSelected: (action) => action(),
       itemBuilder: (_) => [
-        for (final (label, icon, action) in actions)
-          PopupMenuItem(
-            value: action,
-            child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(label)),
-          ),
+        item('Bearbeiten', Icons.edit_outlined, () => editExercise(log)),
+        if (i > 0) item('Nach oben', Icons.arrow_upward, () => moveExercise(log, -1)),
+        if (i < s.exercises.length - 1) item('Nach unten', Icons.arrow_downward, () => moveExercise(log, 1)),
+        if (log.added && log.setsDone == 0) ...[
+          const PopupMenuDivider(),
+          item('Entfernen', Icons.delete_outline, () => removeExercise(log)),
+        ],
       ],
     );
   }
@@ -678,7 +714,7 @@ class _SessionPageState extends State<SessionPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
@@ -699,12 +735,19 @@ class _SessionPageState extends State<SessionPage> {
                     if (log.replaces case final r?) Text('statt $r', style: muted),
                   ]),
                 ),
-                _exerciseMenu(log),
-                if (log.setsDone == log.reps.length)
-                  Icon(Icons.check_circle, color: log.succeeded ? c.primary : c.tertiary)
-                else if (current)
-                  Text('JETZT',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
+                // On the title's line: the state, then the menu at the edge.
+                SizedBox(
+                  height: 26,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (log.setsDone == log.reps.length)
+                      Icon(Icons.check_circle, size: 22, color: log.succeeded ? c.primary : c.tertiary)
+                    else if (current)
+                      Text('JETZT',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
+                    const SizedBox(width: 2),
+                    Transform.translate(offset: const Offset(6, 0), child: _exerciseMenu(log)),
+                  ]),
+                ),
               ]),
               ?_warmup(log, c, muted),
               const SizedBox(height: 10),

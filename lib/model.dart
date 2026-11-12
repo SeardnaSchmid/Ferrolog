@@ -369,6 +369,36 @@ class ExerciseLog {
         added: added,
       );
 
+  /// This exercise reshaped to [e] as edited during the training: its sets, reps per set, rep range and
+  /// weights. Logged sets stay as they were and where they were (so there are never fewer sets than the
+  /// last logged one); the open ones take [e]'s. For cardio [e]'s goal. The plan isn't touched.
+  ExerciseLog reshaped(Exercise e) {
+    final done = [for (final (i, r) in reps.indexed) if (r != null) i];
+    final n = max(e.cardio ? 1 : e.sets, done.isEmpty ? 0 : done.last + 1);
+    T at<T>(List<T> l, int i) => l[min(i, l.length - 1)];
+    bool kept(int i) => i < reps.length && reps[i] != null;
+    return ExerciseLog(
+      name: name,
+      weight: e.weight,
+      targetReps: at(e.repsPerSet, 0),
+      reps: [for (var i = 0; i < n; i++) kept(i) ? reps[i] : null],
+      targets: [for (var i = 0; i < n; i++) kept(i) ? targets[i] : at(e.repsPerSet, i)],
+      weights: [for (var i = 0; i < n; i++) kept(i) ? weights[i] : at(e.weights, i)],
+      doneAt: [for (var i = 0; i < n; i++) kept(i) ? doneAt[i] : null],
+      maxReps: e.maxReps,
+      cardio: cardio,
+      km: km,
+      targetKm: cardio ? e.km : targetKm,
+      timed: timed,
+      startedAt: startedAt,
+      restSeconds: restSeconds,
+      failRestSeconds: failRestSeconds,
+      increment: increment,
+      replaces: replaces,
+      added: added,
+    );
+  }
+
   /// The same exercise with other sets; the lists are final, so a set more or less is a new log.
   ExerciseLog withSets({
     required List<int?> reps,

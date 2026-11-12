@@ -273,7 +273,11 @@ class ExerciseEditor extends StatefulWidget {
 
   /// Names of the workout's other exercises: the same name twice in one workout isn't allowed.
   final Set<String> taken;
-  const ExerciseEditor(this.initial, {super.key, this.taken = const {}});
+
+  /// Editing an exercise of the running training: only what it is and its sets. Rest and the automatic
+  /// adjustment belong to the plan and stay hidden.
+  final bool forTraining;
+  const ExerciseEditor(this.initial, {super.key, this.taken = const {}, this.forTraining = false});
 
   @override
   State<ExerciseEditor> createState() => _ExerciseEditorState();
@@ -572,7 +576,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
               onPressed: e.name.trim().isEmpty || duplicate ? null : () => Navigator.pop(context, result()),
-              child: Text(isNew ? 'Hinzufügen' : 'Speichern'),
+              child: Text(isNew ? 'Hinzufügen' : widget.forTraining ? 'Übernehmen' : 'Speichern'),
             ),
           ),
         ],
@@ -684,8 +688,12 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           Row(children: [
             const Expanded(child: Text('Sätze', style: TextStyle(fontWeight: FontWeight.w500))),
             Flexible(
-              child: Text(isNew ? 'Satz antippen zum Ändern' : 'Nächstes Training · antippen zum Ändern',
-                  textAlign: TextAlign.end, style: muted),
+              child: Text(
+                  isNew
+                      ? 'Satz antippen zum Ändern'
+                      : '${widget.forTraining ? 'Dieses' : 'Nächstes'} Training · antippen zum Ändern',
+                  textAlign: TextAlign.end,
+                  style: muted),
             ),
           ]),
           const SizedBox(height: 8),
@@ -735,6 +743,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ]),
           const SizedBox(height: 18),
           musclePicker(card, muted),
+          if (!widget.forTraining) ...[
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -772,7 +781,8 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               ),
             ]),
           ),
-          if (!noWeight) ...[
+          ],
+          if (!noWeight && !widget.forTraining) ...[
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
@@ -854,6 +864,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         : ws.toSet().length == 1
             ? '${setsLabel(rs, maxReps)} mit ${weightLabel(ws.first)}'
             : [for (final (i, w) in ws.indexed) '${rs[i]}×${weightLabel(w)}'].join(', ');
+    if (widget.forTraining) return '$name: $plan. Nur für dieses Training, der Plan bleibt, wie er ist.';
     if (noWeight) return '$name: $plan.';
     return [
       '$name: $plan.',
