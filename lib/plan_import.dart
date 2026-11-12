@@ -26,6 +26,11 @@ final capabilities = {
         'reps (if up), -decrement kg after failsToDeload missed trainings in a row (if down). It always moves the '
         'weight, never reps or seconds: for bodyweight and held exercises without added weight set up false, '
         'unless weight should be added.',
+    'Or the auto mode per exercise (auto true, see "format"): a share of the weight that adapts itself, steered by '
+        'the reps in reserve, rep bridges where a step is too small to load, bad days excused, a break of two weeks '
+        'or more starts lighter. increment, up, down, decrement and failsToDeload are then ignored. loadStep (kg) = '
+        'what the weight can be loaded in when the user set it (e.g. a machine taking only 5 kg plates), else '
+        'learned. Leave autoState out: the app keeps it.',
     'Rest per exercise in seconds (restSeconds), optionally a different rest after a missed set (failRestSeconds).',
     'Own exercises with their muscles (muscles: primary, secondary), for names the app doesn\'t know.',
     'During a training the user can swap an exercise (machine taken), add one, add or take off sets and change '
@@ -43,7 +48,7 @@ final capabilities = {
     'Periodisation over weeks (waves, deload weeks, blocks): only the automatic steps above; a planned change '
         'has to be made by hand when it is due.',
     'A schedule (which workout on which day) or optional exercises: an exercise in the plan is planned every time.',
-    'More reps or seconds automatically: only the weight moves by itself.',
+    'More reps or seconds automatically, except the auto mode\'s rep bridges toward the next weight.',
     'Distance or steps for carries: only seconds.',
   ],
 };
@@ -56,9 +61,9 @@ final planImport = {
       'summary = one line what changes. workouts: each listed workout replaces the one with the same id as a whole '
       '(all its exercises, in the new order); without id it is a new workout; delete true (with id) removes one; '
       'workouts not listed stay as they are. Exercises use the fields of the plan format (see "format" and '
-      '"capabilities"): name, weight, sets, reps, increment, up, decrement, down, failsToDeload, restSeconds, and '
+      '"capabilities"): name, weight, sets, reps, increment, up, decrement, down, failsToDeload, auto, restSeconds, and '
       'where needed failRestSeconds, setWeights, setReps, maxReps, type, km. For an exercise the app already has, '
-      'progression and rest left out (increment, up, decrement, down, failsToDeload, restSeconds, failRestSeconds) '
+      'progression and rest left out (increment, up, decrement, down, failsToDeload, auto, restSeconds, failRestSeconds) '
       'stay as they are; setWeights, setReps, maxReps, type and km left out are gone. Leave out fails: the app '
       'keeps the count. Keep an exercise\'s name exactly to keep its history; a new name starts '
       'a new one. muscles (optional, only for an exercise the app doesn\'t know): primary and secondary as muscle '
@@ -223,7 +228,7 @@ PlanImport parsePlanImport(String text) {
 }
 
 /// Settings an exercise keeps when the AI leaves them out.
-const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'restSeconds', 'failRestSeconds'];
+const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 'autoState', 'loadStep', 'restSeconds', 'failRestSeconds'];
 
 /// One exercise from the AI: what it left out from the plan's exercise of that name ([_kept]) or the app's
 /// defaults, and [Exercise.fails] kept. Its why and muscles go into [why] and [muscles].
@@ -315,8 +320,8 @@ final List<(String, String Function(Exercise))> _aspects = [
   ('Art', _kind),
   ('Sätze', _scheme),
   ('Gewicht', _load),
-  ('Steigerung', (e) => e.cardio ? '' : e.up ? '+${weightLabel(e.increment)}' : 'aus'),
-  ('Entlastung', (e) => e.cardio ? '' : e.down ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload} Fehlversuchen' : 'aus'),
+  ('Steigerung', (e) => e.cardio ? '' : e.auto ? 'automatisch' : e.up ? '+${weightLabel(e.increment)}' : 'aus'),
+  ('Entlastung', (e) => e.cardio || e.auto ? '' : e.down ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload} Fehlversuchen' : 'aus'),
   ('Pause', (e) => [if (e.restSeconds > 0) '${e.restSeconds} s', if (e.failRestSeconds case final f?) 'nach Fehlversuch $f s'].join(', ')),
 ];
 

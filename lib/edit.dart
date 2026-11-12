@@ -135,6 +135,27 @@ class _EditWorkoutState extends State<EditWorkout> {
           ),
           // Templates only for new workouts, so an existing one isn't replaced by accident.
           if (isNew) templatePicker(context),
+          // Exercises from before the auto mode (or a template) stay fixed until switched; one tap does all.
+          if (w.exercises.where((e) => !e.auto && !e.cardio && !e.noWeight).length case final n when n > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Text(n == 1 ? '1 Übung steigert in festen Schritten' : '$n Übungen steigern in festen Schritten',
+                      style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: const Text('Alle automatisch'),
+                  onPressed: () => setState(() {
+                    for (final e in w.exercises) {
+                      if (!e.cardio && !e.noWeight) e.auto = true;
+                    }
+                    changedByHand = true;
+                  }),
+                ),
+              ]),
+            ),
           Expanded(
             child: ReorderableListView(
               buildDefaultDragHandles: false,
@@ -158,7 +179,8 @@ class _EditWorkoutState extends State<EditWorkout> {
                         : [
                             setsLabel(e.repsPerSet, e.maxReps),
                             if (!e.noWeight) weightLabel(e.weight),
-                            if (e.up && !e.noWeight) '+${weightLabel(e.increment)} bei Erfolg',
+                            if (e.auto && !e.noWeight) 'automatisch'
+                            else if (e.up && !e.noWeight) '+${weightLabel(e.increment)} bei Erfolg',
                           ].join(' · ')),
                     onTap: () => editExercise(i),
                     trailing: Row(
@@ -284,11 +306,12 @@ class ExerciseEditor extends StatefulWidget {
 }
 
 class _ExerciseEditorState extends State<ExerciseEditor> {
-  late final Exercise e = widget.initial ?? Exercise(name: '');
+  late final Exercise e = widget.initial ?? Exercise(name: '', auto: true); // new ones start in auto mode
   late final nameField = TextEditingController(text: e.name);
   late List<double> ws = List.of(e.noWeight ? List.filled(e.sets, 20.0) : e.weights); // kg, one per set
   late List<int> rs = List.of(e.repsPerSet); // reps, one per set
   late bool noWeight = e.noWeight;
+  late final repsBefore = List.of(e.repsPerSet); // reps changed by hand end an auto mode's rep bridge
   late int? maxReps = e.maxReps; // rep range top, null = fixed reps
   late bool byDistance = e.cardio && e.km != null; // cardio goal
   String? filledFrom; // catalogue/used exercise whose defaults were taken
@@ -317,6 +340,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
   void pick(String name) {
     nameField.text = name;
     final x = knownExercise(name);
+    final planned = store.workouts.any((w) => w.exercises.any((y) => y.name == name));
     setState(() {
       e
         ..name = name
@@ -331,6 +355,9 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..decrement = x.decrement
         ..down = x.down
         ..failsToDeload = x.failsToDeload
+        // As set up in another workout; else a new exercise stays in auto mode, an opened one keeps its mode.
+        ..auto = planned ? x.auto : widget.initial == null || e.auto
+        ..loadStep = planned ? x.loadStep : e.loadStep
         ..restSeconds = x.restSeconds;
       noWeight = x.noWeight;
       ws = List.of(noWeight ? List.filled(x.sets, 20.0) : x.weights);
@@ -383,6 +410,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       e
         ..up = false
         ..down = false;
+    }
+    if (rs.join(',') != repsBefore.join(',')) {
+      e.state
+        ?..bridgeFrom = null
+        ..bridgeTo = null;
     }
     return e;
   }
@@ -788,56 +820,105 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             padding: const EdgeInsets.all(14),
             decoration: card,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Automatische Anpassung · optional',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.trending_up),
-                title: const Text('Steigerung bei Erfolg'),
-                subtitle: Text(e.up
-                    ? '+${weightLabel(e.increment)}, wenn alle Sätze geschafft'
-                    : 'Aus · Gewicht bleibt gleich'),
-                value: e.up,
-                onChanged: (on) => setState(() {
-                  e.up = on;
-                  if (editing == 'inc') editing = null;
-                }),
+              Text('Gewicht anpassen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: true, icon: Icon(Icons.auto_awesome_outlined), label: Text('Automatisch')),
+                    ButtonSegment(value: false, icon: Icon(Icons.tune), label: Text('Fest')),
+                  ],
+                  selected: {e.auto},
+                  onSelectionChanged: (v) => setState(() {
+                    e.auto = v.first;
+                    editing = null;
+                  }),
+                ),
               ),
-              if (e.up) weightChips('inc', '+', e.increment, (kg) => e.increment = kg),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: const Icon(Icons.trending_down),
-                title: const Text('Senkung bei Misserfolg'),
-                subtitle: Text(e.down
-                    ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload}× nicht geschafft'
-                    : 'Aus · Gewicht bleibt gleich'),
-                value: e.down,
-                onChanged: (on) => setState(() {
-                  e.down = on;
-                  if (editing == 'dec') editing = null;
-                }),
-              ),
-              if (e.down) ...[
-                weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
+              if (e.auto) ...[
+                const SizedBox(height: 12),
+                Text(autoRules, style: TextStyle(color: c.onSurfaceVariant, height: 1.4)),
                 const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(child: Text('Senken nach Fehlversuchen in Folge', style: TextStyle(color: c.onSurfaceVariant))),
-                  IconButton.filledTonal(
-                    icon: const Icon(Icons.remove, size: 20),
-                    onPressed: () => setState(() => e.failsToDeload = max(1, e.failsToDeload - 1)),
+                Text(autoNow, style: TextStyle(color: c.onSurfaceVariant, fontWeight: FontWeight.w500, height: 1.4)),
+                const SizedBox(height: 12),
+                Text('Ladestufe', style: TextStyle(color: c.onSurfaceVariant)),
+                const SizedBox(height: 6),
+                // What this exercise can be loaded in, e.g. a leg press that only takes 5 kg plates.
+                chips(
+                  key: 'step',
+                  presets: unit.value == WeightUnit.kg ? const [1, 1.25, 2, 2.5, 5] : const [1, 2.5, 5, 10],
+                  current: shown(e.loadStep ?? 0),
+                  none: e.loadStep == null,
+                  lead: ChoiceChip(
+                    showCheckmark: false,
+                    avatar: const Icon(Icons.auto_awesome_outlined, size: 14),
+                    label: const Text('Automatisch'),
+                    selected: e.loadStep == null && editing != 'step',
+                    onSelected: (_) => setState(() {
+                      e.loadStep = null;
+                      editing = null;
+                    }),
                   ),
-                  SizedBox(
-                    width: 28,
-                    child: Text('${e.failsToDeload}',
-                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                  ),
-                  IconButton.filledTonal(
-                    icon: const Icon(Icons.add, size: 20),
-                    onPressed: () => setState(() => e.failsToDeload = min(5, e.failsToDeload + 1)),
-                  ),
-                ]),
+                  label: (v) => '${weightNum(toKg(v))} $unitLabel',
+                  set: (v) => e.loadStep = toKg(v),
+                  hint: unit.value == WeightUnit.kg ? 'z. B. 7,5' : 'z. B. 15',
+                  unitText: unitLabel,
+                  parse: (s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
+                    final v? when v > 0 => (v * 100).roundToDouble() / 100,
+                    _ => null,
+                  },
+                ),
+              ] else ...[
+                const SizedBox(height: 4),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.trending_up),
+                  title: const Text('Steigerung bei Erfolg'),
+                  subtitle: Text(e.up
+                      ? '+${weightLabel(e.increment)}, wenn alle Sätze geschafft'
+                      : 'Aus · Gewicht bleibt gleich'),
+                  value: e.up,
+                  onChanged: (on) => setState(() {
+                    e.up = on;
+                    if (editing == 'inc') editing = null;
+                  }),
+                ),
+                if (e.up) weightChips('inc', '+', e.increment, (kg) => e.increment = kg),
+                const Divider(height: 24),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.trending_down),
+                  title: const Text('Senkung bei Misserfolg'),
+                  subtitle: Text(e.down
+                      ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload}× nicht geschafft'
+                      : 'Aus · Gewicht bleibt gleich'),
+                  value: e.down,
+                  onChanged: (on) => setState(() {
+                    e.down = on;
+                    if (editing == 'dec') editing = null;
+                  }),
+                ),
+                if (e.down) ...[
+                  weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: Text('Senken nach Fehlversuchen in Folge', style: TextStyle(color: c.onSurfaceVariant))),
+                    IconButton.filledTonal(
+                      icon: const Icon(Icons.remove, size: 20),
+                      onPressed: () => setState(() => e.failsToDeload = max(1, e.failsToDeload - 1)),
+                    ),
+                    SizedBox(
+                      width: 28,
+                      child: Text('${e.failsToDeload}',
+                          textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                    ),
+                    IconButton.filledTonal(
+                      icon: const Icon(Icons.add, size: 20),
+                      onPressed: () => setState(() => e.failsToDeload = min(5, e.failsToDeload + 1)),
+                    ),
+                  ]),
+                ],
               ],
             ]),
           ),
@@ -866,12 +947,37 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             : [for (final (i, w) in ws.indexed) '${rs[i]}×${weightLabel(w)}'].join(', ');
     if (widget.forTraining) return '$name: $plan. Nur für dieses Training, der Plan bleibt, wie er ist.';
     if (noWeight) return '$name: $plan.';
+    if (e.auto) return '$name: $plan. Gewicht passt sich automatisch an.';
     return [
       '$name: $plan.',
       if (e.up) 'Bei Erfolg +${weightLabel(e.increment)}.',
       if (e.down) 'Nach ${e.failsToDeload}× Misserfolg −${weightLabel(e.decrement)}.',
       if (!e.up && !e.down) 'Gewicht wird nicht automatisch angepasst.',
     ].join(' ');
+  }
+
+  /// The auto mode in a few sentences. Nothing to set: the step adapts itself.
+  String get autoRules => [
+        'Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es '
+            '(beim zweiten Mal in Folge ein halber Schritt).',
+        if (maxReps == null) 'Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.'
+        else 'Erst wenn alle Sätze oben in der Spanne sind.',
+        'Nicht geschafft: Gewicht bleibt, nach $autoFails× in Folge etwa −10 % und danach kleinere Schritte, '
+            'die mit Reserve wieder wachsen.',
+        'Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), '
+            'nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.',
+      ].join(' ');
+
+  /// The current share and what the weight can be loaded in.
+  String get autoNow {
+    final (grid, from) = store.loadStepOf(e);
+    final pct = (e.state?.pct ?? AutoState.startPct).toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '').replaceAll('.', ',');
+    return 'Gerade +$pct % pro Training · Ladestufe ${weightLabel(grid)} (${switch (from) {
+      LoadSource.plates => 'deine Scheiben',
+      LoadSource.learned => 'aus deinen Gewichten',
+      LoadSource.guess => 'Startwert, lernt mit',
+      LoadSource.set => 'eingestellt',
+    }})';
   }
 
   /// Plate-sized steps for increment/decrement chips, in the shown unit.
@@ -902,8 +1008,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     required String unitText,
     required double? Function(String) parse,
     String prefix = '',
+    Widget? lead,
+    bool none = false,
   }) {
-    final isPreset = presets.any((p) => p == current);
+    // [none]: no value picked (the [lead] chip stands for it), so neither a preset nor "Eigene" is on.
+    final isPreset = none || presets.any((p) => p == current);
     final open = editing == key;
     void ok() => setState(() {
           if (parse(draft.text) case final v?) set(v);
@@ -911,11 +1020,12 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         });
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 6, runSpacing: 6, children: [
+        ?lead,
         for (final p in presets)
           ChoiceChip(
             showCheckmark: false,
             label: Text(label(p.toDouble())),
-            selected: p == current && !open,
+            selected: p == current && !open && !none,
             onSelected: (_) => setState(() {
               set(p.toDouble());
               editing = null;

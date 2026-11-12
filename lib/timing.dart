@@ -27,15 +27,6 @@ const _maxGap = Duration(minutes: 15), _maxFirst = Duration(minutes: 25);
   );
 }
 
-/// Big barbell lifts: heavier, slower reps and warm-up sets before the work sets.
-bool isBarbell(String name) {
-  final k = searchKey(name);
-  const big = ['kniebeuge', 'squat', 'kreuzheb', 'deadlift', 'bankdrueck', 'benchpress', 'schulterdrueck',
-      'overheadpress', 'langhantelrudern', 'barbellrow', 'rackpull', 'goodmorning', 'pushpress', 'umsetzen', 'reissen'];
-  const not = ['kurzhantel', 'dumbbell', 'maschine', 'machine', 'goblet', 'split', 'bulgarian', 'einbeinig', 'single'];
-  return big.any(k.contains) && !not.any(k.contains);
-}
-
 /// Seconds per rep, from typical tempos: about 3 s for a controlled rep (1–2 s up, 2 s down), more for
 /// heavy barbell reps (bracing and a breath between them), most for Olympic lifts (reset after each),
 /// less for swings and burpees.

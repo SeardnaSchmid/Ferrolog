@@ -38,10 +38,11 @@ class _SessionPageState extends State<SessionPage> {
   /// [askRir]. Only on this page: an answer or the next set tapped and the question is gone.
   ExerciseLog? rirAsk;
 
-  /// Whether the reserve is asked after an exercise's last set: a setting, off unless switched on.
-  /// Strength sets only: no cardio, no holds, no assistance (the reps aren't the limit there).
+  /// Whether the reserve is asked after an exercise's last set: a setting, off unless switched on, and
+  /// always for an exercise in auto mode, which steers by it. Strength sets only: no cardio, no holds, no
+  /// assistance (the reps aren't the limit there).
   bool askRir(ExerciseLog log) =>
-      (prefs.getBool('session.askRir') ?? false) &&
+      ((prefs.getBool('session.askRir') ?? false) || autoRir(s, log)) &&
       !log.cardio &&
       !log.timed &&
       log.weights.every((w) => w >= 0) &&
@@ -1052,6 +1053,10 @@ RestZone restZone(int left, int target) => left <= -30
         : RestZone.rest;
 
 /// Which sets a weight change in the sheet applies to.
+/// Whether [log] trains an exercise in auto mode in [s]'s plan: the reserve is then always asked.
+bool autoRir(Session s, ExerciseLog log) =>
+    planEntryOf(store.workouts.where((w) => w.id == s.workoutId).firstOrNull, s.exercises, log)?.auto ?? false;
+
 enum WeightScope { set, open, all }
 
 /// Sheet to edit the weight of set [i]: type it or step it by [increment], choose which sets it applies

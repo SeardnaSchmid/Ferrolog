@@ -35,7 +35,10 @@ void main() {
     await tester.tap(find.text('Bankdrücken'));
     await tester.pump();
     expect(find.text('Standardwerte für Bankdrücken übernommen'), findsOneWidget);
+    expect(find.textContaining('pro Training · Ladestufe'), findsOneWidget, reason: 'new ones start in auto mode');
 
+    await tester.tap(find.text('Fest'));
+    await tester.pump();
     await tester.tap(find.text('Senkung bei Misserfolg'));
     await tester.pump();
     // First set tile → sheet: one plate step lighter, this set only.
@@ -54,6 +57,7 @@ void main() {
     expect(result?.name, 'Bankdrücken');
     expect((result?.sets, result?.reps, result?.setReps), (4, 5, null));
     expect(result?.decrement, 2.5);
+    expect(result?.auto, isFalse);
     expect(result?.setWeights, [47.5, 50, 50, 50], reason: 'catalogue weight 50 kg, first set −2,5, one set added');
     expect(result?.weight, 50);
     expect((result?.restSeconds, result?.failRestSeconds), (90, 120), reason: 'catalogue rest, longer after a miss');

@@ -25,4 +25,4 @@ Die App wusste, ob die Wiederholungen geschafft waren, nicht wie schwer. 5/5/5 m
 
 ## Phasen
 
-1. **Erledigt** (nicht committet): WP6b.
+1. **Erledigt** (`f2e222c`): WP6b. Darauf baut der Auto-Modus auf, siehe [auto-modus.md](auto-modus.md).

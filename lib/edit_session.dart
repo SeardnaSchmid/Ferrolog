@@ -159,7 +159,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                     if (!log.cardio &&
                         !log.timed &&
                         log.weights.every((w) => w >= 0) &&
-                        ((prefs.getBool('session.askRir') ?? false) || log.rir != null)) ...[
+                        ((prefs.getBool('session.askRir') ?? false) || log.rir != null || autoRir(draft, log))) ...[
                       const SizedBox(height: 10),
                       // The reserve after the last set; the chosen one again takes it off.
                       Row(children: [

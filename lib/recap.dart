@@ -30,15 +30,14 @@ class _RecapPageState extends State<RecapPage> {
   void dispose() {
     final text = note.text.trim();
     final tagList = [for (final t in noteTags.keys) if (tags.contains(t)) t];
-    if (bodyWeight != s.bodyWeight ||
-        (text.isEmpty ? null : text) != s.note ||
-        mood != s.mood ||
-        tagList.join('|') != s.tags.join('|')) {
+    // The tags steer the auto mode (a bad day, pain), the mood doesn't.
+    final tagsChanged = tagList.join('|') != s.tags.join('|');
+    if (bodyWeight != s.bodyWeight || (text.isEmpty ? null : text) != s.note || mood != s.mood || tagsChanged) {
       s.bodyWeight = bodyWeight;
       s.note = text.isEmpty ? null : text;
       s.mood = mood;
       s.tags = tagList;
-      store.updateSession(s);
+      store.updateSession(s, replan: tagsChanged);
     }
     note.dispose();
     super.dispose();
@@ -76,9 +75,9 @@ class _RecapPageState extends State<RecapPage> {
     final nextOf = plan != null && store.lastSessionOf(plan) == s
         ? {
             for (final l in strength)
-              if (plan.exercises.where((e) => e.name == l.name && !e.noWeight).firstOrNull case final e?) l.name: (l, e.weight),
+              if (plan.exercises.where((e) => e.name == l.name && !e.noWeight).firstOrNull case final e?) l.name: (l, e),
           }
-        : const <String, (ExerciseLog, double)>{};
+        : const <String, (ExerciseLog, Exercise)>{};
     final delta = switch (r.volumeBefore) {
       final b? when b > 0 => ((r.volume / b - 1) * 100).round(),
       _ => null,
@@ -104,7 +103,8 @@ class _RecapPageState extends State<RecapPage> {
       ].join(' · ');
       if (!record && next == null && time.isEmpty) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
-      if (next case (final l, final kg)) {
+      if (next case (final l, final e)) {
+        final kg = e.weight;
         final (icon, color) = kg > l.weight
             ? (Icons.arrow_upward, c.primary)
             : kg < l.weight
@@ -119,6 +119,13 @@ class _RecapPageState extends State<RecapPage> {
               Text(' ${weightLabel(kg)}', style: small.copyWith(color: color, fontWeight: FontWeight.w600)),
             ]),
           ),
+          // The auto mode says why.
+          if ([
+            if (l.backoff case final pct?) 'nach der Pause −$pct %',
+            if (l.progression case final p?) progressionLabel(p, e),
+          ].join(', ')
+              case final why when why.isNotEmpty)
+            TextSpan(text: ' · $why'),
         ]);
       }
       // The time on a line of its own, so it never breaks in the middle.

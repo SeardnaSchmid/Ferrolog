@@ -245,8 +245,10 @@ def demo_data():
     workouts = [
         {'id': 'wA', 'name': 'StrongLifts A', 'exercises': [
             plan('Kniebeuge', 5, 5, weight['Kniebeuge']), plan('Bankdrücken', 5, 5, weight['Bankdrücken']),
-            plan('Langhantelrudern', 5, 5, weight['Langhantelrudern']), plan('Bizepscurls', 3, 8, weight['Bizepscurls'], top=12),
-            plan('Rumänisches Kreuzheben', 3, 8, weight['Rumänisches Kreuzheben']),
+            # The accessories run in auto mode (switched on lately: their history came from the fixed steps).
+            plan('Langhantelrudern', 5, 5, weight['Langhantelrudern']),
+            {**plan('Bizepscurls', 3, 8, weight['Bizepscurls'], top=12), 'auto': True},
+            {**plan('Rumänisches Kreuzheben', 3, 8, weight['Rumänisches Kreuzheben']), 'auto': True},
             # An own exercise the app knows no muscles of: the workout card asks for them.
             {**plan('Atemübung', 1, 10, 0.0, 0.0), 'up': False, 'down': False}]},
         {'id': 'wB', 'name': 'StrongLifts B', 'exercises': [

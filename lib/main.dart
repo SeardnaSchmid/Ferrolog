@@ -611,11 +611,17 @@ class WorkoutCard extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     // Own exercises with no muscles known don't count in the balance and the muscle map: say so here.
     final unknown = {for (final e in workout.exercises) if (!e.cardio && musclesOf(e.name) == null) e.name};
+    // Auto exercises back after a break start lighter; the card shows the weights the training will start with.
+    final comeback = {for (final e in workout.exercises) e.name: ?store.comebackOf(e)};
     return OverviewCard(
       title: workout.name,
       timed: {for (final e in workout.exercises) if (e.timed) e.name},
       detail: (name) => !unknown.contains(name)
-          ? null
+          ? switch (comeback[name]) {
+              final pct? => Text('Nach der Pause $pct % leichter zum Einstieg',
+                  style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+              null => null,
+            }
           : InkWell(
               onTap: () => editExerciseIn(context, workout, name),
               child: Padding(
@@ -639,7 +645,8 @@ class WorkoutCard extends StatelessWidget {
       rows: [
         for (final e in workout.exercises)
           // Weight went up when last time every set hit the target (the store already added the increment).
-          (e.name, e.weights, List<int?>.filled(e.sets, null), e.repsPerSet, _improved(last, e), e.km, e.cardio),
+          (e.name, comeback.containsKey(e.name) ? store.comebackWeights(e, comeback[e.name]!) : e.weights,
+              List<int?>.filled(e.sets, null), e.repsPerSet, _improved(last, e), e.km, e.cardio),
       ],
       actions: [
         IconButton(
@@ -656,7 +663,7 @@ class WorkoutCard extends StatelessWidget {
               ? null
               : () {
                   // Persist before opening, so a killed app can resume it.
-                  final session = Session.start(workout);
+                  final session = store.startSession(workout);
                   store.saveActive(session);
                   Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session)));
                 },

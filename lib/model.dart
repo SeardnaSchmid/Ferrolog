@@ -4,6 +4,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'loading.dart' show plateChoices;
+import 'units.dart';
+
 
 DateTime mondayOf(DateTime d) => DateTime(d.year, d.month, d.day - (d.weekday - 1));
 
@@ -134,6 +137,18 @@ class Exercise {
   /// without weight.
   bool timed;
 
+  /// Auto mode instead of [up], [down], [increment] and [failsToDeload]: a share of the weight that adapts
+  /// itself, steered by the reserve; reps bridge steps too coarse to load. See [applyResult], [AutoState],
+  /// [Store.loadStepOf] and [Store.comebackOf].
+  bool auto;
+
+  /// The auto mode's memory; null in the fixed mode.
+  AutoState? state;
+
+  /// What the weight can be loaded in, in kg, set by the user (a machine that only takes 5 kg plates);
+  /// null = learned, see [Store.loadStepOf]. Auto mode only.
+  double? loadStep;
+
   Exercise({
     required this.name,
     this.weight = 20,
@@ -153,6 +168,9 @@ class Exercise {
     this.cardio = false,
     this.km,
     this.timed = false,
+    this.auto = false,
+    this.state,
+    this.loadStep,
   });
 
   /// A cardio exercise with a distance goal ([km]) or else a duration goal ([minutes]).
@@ -168,23 +186,30 @@ class Exercise {
         fails = 0,
         restSeconds = 0,
         cardio = true,
-        timed = false;
+        timed = false,
+        auto = false;
 
   /// Next session's weights from what was lifted: up on success, down after enough misses in a row.
   /// A set done lighter than planned holds the plan: the new weight was trained, just not every set
   /// (e.g. the last set dropped back), so neither an increase nor a miss towards a deload.
-  void applyResult(ExerciseLog log) {
-    if (cardio) return; // cardio stays as planned
+  /// In [auto] mode see [_auto]; it returns what it did (null in the fixed mode).
+  Progression? applyResult(ExerciseLog log, {bool badDay = false, bool pain = false, double grid = 2.5}) {
+    if (cardio) return null; // cardio stays as planned
     final planned = weights;
     final lighter = [
       for (final (i, r) in log.reps.indexed)
         if (r != null && i < planned.length && log.weights[i] < planned[i]) i,
     ].isNotEmpty;
     // Fewer sets than planned (taken off or swapped during the training): the plan holds, no miss.
-    if (lighter || log.reps.length < sets) return;
+    if (lighter) return auto ? Progression.lighter : null;
+    if (log.reps.length < sets) return auto ? Progression.fewer : null;
     var delta = 0.0;
+    Progression? done;
     final top = maxReps;
-    if (top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top)) {
+    final reached = top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top);
+    if (auto) {
+      (delta, done) = _auto(log, reached, badDay: badDay, pain: pain, grid: grid);
+    } else if (reached) {
       if (up) delta = increment;
       fails = 0;
     } else if (log.succeeded) {
@@ -201,6 +226,118 @@ class Exercise {
     } else {
       weight = _next(log.weight, delta);
     }
+    return done;
+  }
+
+  /// The auto mode after a training, as (weight change, what it did):
+  /// - Done (every set at its reps, in a range at the top): up by [AutoState.pct] of the weight, rounded to
+  ///   [grid] (what can be loaded); twice that with 3 or more reps in reserve, nothing at the limit, half a
+  ///   step at the limit the second time in a row. Reps beyond the target in the last set count as reserve.
+  ///   Back from a break, double steps up to the weight from before it.
+  /// - A step that rounds to nothing (light weight, coarse steps) is bridged by reps: one more per set (two
+  ///   with reserve), and once the sets hold [AutoState.bridgeTo] the weight goes up a [grid] and the reps
+  ///   back. A range is its own bridge.
+  /// - Missed: holds. The second miss in a row takes a bridge back, the third takes off about 10 % and
+  ///   halves the share (down to [AutoState.minPct]); three done in a row with reserve double it again.
+  /// - A bad day ([badDay]) excuses a miss, twice in a row at most; [pain] holds everything.
+  (double, Progression) _auto(ExerciseLog log, bool reached, {required bool badDay, required bool pain, required double grid}) {
+    final a = state ??= AutoState();
+    final w = log.weight;
+    if (pain) return (0, Progression.pain);
+    if (!reached && log.succeeded) {
+      fails = a.excused = 0;
+      return (0, Progression.range); // within the range: more reps first
+    }
+    if (!reached) {
+      a.limits = a.streak = 0;
+      if (badDay && a.excused < 2) {
+        a.excused++;
+        return (0, Progression.badDay);
+      }
+      a.excused = 0;
+      if (++fails >= autoFails) {
+        fails = 0;
+        _endBridge();
+        a
+          ..pct = max(AutoState.minPct, a.pct / 2)
+          ..comebackTo = null;
+        return (noWeight ? 0 : w > 0 ? deloadTo(w, grid) - w : -grid, Progression.deload);
+      }
+      if (fails == 2 && a.bridgeFrom != null) {
+        _endBridge();
+        return (0, Progression.reset);
+      }
+      return (0, Progression.miss);
+    }
+
+    fails = a.excused = 0;
+    final aim = maxReps ?? log.targets.last;
+    final extra = max(0, (log.reps.last ?? 0) - aim);
+    final reserve = log.rir == null && extra == 0 ? null : (log.rir ?? 0) + extra;
+    double factor;
+    if (reserve == 0) {
+      a.streak = 0;
+      factor = ++a.limits >= 2 ? .5 : 0;
+    } else {
+      a.limits = 0;
+      a.streak = reserve != null && reserve >= 2 ? a.streak + 1 : 0;
+      factor = reserve != null && reserve >= 3 ? 2 : 1;
+    }
+    final pct = a.pct;
+    if (a.streak >= 3) {
+      a
+        ..pct = min(AutoState.maxPct, a.pct * 2)
+        ..streak = 0;
+    }
+    if (factor == 0 || noWeight) return (0, Progression.limit);
+    final back = a.comebackTo != null;
+    if (back) factor *= 2;
+    final done = factor >= 2 && !back ? Progression.up2 : factor < 1 ? Progression.half : Progression.up;
+
+    double up(double delta) {
+      // Back from a break: no further than the weight from before it.
+      if (a.comebackTo case final to? when w + delta >= to - 1e-6) {
+        a.comebackTo = null;
+        return max(0, to - w);
+      }
+      return delta;
+    }
+
+    if (w < 0) return (up(grid * max(1, factor.floor())), done); // assistance: a step less help
+    final steps = (w * pct / 100 * factor / grid).round();
+    if (steps >= 1) {
+      _endBridge();
+      return (up(steps * grid), done);
+    }
+    if (maxReps != null) return (up(grid), done); // the range was the bridge
+    if (factor < 1) return (0, Progression.limit);
+    // Too small to load: bridge by reps.
+    final base = a.bridgeFrom ?? reps;
+    final to = a.bridgeTo ?? base + (grid / max(w, grid) / .05).round().clamp(1, 3);
+    if (reps >= to) {
+      _endBridge();
+      return (up(grid), done);
+    }
+    final add = min(factor >= 2 ? 2 : 1, to - reps);
+    a
+      ..bridgeFrom = base
+      ..bridgeTo = to;
+    reps += add;
+    if (setReps case final r?) setReps = [for (final x in r) x + add];
+    return (0, Progression.bridge);
+  }
+
+  /// Back to the reps from before a bridge.
+  void _endBridge() {
+    final a = state;
+    if (a?.bridgeFrom case final base?) {
+      final add = reps - base;
+      reps = base;
+      if (setReps case final r?) setReps = [for (final x in r) x - add];
+    }
+    a
+      ?..bridgeFrom = null
+      ..bridgeTo = null;
   }
 
   /// [w] moved by [delta]: added weight never drops below none, assistance (negative) moves freely, so
@@ -237,6 +374,9 @@ class Exercise {
         if (cardio) 'type': 'cardio',
         if (timed) 'type': 'timed',
         if (km != null) 'km': km,
+        if (auto) 'auto': true,
+        if (auto && state != null) 'autoState': state!.toJson(),
+        if (auto && loadStep != null) 'loadStep': loadStep,
       };
 
   factory Exercise.fromJson(Map<String, dynamic> j) => Exercise(
@@ -259,7 +399,109 @@ class Exercise {
         cardio: j['type'] == 'cardio',
         km: (j['km'] as num?)?.toDouble(),
         timed: j['type'] == 'timed',
+        auto: j['auto'] == true,
+        state: j['autoState'] == null ? null : AutoState.fromJson(j['autoState']),
+        loadStep: (j['loadStep'] as num?)?.toDouble(),
       );
+}
+
+/// What the auto mode remembers of an exercise between trainings.
+class AutoState {
+  static const startPct = 2.5, minPct = .5, maxPct = 2.5;
+
+  /// Share of the weight a step adds, in percent: halved by every deload, doubled again by [streak].
+  double pct;
+
+  /// Trainings done in a row with 2 or more reps in reserve; 3 raise [pct].
+  int streak;
+
+  /// Trainings done in a row at the limit (reserve 0); from the second on half a step.
+  int limits;
+
+  /// Misses in a row excused as a bad day; at most 2.
+  int excused;
+
+  /// A rep bridge: the reps before it, and the reps at which the weight goes up a step.
+  int? bridgeFrom, bridgeTo;
+
+  /// Back from a break: the weight from before it, reached again in double steps.
+  double? comebackTo;
+
+  AutoState({this.pct = startPct, this.streak = 0, this.limits = 0, this.excused = 0, this.bridgeFrom, this.bridgeTo, this.comebackTo});
+
+  Map<String, dynamic> toJson() => {
+        'pct': pct,
+        if (streak > 0) 'streak': streak,
+        if (limits > 0) 'limits': limits,
+        if (excused > 0) 'excused': excused,
+        'bridgeFrom': ?bridgeFrom,
+        'bridgeTo': ?bridgeTo,
+        'comebackTo': ?comebackTo,
+      };
+
+  factory AutoState.fromJson(Map<String, dynamic> j) => AutoState(
+        pct: (j['pct'] as num?)?.toDouble() ?? startPct,
+        streak: j['streak'] ?? 0,
+        limits: j['limits'] ?? 0,
+        excused: j['excused'] ?? 0,
+        bridgeFrom: j['bridgeFrom'],
+        bridgeTo: j['bridgeTo'],
+        comebackTo: (j['comebackTo'] as num?)?.toDouble(),
+      );
+}
+
+/// Misses in a row before the auto mode takes weight off.
+const autoFails = 3;
+
+/// About 10 % off [kg] ([share] to keep), down to a multiple of [grid] (what can be loaded), at least one [grid].
+double deloadTo(double kg, double grid, {double share = .9}) =>
+    max(0.0, min(kg - grid, (kg * share / grid + 1e-9).floor() * grid));
+
+/// Where a load step comes from, see [Store.loadStepOf].
+enum LoadSource { set, plates, learned, guess }
+
+/// What the auto mode did with an exercise after a training, kept on its log for the recap and the export.
+enum Progression { up, up2, half, limit, bridge, range, miss, reset, badDay, pain, deload, lighter, fewer }
+
+/// For the recap, after next time's weight: "↑ 102,5 kg · viel Reserve". [e] is the plan after the training,
+/// for a bridge's reps.
+String progressionLabel(Progression p, [Exercise? e]) => switch (p) {
+      Progression.up => 'geschafft',
+      Progression.up2 => 'viel Reserve, doppelter Schritt',
+      Progression.half => '2× am Limit, halber Schritt',
+      Progression.limit => 'am Limit, Gewicht bleibt',
+      Progression.bridge => switch (e?.state?.bridgeTo) {
+          final to? => 'nächstes Mal ${e!.reps} Wdh., bei $to mehr Gewicht',
+          null => 'erst mehr Wiederholungen',
+        },
+      Progression.range => 'erst alle Wiederholungen',
+      Progression.miss => 'nicht geschafft',
+      Progression.reset => '2× nicht geschafft, Wiederholungen zurück',
+      Progression.badDay => 'schlechter Tag, zählt nicht',
+      Progression.pain => 'Schmerzen: Gewicht bleibt. Kommt es wieder, lass die Übung prüfen.',
+      Progression.deload => '$autoFails× nicht geschafft, etwa −10 %, kleinere Schritte',
+      Progression.lighter => 'leichter gemacht',
+      Progression.fewer => 'weniger Sätze',
+    };
+
+/// Tags after a training that excuse a miss in the auto mode (twice in a row at most). The mood doesn't:
+/// it comes after the training, and a miss makes it bad.
+const badDayTags = {'Krank', 'Schlecht geschlafen', 'Wenig gegessen', 'Stress'};
+
+/// The tag that holds the weight in the auto mode, whatever happened.
+const painTag = 'Schmerzen';
+
+bool isBadDay(Session s) => s.tags.any(badDayTags.contains);
+
+
+/// Big barbell lifts (squat, bench, deadlift, press, row, …), not their dumbbell or machine variants: the
+/// warm-up takes longer, the plates per side are shown and the auto mode steps by the plates.
+bool isBarbell(String name) {
+  final k = searchKey(name);
+  const big = ['kniebeuge', 'squat', 'kreuzheb', 'deadlift', 'bankdrueck', 'benchpress', 'schulterdrueck',
+      'overheadpress', 'langhantelrudern', 'barbellrow', 'rackpull', 'goodmorning', 'pushpress', 'umsetzen', 'reissen'];
+  const not = ['kurzhantel', 'dumbbell', 'maschine', 'machine', 'goblet', 'split', 'bulgarian', 'einbeinig', 'single'];
+  return big.any(k.contains) && !not.any(k.contains);
 }
 
 class Workout {
@@ -331,6 +573,12 @@ class ExerciseLog {
   /// Null when not asked or not answered. Read by the plateau finding, never by the 1RM.
   int? rir;
 
+  /// Percent the auto mode took off at the start after a break, see [Store.comebackOf].
+  final int? backoff;
+
+  /// What the auto mode did after this training; null for a plan without it.
+  Progression? progression;
+
   ExerciseLog({
     required this.name,
     required double weight,
@@ -351,12 +599,14 @@ class ExerciseLog {
     this.replaces,
     this.added = false,
     this.rir,
+    this.backoff,
+    this.progression,
   })  : weights = weights ?? List.filled(reps.length, weight),
         doneAt = doneAt ?? List.filled(reps.length, null),
         targets = targets ?? List.filled(reps.length, targetReps);
 
   /// A fresh log for training [e]: every set open.
-  factory ExerciseLog.fromPlan(Exercise e, {String? replaces, bool added = false}) => ExerciseLog(
+  factory ExerciseLog.fromPlan(Exercise e, {String? replaces, bool added = false, int? backoff}) => ExerciseLog(
         name: e.name,
         weight: e.weight,
         weights: List.of(e.weights),
@@ -372,6 +622,7 @@ class ExerciseLog {
         increment: e.increment,
         replaces: replaces,
         added: added,
+        backoff: backoff,
       );
 
   /// This exercise reshaped to [e] as edited during the training: its sets, reps per set, rep range and
@@ -402,6 +653,7 @@ class ExerciseLog {
       replaces: replaces,
       added: added,
       rir: n == done.length ? rir : null, // asked after the last set: open sets again, the answer goes
+      backoff: backoff,
     );
   }
 
@@ -432,6 +684,7 @@ class ExerciseLog {
         replaces: replaces,
         added: added,
         rir: reps.every((r) => r != null) ? rir : null, // asked after the last set
+        backoff: backoff,
       );
 
   /// Target reps of the first set; for cardio the planned minutes.
@@ -464,6 +717,8 @@ class ExerciseLog {
         if (replaces != null) 'replaces': replaces,
         if (added) 'added': true,
         'rir': ?rir,
+        'backoff': ?backoff,
+        'progression': ?progression?.name,
         // A planned exercise has these in the plan; one from outside it keeps them for the running training.
         if (replaces != null || added) ...{
           if (restSeconds != null) 'restSeconds': restSeconds,
@@ -493,6 +748,8 @@ class ExerciseLog {
         replaces: j['replaces'],
         added: j['added'] == true,
         rir: j['rir'],
+        backoff: j['backoff'],
+        progression: Progression.values.asNameMap()[j['progression']],
       );
 }
 
@@ -517,7 +774,8 @@ const noteTags = {
 };
 
 /// What progression changes on a planned exercise, as it was before a training.
-typedef PlanState = ({double weight, List<double>? setWeights, int fails});
+/// [auto] is the auto mode's part: reps, setReps and [AutoState], as JSON; null in the fixed mode.
+typedef PlanState = ({double weight, List<double>? setWeights, int fails, Map<String, dynamic>? auto});
 
 class Session {
   final String id;
@@ -624,7 +882,7 @@ class Session {
         if (planBefore case final p?)
           'planBefore': {
             for (final MapEntry(:key, :value) in p.entries)
-              key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails},
+              key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails, 'auto': ?value.auto},
           },
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
@@ -650,6 +908,7 @@ class Session {
                   weight: (value['weight'] as num).toDouble(),
                   setWeights: value['setWeights'] == null ? null : [for (final w in value['setWeights']) (w as num).toDouble()],
                   fails: value['fails'] as int? ?? 0,
+                  auto: value['auto'],
                 ),
             },
           _ => null,
@@ -780,7 +1039,19 @@ class Store extends ChangeNotifier {
             'present, per set; all 0 = no weight) and rises by "increment" when all sets hit "reps" (setReps, if present, '
             'per set; with "maxReps" a rep range whose top every set must reach) and "up" is true (progressive overload); '
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true; a set done lighter than '
-            'planned holds the weight (no increase, no miss), an exercise skipped entirely changes nothing. sessions = completed trainings, '
+            'planned holds the weight (no increase, no miss), an exercise skipped entirely changes nothing. "auto": true = auto mode '
+            'instead of increment/up/down/failsToDeload, with its memory in "autoState": on success the weight rises by '
+            'autoState.pct percent (starts at ${AutoState.startPct}, halved by each deload down to ${AutoState.minPct}, doubled back '
+            'after 3 successes in a row with 2+ reps in reserve), rounded to the exercise\'s load step (barbell: the user\'s '
+            'plates; else learned from the weights used; "loadStep" in kg when the user set it); twice that with 3+ reps in reserve (rir plus reps beyond the '
+            'target in the last set), nothing at the limit, half a step the second time in a row at the limit; a step too '
+            'small to load is bridged by reps (bridgeFrom = reps before, bridgeTo = reps at which the weight goes up a load '
+            'step); a miss holds, the 2nd in a row ends a bridge, $autoFails in a row take off about 10 %; tags '
+            '${badDayTags.map((t) => '"$t"').join(', ')} excuse a miss (2 in a row at most), "$painTag" holds everything; '
+            'after 14 days without the exercise a training starts 5 % lighter, 28 days 10 %, 56 days 20 % '
+            '(exercises[].backoff), then double steps back up to autoState.comebackTo; exercises[].progression = what the '
+            'auto mode did (up, up2, half, limit, bridge, range, miss, reset, badDay, pain, deload, lighter, fewer). '
+            'sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
             'they differ); "failRestSeconds" = rest after a missed set; exercises[].replaces = the planned exercise this '
             'one was swapped in for during the training, exercises[].added = added on top of the plan (both change '
@@ -878,7 +1149,12 @@ class Store extends ChangeNotifier {
       s.planBefore = {
         for (final e in w.exercises)
           if (s.exercises.any((log) => log.name == e.name))
-            e.name: (weight: e.weight, setWeights: e.setWeights == null ? null : List.of(e.setWeights!), fails: e.fails),
+            e.name: (
+              weight: e.weight,
+              setWeights: e.setWeights == null ? null : List.of(e.setWeights!),
+              fails: e.fails,
+              auto: e.auto ? {'reps': e.reps, 'setReps': ?e.setReps, 'state': ?e.state?.toJson()} : null,
+            ),
       };
       _progress(w, s);
     }
@@ -889,12 +1165,80 @@ class Store extends ChangeNotifier {
   Workout? _workoutOf(Session s) => workouts.where((x) => x.id == s.workoutId).firstOrNull;
 
   void _progress(Workout w, Session s) {
+    final bad = isBadDay(s), pain = s.tags.contains(painTag);
     for (final log in s.exercises) {
       final e = planEntryOf(w, s.exercises, log);
+      log.progression = null;
       // Skipped entirely (no time, no bar): not a miss, the plan stays.
       if (e == null || log.setsDone == 0) continue;
-      e.applyResult(log);
+      if (log.backoff case final pct? when e.auto) {
+        // Back after a break: the lighter start becomes the plan, the old weight the way back.
+        final ws = comebackWeights(e, pct);
+        (e.state ??= AutoState()).comebackTo = max(e.state!.comebackTo ?? 0, e.weight);
+        if (e.setWeights != null) e.setWeights = ws;
+        e.weight = ws.reduce(max);
+      }
+      log.progression = e.applyResult(log, badDay: bad, pain: pain, grid: loadStepOf(e).$1);
     }
+  }
+
+  /// The smallest step [e]'s weight can change by, in kg, and where it comes from: as set for the exercise
+  /// ([Exercise.loadStep]); for a barbell lift both
+  /// sides' smallest plate the user has; else learned from the weights used (the coarsest step all of them
+  /// fit, once there are 3 different ones); else a start value by kind: dumbbells 2 kg, machines and cables
+  /// 2,5 kg (5 lb each), anything else the plan's increment.
+  (double, LoadSource) loadStepOf(Exercise e) {
+    final lb = unit.value == WeightUnit.lb;
+    if (e.loadStep case final step? when step > 0) return (step, LoadSource.set);
+    if (isBarbell(e.name)) {
+      final plates = [
+        for (final p in _prefs.getStringList('barbell.plates.${unit.value.name}') ?? const <String>[]) double.parse(p),
+      ];
+      return (toKg(2 * (plates.isEmpty ? plateChoices[unit.value]! : plates).reduce(min)), LoadSource.plates);
+    }
+    final used = {
+      for (final (_, l) in historyOf(e.name)) for (final w in l.weights) if (w > 0) shown(w),
+      for (final w in e.weights) if (w > 0) shown(w),
+    };
+    if (used.length >= 3) {
+      for (final g in lb ? const [10.0, 5.0, 2.5, 1.0] : const [5.0, 2.5, 2.0, 1.25, 1.0, .5]) {
+        if (used.every((w) => ((w / g) - (w / g).round()).abs() < 1e-3)) return (toKg(g), LoadSource.learned);
+      }
+    }
+    final k = searchKey(e.name);
+    if (const ['kurzhantel', 'dumbbell'].any(k.contains)) return (toKg(lb ? 5 : 2), LoadSource.guess);
+    if (const ['maschine', 'machine', 'kabel', 'cable', 'zug', 'presse', 'press'].any(k.contains)) {
+      return (toKg(lb ? 5 : 2.5), LoadSource.guess);
+    }
+    return (e.increment, LoadSource.guess);
+  }
+
+  /// Percent an auto exercise starts lighter after a break: 5 from 14 days without it, 10 from 4 weeks,
+  /// 20 from 8 weeks. Null when trained lately, never trained, or not in auto mode.
+  int? comebackOf(Exercise e, [DateTime? now]) {
+    if (!e.auto || e.cardio || e.weight <= 0) return null;
+    final last = sessions.where((s) => s.exercises.any((l) => l.name == e.name && l.setsDone > 0)).firstOrNull;
+    if (last == null) return null;
+    final days = (now ?? DateTime.now()).difference(last.date).inDays;
+    return days >= 56 ? 20 : days >= 28 ? 10 : days >= 14 ? 5 : null;
+  }
+
+  /// [e]'s planned weights [pct] percent lighter, down to what can be loaded.
+  List<double> comebackWeights(Exercise e, int pct) {
+    final grid = loadStepOf(e).$1;
+    return [for (final w in e.weights) w <= 0 ? w : deloadTo(w, grid, share: 1 - pct / 100)];
+  }
+
+  /// A fresh training of [w]; auto exercises back after a break start lighter ([comebackOf]). Not saved.
+  Session startSession(Workout w, [DateTime? now]) {
+    final s = Session.start(w);
+    for (final (i, e) in w.exercises.indexed) {
+      if (comebackOf(e, now) case final pct?) {
+        final log = s.exercises[i] = ExerciseLog.fromPlan(e, backoff: pct);
+        log.weights.setAll(0, comebackWeights(e, pct));
+      }
+    }
+    return s;
   }
 
   /// True if editing or deleting [s] moves the plan: it's the newest training of its workout and knows
@@ -916,6 +1260,13 @@ class Store extends ChangeNotifier {
         ..weight = before.weight
         ..setWeights = before.setWeights == null ? null : List.of(before.setWeights!)
         ..fails = before.fails;
+      // The auto mode's reps and memory, unless the mode or the sets were changed in the plan since.
+      if (before.auto case final a? when e.auto && (a['setReps'] as List?)?.length == e.setReps?.length) {
+        e
+          ..reps = a['reps']
+          ..setReps = a['setReps'] == null ? null : List<int>.from(a['setReps'])
+          ..state = a['state'] == null ? null : AutoState.fromJson(a['state']);
+      }
     }
   }
 
@@ -927,8 +1278,12 @@ class Store extends ChangeNotifier {
     _progress(_workoutOf(s)!, s);
   }
 
-  /// Saves changes made in place to a stored session (body weight, note).
-  Future<void> updateSession(Session s) => _save();
+  /// Saves changes made in place to a stored session (body weight, note). With [replan] (the mood or
+  /// tags changed) the auto mode looks at the training again: a bad day doesn't count a miss.
+  Future<void> updateSession(Session s, {bool replan = false}) {
+    if (replan && (_workoutOf(s)?.exercises.any((e) => e.auto) ?? false)) reapplyProgression(s);
+    return _save();
+  }
 
   /// Takes an edited copy of a stored training (same id): the history re-sorted by date and, for the
   /// newest training of its workout, the plan recomputed. A training moved behind another of its workout

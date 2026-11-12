@@ -36,7 +36,7 @@ void main() {
 
   test('finishing keeps the plan before on the newest training only', () async {
     final first = await train(2, [5, 5, 5]);
-    expect(first.planBefore?['Kniebeuge'], (weight: 100.0, setWeights: null, fails: 0));
+    expect(first.planBefore?['Kniebeuge'], (weight: 100.0, setWeights: null, fails: 0, auto: null));
     expect(squat().weight, 102.5);
     final second = await train(4, [5, 5, 3]);
     expect(first.planBefore, isNull, reason: 'handed over to the newer one');

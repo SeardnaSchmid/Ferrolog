@@ -162,7 +162,8 @@ class _SyncSettingsState extends State<SyncSettings> {
             ('session.showWhenLocked', Icons.lock_open_outlined, 'Über dem Sperrbildschirm zeigen',
                 'Während des Trainings ohne Entsperren auf die Pause schauen', true),
             ('session.askRir', Icons.battery_5_bar_outlined, 'Reserve abfragen',
-                'Nach dem letzten Satz einer Übung: Wie viele Wiederholungen gingen noch? Hilft bei Plateaus', false),
+                'Nach dem letzten Satz einer Übung: Wie viele Wiederholungen gingen noch? Hilft bei Plateaus. '
+                    'Übungen im Auto-Modus fragen immer', false),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

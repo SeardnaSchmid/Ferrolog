@@ -50,13 +50,14 @@ Die App schreibt nach jedem Training `ferrolog.json` in ein GitHub-Repo
   "workouts": [{                       // Pläne mit dem Gewicht fürs NÄCHSTE Training
     "id": "…", "name": "Push/Pull A",
     "exercises": [{ "name": "Kniebeuge", "weight": 110, "sets": 3, "reps": 5,
-                    "increment": 2.5, "restSeconds": 180 }]
+                    "increment": 2.5, "restSeconds": 180, "auto": true }]  // auto = Auto-Modus statt fester Schritte
   }],
   "sessions": [{                       // absolvierte Trainings, neueste zuerst
     "id": "…", "workoutId": "…", "workoutName": "Push/Pull A",
     "date": "2026-10-30T18:12:00.000",
     "exercises": [{ "name": "Bankdrücken", "weight": 77.5, "targetReps": 5,
-                    "reps": [5, 5, 3], "rir": 0 },  // null = Satz nicht gemacht; rir = Wdh. übrig nach dem letzten Satz (falls abgefragt)
+                    "reps": [5, 5, 3], "rir": 0,    // null = Satz nicht gemacht; rir = Wdh. übrig nach dem letzten Satz (falls abgefragt)
+                    "backoff": 10, "progression": "miss" },  // Auto-Modus: nach Pause 10 % leichter gestartet, Ergebnis
                   { "name": "Kabelrudern", "weight": 45, "targetReps": 10,
                     "reps": [10, 10, 9], "replaces": "Rudern" }]  // im Training getauscht; "added": true = dazugenommen
   }]
@@ -64,4 +65,6 @@ Die App schreibt nach jedem Training `ferrolog.json` in ein GitHub-Repo
 ```
 
 Progressive Overload: Sind alle Sätze einer Übung geschafft, steigt `weight` im Plan
-um `increment`.
+um `increment`. Im Auto-Modus steigt es um einen Anteil des Gewichts, der sich selbst anpasst und
+nach der Reserve richtet; zu kleine Schritte überbrückt die App mit Wiederholungen, ein schlechter Tag
+zählt nicht, nach einer Pause geht es leichter los (siehe `docs/auto-modus.md`).

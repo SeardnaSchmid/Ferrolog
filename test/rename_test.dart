@@ -32,7 +32,7 @@ void main() {
     ];
     store.sessions = [
       _training('a', DateTime(2026, 11, 4), [_log('Kurzhantel-Bankdrücken', 24, replaces: 'Bankdrücken')])
-        ..planBefore = {'Bankdrücken': (weight: 60, setWeights: null, fails: 1)},
+        ..planBefore = {'Bankdrücken': (weight: 60, setWeights: null, fails: 1, auto: null)},
       _training('a', DateTime(2026, 11, 2), [_log('Bankdrücken', 57.5), _log('Kniebeuge', 100)]),
     ];
     store.muscles = {'bankdruecken': {'primary': ['chest']}};
