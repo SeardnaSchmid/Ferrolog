@@ -30,11 +30,13 @@ final capabilities = {
     'Own exercises with their muscles (muscles: primary, secondary), for names the app doesn\'t know.',
     'During a training the user can swap an exercise (machine taken), add one, add or take off sets and change '
         'the order; that changes only that training, not the plan (see replaces, added in the sessions).',
+    'Barbell lifts show the plates per side for the user\'s bar and plates, and, if the user switched it on, a '
+        'warm-up before the first set (empty bar × 8, then 50/70/85 % of the first set); nothing to plan for either.',
   ],
   'cannot': [
     'Supersets, circuits or giant sets: exercises are done one after the other; the rest timer runs per exercise.',
     'RPE / RIR, percentages of the 1RM, tempo, notes per exercise.',
-    'Planned warm-up sets: the app leaves them to the user (and estimates their time).',
+    'Own warm-up sets, or warm-ups for dumbbell and machine exercises; warm-up sets are never logged.',
     'Periodisation over weeks (waves, deload weeks, blocks): only the automatic steps above; a planned change '
         'has to be made by hand when it is due.',
     'A schedule (which workout on which day) or optional exercises: an exercise in the plan is planned every time.',

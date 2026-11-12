@@ -9,6 +9,7 @@ import 'model.dart';
 import 'recap.dart';
 import 'timing.dart';
 import 'edit.dart';
+import 'loading.dart';
 import 'units.dart';
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
@@ -32,6 +33,10 @@ class _SessionPageState extends State<SessionPage> {
   int get restTarget => s.restSeconds ?? 0;
   set restTarget(int seconds) => s.restSeconds = seconds;
   ExerciseLog? touched; // highlighted: the exercise last logged or edited
+
+  /// Warm-up lines opened, and the warm-up sets ticked off: only on this page, they're never logged.
+  final warmupOpen = <ExerciseLog>{};
+  final warmupDone = <ExerciseLog, Set<int>>{};
 
   /// Estimates from the trainings before this one; they don't change while training.
   final pace = currentPace();
@@ -701,6 +706,7 @@ class _SessionPageState extends State<SessionPage> {
                   Text('JETZT',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
               ]),
+              ?_warmup(log, c, muted),
               const SizedBox(height: 10),
               if (log.cardio)
                 _cardioTile(log, c)
@@ -737,6 +743,54 @@ class _SessionPageState extends State<SessionPage> {
           ),
         ),
       );
+
+  /// If switched on in the settings, before the first set of a barbell lift: the warm-up ramp to its first set, one line that opens into
+  /// sets to tick off, each with the plates per side. Not logged, no volume, no rest.
+  Widget? _warmup(ExerciseLog log, ColorScheme c, TextStyle muted) {
+    if (!showWarmup || log.cardio || log.timed || log.setsDone > 0 || !isBarbell(log.name) || log.weights.isEmpty) {
+      return null;
+    }
+    final sets = warmupFor(log.weights.first);
+    if (sets.isEmpty) return null;
+    final open = warmupOpen.contains(log);
+    final done = warmupDone[log] ?? const {};
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => open ? warmupOpen.remove(log) : warmupOpen.add(log)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Icon(Icons.local_fire_department_outlined, size: 16, color: c.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Aufwärmen: ${[for (final (w, r) in sets) '${plateNum(w)}×$r'].join(' · ')}'
+                '${done.isEmpty ? '' : '  ✓ ${done.length}/${sets.length}'}',
+                style: muted.copyWith(fontSize: 13),
+              ),
+            ),
+            Icon(open ? Icons.expand_less : Icons.expand_more, size: 18, color: c.onSurfaceVariant),
+          ]),
+        ),
+      ),
+      if (open)
+        for (final (i, (w, r)) in sets.indexed)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            visualDensity: VisualDensity.compact,
+            value: done.contains(i),
+            title: Text('${plateNum(w)} $unitLabel × $r'),
+            subtitle: Text(perSideLabel(toKg(w))),
+            onChanged: (v) => setState(() {
+              final ticks = warmupDone.putIfAbsent(log, () => {});
+              v == true ? ticks.add(i) : ticks.remove(i);
+            }),
+          ),
+    ]);
+  }
 
   /// Cardio as one wide tile: a stopwatch on top (start / stop / undo), what was done below (tap to edit).
   Widget _cardioTile(ExerciseLog log, ColorScheme c) {
@@ -964,6 +1018,10 @@ Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog
                 const SizedBox(width: 12),
                 stepButton(Icons.add, 1),
               ]),
+              if (w != null && w > 0 && !log.timed && isBarbell(log.name)) ...[
+                const SizedBox(height: 8),
+                Text(perSideLabel(w), textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
+              ],
               const SizedBox(height: 16),
               Text('Übernehmen für', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
               const SizedBox(height: 8),

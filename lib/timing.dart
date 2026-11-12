@@ -28,7 +28,7 @@ const _maxGap = Duration(minutes: 15), _maxFirst = Duration(minutes: 25);
 }
 
 /// Big barbell lifts: heavier, slower reps and warm-up sets before the work sets.
-bool _barbell(String name) {
+bool isBarbell(String name) {
   final k = searchKey(name);
   const big = ['kniebeuge', 'squat', 'kreuzheb', 'deadlift', 'bankdrueck', 'benchpress', 'schulterdrueck',
       'overheadpress', 'langhantelrudern', 'barbellrow', 'rackpull', 'goodmorning', 'pushpress', 'umsetzen', 'reissen'];
@@ -42,14 +42,14 @@ bool _barbell(String name) {
 double _perRep(String name) {
   if (const {'Umsetzen', 'Reißen'}.contains(name)) return 8;
   if (const {'Kettlebell Swings', 'Burpees', 'Russian Twists'}.contains(name)) return 2;
-  return _barbell(name) ? 4.5 : 3;
+  return isBarbell(name) ? 4.5 : 3;
 }
 
 /// Setup before the first set: barbell lifts ramp up from the empty bar in steps of about half again
 /// (100 kg: 20, 30, 45, 70 → 4 warm-up sets), a minute each with loading the plates; else a minute
 /// to get the station or dumbbells ready, half that with no weight.
 int _setupSeconds(String name, double kg) {
-  if (_barbell(name)) return 60 + (kg > 20 ? (log(kg / 20) / log(1.5)).ceil() : 0) * 60;
+  if (isBarbell(name)) return 60 + (kg > 20 ? (log(kg / 20) / log(1.5)).ceil() : 0) * 60;
   return kg > 0 ? 60 : 30;
 }
 
