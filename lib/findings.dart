@@ -1,5 +1,8 @@
 import 'dart:math';
 
+import 'package:intl/intl.dart' show DateFormat;
+
+import 'language.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'units.dart';
@@ -116,10 +119,11 @@ List<Finding> findings(List<Session> sessions, List<Workout> workouts, DateTime 
   return (top, rest.take(2).toList());
 }
 
-/// "6", "6,5": a number with at most one decimal, German style.
-String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1).replaceAll('.', ',');
+/// "6", "6,5" / "6.5": a number with at most one decimal.
+String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : decimal(v.toStringAsFixed(1));
 
-String _date(DateTime d) => '${d.day}.${d.month}.';
+/// "2.11." / "11/2"
+String _date(DateTime d) => DateFormat.Md(appLocale.languageCode).format(d);
 
 // ---------------------------------------------------------------------------------------------------
 // Actions
@@ -135,21 +139,21 @@ Finding? _weekGoal(List<Session> sessions, DateTime now, int perWeek) {
   final firstWeek = !sessions.last.date.isBefore(monday);
   if (firstWeek || needed <= 0 || needed > daysLeft || needed < daysLeft - 1) return null;
   final when = daysLeft > 1
-      ? 'noch $daysLeft Tage'
+      ? tr.weekDaysLeft(daysLeft)
       : trainedToday
-          ? 'morgen ist der letzte Tag'
-          : 'heute ist der letzte Tag';
+          ? tr.weekTomorrowLast
+          : tr.weekTodayLast;
   return Finding('week:${monday.year}-${monday.month}-${monday.day}', FindingType.weekGoal,
-      needed == 1 ? 'Noch 1 Training diese Woche' : 'Noch $needed Trainings diese Woche',
-      '$done von $perWeek geschafft, $when',
-      why: 'Dein Wochenziel sind $perWeek Trainings.',
-      advice: 'Mit einem Training ${daysLeft > 1 ? 'in den nächsten Tagen' : trainedToday ? 'morgen' : 'heute'} bleibt die Serie.',
+      tr.weekTitle(needed),
+      tr.weekEvidence(done, perWeek, when),
+      why: tr.weekWhy(perWeek),
+      advice: daysLeft > 1 ? tr.weekAdviceDays : trainedToday ? tr.weekAdviceTomorrow : tr.weekAdviceToday,
       source: statsAt(StatsView.weeks));
 }
 
 /// Where an exercise moved up goes: right after the main lifts at the start, before the first accessory.
 int earlierSlot(Workout w) {
-  final i = w.exercises.indexWhere((e) => !heavyLifts.contains(e.name));
+  final i = w.exercises.indexWhere((e) => !heavyLifts.contains(catalogueName(e.name)));
   return i < 0 ? w.exercises.length : i;
 }
 
@@ -172,17 +176,15 @@ List<Finding> _skipped(List<Session> recent, List<Workout> workouts, List<Findin
     // Skipped as the last exercise (cardio aside): then it's the time running out.
     bool lastIn(Session s) => s.exercises.lastWhere((e) => !e.cardio).name == name;
     final atEnd = ss.where(lastIn).length;
-    final end = atEnd == n ? ', jedes Mal als letzte Übung' : atEnd * 2 >= n ? ', meist als letzte Übung' : '';
+    final end = atEnd == n ? tr.skippedEndAlways : atEnd * 2 >= n ? tr.skippedEndMostly : '';
     final lagging = balance.where((b) => b.source.pair != null && sideOf(b.source.pair!, name) != null).firstOrNull;
-    final consequence = lagging == null ? '' : ' Folge für die Balance: ${lagging.evidence}.';
+    final consequence = lagging == null ? '' : tr.skippedConsequence(lagging.evidence);
     final w = workouts.where((w) => w.exercises.any((e) => e.name == name)).firstOrNull;
     final i = w?.exercises.indexWhere((e) => e.name == name) ?? -1;
     final canMove = w != null && earlierSlot(w) < i;
-    result.add(Finding('skipped:$name', FindingType.skipped, '$name $n× ausgelassen', 'In 4 Wochen$end',
-        why: 'In $n von $of Trainings komplett weggelassen$end.$consequence',
-        advice: canMove
-            ? '$name vor die Zusatzübungen ziehen. Gleiches Volumen, es fällt nur nicht mehr hinten runter.'
-            : '$name früher im Training einplanen oder bewusst aus dem Plan nehmen.',
+    result.add(Finding('skipped:$name', FindingType.skipped, tr.skippedTitle(name, n), tr.skippedEvidence(end),
+        why: tr.skippedWhy(n, of, end, consequence),
+        advice: canMove ? tr.skippedAdviceMove(name) : tr.skippedAdvice(name),
         source: lagging != null
             ? statsAt(StatsView.balance, pair: lagging.source.pair)
             : statsAt(StatsView.exercise, exercise: name, dates: [for (final s in ss) s.date]),
@@ -194,27 +196,24 @@ List<Finding> _skipped(List<Session> recent, List<Workout> workouts, List<Findin
   return result;
 }
 
-/// What trains a muscle group that falls behind, and the exercise to suggest when none is planned.
-const _remedies = <String, (List<String>, String)>{
-  'Oberer Rücken': (['Langhantelrudern', 'Kurzhantelrudern', 'Kabelrudern'], 'Kurzhantelrudern'),
-  'Brust': (['Bankdrücken', 'Kurzhantel-Bankdrücken', 'Dips'], 'Kurzhantel-Bankdrücken'),
-  'Schultern': (['Schulterdrücken', 'Kurzhantel-Schulterdrücken'], 'Schulterdrücken'),
-  'Latissimus': (['Klimmzüge', 'Latzug'], 'Latzug'),
-  'Vordere Schulter': (['Schulterdrücken', 'Frontheben'], 'Schulterdrücken'),
-  'Hintere Schulter': (['Face Pulls', 'Reverse Butterfly'], 'Face Pulls oder Reverse Flys'),
-  'Quadrizeps': (['Kniebeuge', 'Beinpresse', 'Bulgarian Split Squat'], 'Beinpresse'),
-  'Hintere Oberschenkel': (['Rumänisches Kreuzheben', 'Nordic Curls', 'Beinbeuger'], 'Nordic Curls'),
-  'Innenrotation': (['Bankdrücken', 'Schulterdrücken'], 'Bankdrücken'),
-  'Außenrotation': (['Face Pulls'], 'Face Pulls'),
-  'Bauch': (['Crunches', 'Plank', 'Ab Wheel'], 'Plank oder Ab Wheel'),
-  'Unterer Rücken': (['Rückenstrecker', 'Kreuzheben'], 'Rückenstrecker'),
-};
-
-/// Extra words for the advice where one exercise covers more than its pair.
-const _remedyNotes = <String, String>{
-  'Außenrotation': ' Face Pulls decken beides ab: Außenrotation und hintere Schulter. Am Ende eines Oberkörper-Trainings einplanen.',
-  'Hintere Schulter': ' Face Pulls decken beides ab: hintere Schulter und Außenrotation.',
-};
+/// What trains the side of a pair that falls behind (catalogue names), the exercise to suggest when none
+/// is planned (shown as is, or in the app's language where it names two), and extra words for the advice
+/// where one exercise covers more than its pair.
+(List<String>, String, String) _remedy(Pair p, int side) => switch ((p, side)) {
+      (Pair.pushPullFlat, 1) => (['Langhantelrudern', 'Kurzhantelrudern', 'Kabelrudern'], exerciseLabel('Kurzhantelrudern'), ''),
+      (Pair.pushPullFlat, _) => (['Bankdrücken', 'Kurzhantel-Bankdrücken', 'Dips'], exerciseLabel('Kurzhantel-Bankdrücken'), ''),
+      (Pair.pushPullOverhead, 0) => (['Schulterdrücken', 'Kurzhantel-Schulterdrücken'], exerciseLabel('Schulterdrücken'), ''),
+      (Pair.pushPullOverhead, _) => (['Klimmzüge', 'Latzug'], exerciseLabel('Latzug'), ''),
+      (Pair.rearDelts, 0) => (['Schulterdrücken', 'Frontheben'], exerciseLabel('Schulterdrücken'), ''),
+      (Pair.rearDelts, _) => (['Face Pulls', 'Reverse Butterfly'], tr.remedyRearDelts, tr.remedyNoteRearDelts),
+      (Pair.quadsHamstrings, 0) => (['Kniebeuge', 'Beinpresse', 'Bulgarian Split Squat'], exerciseLabel('Beinpresse'), ''),
+      (Pair.quadsHamstrings, _) =>
+        (['Rumänisches Kreuzheben', 'Nordic Curls', 'Beinbeuger'], exerciseLabel('Nordic Curls'), ''),
+      (Pair.rotators, 0) => (['Bankdrücken', 'Schulterdrücken'], exerciseLabel('Bankdrücken'), ''),
+      (Pair.rotators, _) => (['Face Pulls'], exerciseLabel('Face Pulls'), tr.remedyNoteExternal),
+      (Pair.core, 0) => (['Crunches', 'Plank', 'Ab Wheel'], tr.remedyAbs, ''),
+      (Pair.core, _) => (['Rückenstrecker', 'Kreuzheben'], exerciseLabel('Rückenstrecker'), ''),
+    };
 
 /// What to do about a pair off its guide, by cause, never adding work:
 /// - planned evenly but sets left out on the side behind: plan it earlier;
@@ -224,9 +223,8 @@ const _remedyNotes = <String, String>{
 /// Null when the pair is balanced. Shared by the finding and the balance card, so both say the same.
 ({String advice, Workout? workout, String? exercise, Fix? fix})? balanceAdvice(
     Balance b, List<Session> recent, List<Workout> workouts) {
-  final lagging = b.lagging;
-  if (lagging == null) return null;
-  final behind = lagging == b.bGroup ? 1 : 0;
+  final behind = b.laggingSide;
+  if (behind == null) return null;
   final behindLabel = behind == 1 ? b.b : b.a;
   final planned = [0.0, 0.0], done = [0.0, 0.0];
   for (final s in recent) {
@@ -242,8 +240,9 @@ const _remedyNotes = <String, String>{
   final plannedRatio = planned[0] == 0 ? double.infinity : planned[1] / planned[0];
   if (done[behind] < planned[behind] && plannedRatio >= b.low && plannedRatio <= b.high) {
     return (
-      advice: 'Geplant ist es ausgeglichen, aber Sätze fallen weg. ${behindLabel[0].toUpperCase()}${behindLabel.substring(1)} '
-          'früher im Training einplanen.',
+      advice: tr.balanceAdviceEarlier(appLocale.languageCode == 'de'
+          ? '${behindLabel[0].toUpperCase()}${behindLabel.substring(1)}'
+          : behindLabel),
       workout: null, exercise: null, fix: null,
     );
   }
@@ -253,46 +252,30 @@ const _remedyNotes = <String, String>{
   final accessory = [
     for (final w in workouts)
       for (final e in w.exercises)
-        if (!e.cardio && e.sets > 1 && !heavyLifts.contains(e.name) && only(e.name, ahead)) (w, e),
+        if (!e.cardio && e.sets > 1 && !heavyLifts.contains(catalogueName(e.name)) && only(e.name, ahead)) (w, e),
   ].firstOrNull;
   if (accessory case (final w, final e)?) {
     return (
-      advice: 'Ein Satz weniger ${e.name} in ${w.name} gleicht aus, ohne mehr Arbeit.',
+      advice: tr.balanceAdviceDrop(e.name, w.name),
       workout: w, exercise: e.name, fix: Fix.dropSet,
     );
   }
-  final (specific, suggest) = _remedies[lagging] ?? (const <String>[], '');
+  final (specific, suggest, note) = _remedy(b.pair, behind);
   final trains = [
     for (final w in workouts)
       for (final e in w.exercises)
-        if (!e.cardio && (only(e.name, behind) || specific.contains(e.name))) e.name,
+        if (!e.cardio && (only(e.name, behind) || specific.contains(catalogueName(e.name)))) e.name,
   ];
-  final note = _remedyNotes[lagging] ?? '';
+  final group = behind == 1 ? b.pair.bObject : b.pair.aObject;
   return (
     advice: trains.isNotEmpty
-        ? 'Grundübungen bleiben wie geplant, ${trains.first} nicht auslassen und weiter steigern.'
+        ? tr.balanceAdviceKeep(trains.first)
         : suggest.isEmpty
-            ? 'Nichts im Plan trainiert ${_accusative[lagging] ?? lagging} direkt.'
-            : 'Nichts im Plan trainiert ${_accusative[lagging] ?? lagging} direkt, zum Beispiel $suggest.$note',
+            ? tr.balanceAdviceNothing(group)
+            : tr.balanceAdviceSuggest(group, suggest, note),
     workout: null, exercise: null, fix: null,
   );
 }
-
-/// "Nichts im Plan trainiert die hintere Schulter": the groups with their article, as an object.
-const _accusative = {
-  'Brust': 'die Brust',
-  'Oberer Rücken': 'den oberen Rücken',
-  'Schultern': 'die Schultern',
-  'Latissimus': 'den Latissimus',
-  'Vordere Schulter': 'die vordere Schulter',
-  'Hintere Schulter': 'die hintere Schulter',
-  'Quadrizeps': 'den Quadrizeps',
-  'Hintere Oberschenkel': 'die hinteren Oberschenkel',
-  'Innenrotation': 'die Innenrotation',
-  'Außenrotation': 'die Außenrotation',
-  'Bauch': 'den Bauch',
-  'Unterer Rücken': 'den unteren Rücken',
-};
 
 /// Opposing pairs off their guide range over [recent] ([balanceDays], [weeks] long), with the advice of
 /// [balanceAdvice].
@@ -305,11 +288,11 @@ List<Finding> _balance(List<Session> recent, List<Workout> workouts, double week
     final range = guideRange(b.low, b.high);
     // The ratio first, so a narrow screen cuts the counts, not it.
     final ratio = b.ratio.isFinite ? '${(b.ratio * 100).floor()} %' : '–';
-    final evidence = '$ratio · ${b.aGroup} ${_num(b.aValue)} : ${b.bGroup} ${_num(b.bValue)} Sätze/Woche';
-    final why = '${b.a[0].toUpperCase()}${b.a.substring(1)} gegen ${b.b}, Richtwert $range. '
-        'Gezählt werden die gemachten Sätze der letzten 28 Tage${b.pair.note == null ? '' : ', ${b.pair.note}'}.';
+    final evidence = tr.balanceEvidence(ratio, b.aGroup, _num(b.aValue), b.bGroup, _num(b.bValue));
+    final why = tr.balanceWhy('${b.a[0].toUpperCase()}${b.a.substring(1)}', b.b, range,
+        b.pair.note == null ? '' : ', ${b.pair.note}');
     final gap = b.ratio < b.low ? (b.ratio == 0 ? 99.0 : b.low / b.ratio) : b.ratio / b.high;
-    result.add(Finding('balance:${b.pair.name}', FindingType.balance, '$lagging kommt zu kurz', evidence,
+    result.add(Finding('balance:${b.pair.name}', FindingType.balance, tr.balanceTitle(lagging), evidence,
         why: why, advice: advice.advice, source: statsAt(StatsView.balance, pair: b.pair),
         workout: advice.workout, exercise: advice.exercise, fix: advice.fix, weight: gap));
   }
@@ -318,7 +301,7 @@ List<Finding> _balance(List<Session> recent, List<Workout> workouts, double week
 
 /// "100–150 %" or "ab 60 %", the guide range as the card and the findings write it.
 String guideRange(double low, double high) =>
-    high.isFinite ? '${(low * 100).round()}–${(high * 100).round()} %' : 'ab ${(low * 100).round()} %';
+    high.isFinite ? '${(low * 100).round()}–${(high * 100).round()} %' : tr.guideFrom((low * 100).round());
 
 /// Planned exercises with weight stuck: the last three trainings at the same weight, some set missed
 /// or done lighter, no more reps at that weight than three trainings ago (a range climbing in reps is
@@ -353,24 +336,22 @@ List<Finding> _plateaus(List<Session> sessions, List<Workout> workouts) {
       final reserve = stuck.first.$2.rir;
       final limit = stuck.take(2).every((x) => x.$2.rir == 0);
       final deload = e.down
-          ? 'Automatischer Deload nach ${e.failsToDeload} Fehlschlägen in Folge (bisher ${e.fails}).'
-          : 'Automatischer Deload ist aus.';
-      result.add(Finding('plateau:${e.name}', FindingType.plateau, '${e.name} steht bei ${weightLabel(at)}',
-          '${stuck.length} Trainings ohne Steigerung',
+          ? tr.plateauDeloadAfter(e.failsToDeload, e.fails)
+          : tr.plateauDeloadOff;
+      result.add(Finding('plateau:${e.name}', FindingType.plateau, tr.plateauTitle(e.name, weightLabel(at)),
+          tr.plateauEvidence(stuck.length),
           why: [
             for (final (d, l) in last3) '${_date(d)}: ${sets(l)}',
-            if (lighter) 'Zuletzt einen Satz leichter gemacht, das hält das Gewicht.',
-            if (reserve != null && reserve >= 2) 'Zuletzt gingen noch ${reserve >= 4 ? '4 oder mehr' : reserve} Wiederholungen.',
-            if (limit) 'Die letzten 2 Trainings am Limit, keine Wiederholung mehr übrig.',
+            if (lighter) tr.plateauLighter,
+            if (reserve != null && reserve >= 2) tr.plateauReserve(reserve >= 4 ? tr.plateauReserveMany : '$reserve'),
+            if (limit) tr.plateauLimit,
             deload,
           ].join('\n'),
           advice: reserve != null && reserve >= 2
-              ? 'Das Gewicht ist nicht die Grenze: Technik, Konzentration und genug Pause prüfen und die Sätze '
-                  'ausreizen. Ein Deload ist nicht nötig.'
+              ? tr.plateauAdviceTechnique
               : limit
-                  ? 'Zweimal am Limit: ein Deload um etwa 10 % hilft, danach wieder aufbauen.'
-                  : 'Gewicht halten, auf saubere Technik und genug Pause achten. Klappt es in 2 Trainings nicht, '
-                      'kann ein Deload helfen.',
+                  ? tr.plateauAdviceDeload
+                  : tr.plateauAdviceHold,
           source: statsAt(StatsView.exercise, exercise: e.name, dates: [for (final (d, _) in stuck) d]),
           exercise: e.name,
           weight: stuck.length.toDouble()));
@@ -402,7 +383,7 @@ List<Finding> _positives(List<Session> sessions, DateTime now) {
   }
   if (record case (final name, final kg)?) {
     result.add(Finding('record:$name:${last.date.toIso8601String()}', FindingType.record,
-        'Rekord: $name ${weightLabel(kg)}', 'Schwerer als je zuvor',
+        tr.recordTitle(name, weightLabel(kg)), tr.recordEvidence,
         source: statsAt(StatsView.exercise, exercise: name, dates: [last.date])));
   }
 
@@ -419,14 +400,14 @@ List<Finding> _positives(List<Session> sessions, DateTime now) {
   }
   if (gain case (final name, final from, final to, final since)?) {
     result.add(Finding('gain:$name:${last.date.toIso8601String()}', FindingType.gain,
-        'Fortschritt: $name ${weightNum(from)} → ${weightLabel(to)}', 'Seit ${_date(since)}',
+        tr.gainTitle(name, weightNum(from), weightLabel(to)), tr.since(_date(since)),
         source: statsAt(StatsView.exercise, exercise: name, dates: [since, last.date])));
   }
 
   const marks = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
   if (marks.contains(sessions.length)) {
-    result.add(Finding('milestone:${sessions.length}', FindingType.milestone, '${sessions.length}. Training geschafft',
-        'Seit ${_date(sessions.last.date)}${sessions.last.date.year}', source: statsAt(StatsView.history)));
+    result.add(Finding('milestone:${sessions.length}', FindingType.milestone, tr.milestoneTitle(sessions.length),
+        tr.since(DateFormat.yMd(appLocale.languageCode).format(sessions.last.date)), source: statsAt(StatsView.history)));
   }
 
   // A record month, broken by the last training.
@@ -437,7 +418,7 @@ List<Finding> _positives(List<Session> sessions, DateTime now) {
   final key = last.date.year * 12 + last.date.month;
   final thisMonth = perMonth.remove(key) ?? 0;
   if (perMonth.isNotEmpty && thisMonth == perMonth.values.reduce(max) + 1) {
-    result.add(Finding('month:$key', FindingType.month, 'Rekordmonat: $thisMonth Trainings', 'So viele wie noch nie',
+    result.add(Finding('month:$key', FindingType.month, tr.monthTitle(thisMonth), tr.monthEvidence,
         source: statsAt(StatsView.history, dates: [last.date])));
   }
   return result;

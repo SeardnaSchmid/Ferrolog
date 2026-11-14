@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'findings.dart';
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'training_card.dart';
 
-/// "7,3": sets with one decimal below 10.
-String _sets(double v) => v.toStringAsFixed(v < 10 ? 1 : 0).replaceAll('.', ',');
+/// "7,3" / "7.3": sets with one decimal below 10.
+String _sets(double v) => decimal(v.toStringAsFixed(v < 10 ? 1 : 0));
 
 String _upper(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
@@ -73,12 +74,12 @@ class _BalanceBodyState extends State<BalanceBody> {
             children: [
               if (warn.isNotEmpty) ...[
                 TextSpan(
-                  text: warn.length == 1 ? '1 Hinweis' : '${warn.length} Hinweise',
+                  text: tr.hintsCount(warn.length),
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.tertiary),
                 ),
-                TextSpan(text: '  · ${ok.length} von ${widget.pairs.length} ausgewogen'),
+                TextSpan(text: tr.pairsBalanced(ok.length, widget.pairs.length)),
               ] else
-                const TextSpan(text: 'Alle Muskelpaare ausgewogen'),
+                TextSpan(text: tr.allPairsBalanced),
             ],
           ),
           style: TextStyle(fontSize: 14, color: c.onSurfaceVariant),
@@ -90,8 +91,7 @@ class _BalanceBodyState extends State<BalanceBody> {
         ],
         const SizedBox(height: 8),
         Text(
-          'Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. '
-          'Tippe auf ein Paar für Empfehlung und Zahlen.',
+          tr.balanceScaleHint,
           style: small,
         ),
         if (widget.trends.isNotEmpty) ...[
@@ -105,7 +105,7 @@ class _BalanceBodyState extends State<BalanceBody> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Kraft im Verlauf',
+                      tr.strengthTrend,
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.onSurfaceVariant),
                     ),
                   ),
@@ -133,10 +133,10 @@ class _BalanceBodyState extends State<BalanceBody> {
                       width: 72,
                       child: Text(
                         now.round() - start.round() >= 2
-                            ? '↗ steigt'
+                            ? tr.trendUp
                             : start.round() - now.round() >= 2
-                            ? '↘ sinkt'
-                            : '→ stabil',
+                            ? tr.trendDown
+                            : tr.trendFlat,
                         textAlign: TextAlign.end,
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                       ),
@@ -145,8 +145,7 @@ class _BalanceBodyState extends State<BalanceBody> {
                 ),
               ),
             Text(
-              'Verhältnis aus dem geschätzten 1RM über 90 Tage. Zeigt deine Entwicklung, keinen Vergleich mit '
-              'Literaturwerten.',
+              tr.strengthTrendHint,
               style: small,
             ),
           ],
@@ -168,9 +167,8 @@ class _BalanceBodyState extends State<BalanceBody> {
     );
     final ratio = b.ratio.isFinite ? '${(b.ratio * 100).floor()} %' : '–';
     final note = b.pair.note == null ? '' : ' (${b.pair.note})';
-    final detail =
-        '${_upper(b.a)} ${_sets(b.aValue)} · ${b.b} ${_sets(b.bValue)} Sätze pro Woche$note. '
-        '${b.bGroup} bei $ratio, Richtwert ${guideRange(b.low, b.high)}.';
+    final detail = tr.balanceDetail(
+        _upper(b.a), _sets(b.aValue), b.b, _sets(b.bValue), note, b.bGroup, ratio, guideRange(b.low, b.high));
     final marked = widget.focus == b.pair;
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -221,7 +219,7 @@ class _BalanceBodyState extends State<BalanceBody> {
                     )
                   else
                     Text(
-                      '✓ Ausgewogen',
+                      tr.balanced,
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: c.primary),
                     ),
                   if (balanceAdvice(b, widget.recent, store.workouts) case final a?) ...[
@@ -233,7 +231,7 @@ class _BalanceBodyState extends State<BalanceBody> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'EMPFEHLUNG',
+                            tr.cardAdvice,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -266,9 +264,12 @@ class _BalanceBodyState extends State<BalanceBody> {
         : r < b.low
         ? (b.low - r) / b.low
         : (r - b.high) / b.high;
-    final lower = RegExp('^(Oberer|Unterer|Hintere|Vordere)');
-    final weak = (aStrong ? b.bGroup : b.aGroup).replaceFirstMapped(lower, (m) => m[0]!.toLowerCase());
-    return '${aStrong ? b.aGroup : b.bGroup} ${off < .15 ? 'etwas' : 'deutlich'} mehr trainiert als $weak';
+    // Mid-sentence: German keeps its nouns capitalised, only the adjectives go small.
+    final weak = appLocale.languageCode == 'de'
+        ? (aStrong ? b.bGroup : b.aGroup)
+            .replaceFirstMapped(RegExp('^(Oberer|Unterer|Hintere|Vordere)'), (m) => m[0]!.toLowerCase())
+        : (aStrong ? b.bGroup : b.aGroup).toLowerCase();
+    return (off < .15 ? tr.verdictSlightly : tr.verdictClearly)(aStrong ? b.aGroup : b.bGroup, weak);
   }
 }
 
@@ -375,61 +376,40 @@ void showBalanceInfo(BuildContext context) {
         controller: scroll,
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
         children: [
-          Text('Balance: was dahintersteckt', style: text.titleLarge),
-          heading('Was belegt ist'),
-          point(
-            'Mehr Sätze pro Muskel und Woche bringen mehr Muskelwachstum, abgestuft nach unter 5, 5–9 und 10+ Sätzen [1].',
-          ),
-          point(
-            'Hilfsmuskeln anteilig zu zählen bildet das Volumen genauer ab: 5 Sätze Curls und 5 Sätze Rudern ergeben '
-            '7,5 Bizeps-Sätze [2].',
-          ),
-          heading('Was unsicher ist'),
-          point('Ob Ungleichgewichte zwischen Drücken und Ziehen das Verletzungsrisiko erhöhen, ist nicht untersucht.'),
-          point('Für das Verhältnis Beinbeuger zu Quadrizeps gibt es nur sehr begrenzte Evidenz als Risikofaktor [3].'),
-          point('Deshalb zeigt FerroLog Hinweise, keine Warnungen.'),
-          heading('Woher die Richtwerte kommen'),
-          point(
-            'Drücken : Ziehen 1:1 bis 1:1,5 ist eine Trainerempfehlung, kein Studienwert. Regeln wie 2:1 oder 3:1 sind '
-            'Faustregeln [4].',
-          ),
-          point(
-            'Beinbeuger ab 60 % lehnt sich an Labormessungen an (H:Q > 0,6) [5]. Die stammen aus der Isokinetik und '
-            'lassen sich nicht direkt auf Kniebeuge und Kreuzheben übertragen.',
-          ),
-          point('Freizeitsportler drücken in Tests 1,5- bis 2,7-mal so viel, wie sie ziehen [6].'),
-          point(
-            'Bei der Schulter liegt die Außenrotation in Kraftmessungen bei 86–99 % der Innenrotation [7]. Für Sätze '
-            'gibt es keinen Studienwert, der Richtwert ist bewusst niedrig angesetzt.',
-          ),
-          point(
-            'Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer '
-            'ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.',
-          ),
-          heading('Wie FerroLog rechnet'),
-          point('Jede Übung zählt voll für ihre Hauptgruppe und halb für Hilfsmuskeln.'),
-          point('Sätze pro Woche, gemittelt über die letzten 28 Tage, je Paar als Verhältnis.'),
-          point('Kraftverhältnisse (geschätztes 1RM) nur als Verlauf, nicht gegen Literaturwerte.'),
-          point('Alle Richtwerte kannst du anpassen.'),
-          heading('So liest du die Waage'),
-          point(
-            'Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.',
-          ),
-          point(
-            'Der Richtwert stammt aus der Trainingspraxis und ist keine medizinische Grenze. Hilfsmuskeln zählen halb.',
-          ),
+          Text(tr.balanceInfoTitle, style: text.titleLarge),
+          heading(tr.infoProven),
+          point(tr.infoProven1),
+          point(tr.infoProven2),
+          heading(tr.infoUncertain),
+          point(tr.infoUncertain1),
+          point(tr.infoUncertain2),
+          point(tr.infoUncertain3),
+          heading(tr.infoGuides),
+          point(tr.infoGuides1),
+          point(tr.infoGuides2),
+          point(tr.infoGuides3),
+          point(tr.infoGuides4),
+          point(tr.infoGuides5),
+          heading(tr.infoMath),
+          point(tr.infoMath1),
+          point(tr.infoMath2),
+          point(tr.infoMath3),
+          point(tr.infoMath4),
+          heading(tr.infoScale),
+          point(tr.infoScale1),
+          point(tr.infoScale2),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
               style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 40)),
               onPressed: () => showGuideEditor(context),
-              child: const Text('Richtwerte anpassen'),
+              child: Text(tr.adjustGuides),
             ),
           ),
           const Divider(height: 28),
-          Text('QUELLEN', style: text.labelSmall?.copyWith(letterSpacing: .6, color: c.onSurfaceVariant)),
+          Text(tr.sources, style: text.labelSmall?.copyWith(letterSpacing: .6, color: c.onSurfaceVariant)),
           const SizedBox(height: 6),
-          for (final (i, (label, url)) in _sources.indexed)
+          for (final (i, (label, url)) in _sources().indexed)
             InkWell(
               onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView),
               child: Padding(
@@ -469,9 +449,9 @@ void showGuideEditor(BuildContext context) {
             controller: scroll,
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
             children: [
-              Text('Richtwerte', style: text.titleLarge),
+              Text(tr.guides, style: text.titleLarge),
               const SizedBox(height: 4),
-              Text('Seite rechts im Verhältnis zur Seite links, in Prozent der Sätze.', style: text.bodyMedium),
+              Text(tr.guidesHint, style: text.bodyMedium),
               for (final p in Pair.values) ...[
                 const SizedBox(height: 16),
                 Row(
@@ -507,7 +487,7 @@ void showGuideEditor(BuildContext context) {
                           setBalanceGuide(null);
                           findingsVersion.value++;
                         },
-                  child: const Text('Auf Standard zurücksetzen'),
+                  child: Text(tr.resetDefaults),
                 ),
               ),
             ],
@@ -519,7 +499,7 @@ void showGuideEditor(BuildContext context) {
 }
 
 /// Sources behind the info sheet, numbered as cited there.
-const _sources = [
+List<(String, String)> _sources() => [
   ('Schoenfeld et al. 2016', 'https://synapsesocial.com/papers/W2506937591'),
   ('Pelland et al. 2025 (via Biolayne)', 'https://biolayne.com/reps/issue-31/the-king-of-volume-metas/'),
   ('Kellis et al.', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC10199143'),
@@ -530,11 +510,11 @@ const _sources = [
   ('Systematic Review 2025, H:Q', 'https://lida.sport-iat.de/ta/Record/4090445?lng=en'),
   ('Negrete et al. 2013', 'https://nsuworks.nova.edu/hpd_pt_facarticles/151'),
   (
-    'Handdynamometer-Normwerte, Schulterrotation',
+    tr.sourceShoulderNorms,
     'https://scholars.georgiasouthern.edu/en/publications/hand-held-dynamometer-testing-of-the-internal-and-external-rotato/',
   ),
   (
-    'Rumpf-Ausdauer Flexion/Extension (MMU)',
+    tr.sourceTrunk,
     'https://e-space.mmu.ac.uk/630014/7/Trunk%20static%20and%20dynamic%20sagittal%20endurance%20in%20healthy%20young%20Nigerian%20adults.pdf',
   ),
   ('Ivanac 2026', 'https://medscimonit.com/abstract/full/idArt/951651'),

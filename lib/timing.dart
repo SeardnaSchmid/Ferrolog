@@ -1,5 +1,8 @@
 import 'dart:math';
 
+import 'package:intl/intl.dart' show DateFormat;
+
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 
@@ -31,8 +34,9 @@ const _maxGap = Duration(minutes: 15), _maxFirst = Duration(minutes: 25);
 /// heavy barbell reps (bracing and a breath between them), most for Olympic lifts (reset after each),
 /// less for swings and burpees.
 double _perRep(String name) {
-  if (const {'Umsetzen', 'Reißen'}.contains(name)) return 8;
-  if (const {'Kettlebell Swings', 'Burpees', 'Russian Twists'}.contains(name)) return 2;
+  final c = catalogueName(name);
+  if (const {'Umsetzen', 'Reißen'}.contains(c)) return 8;
+  if (const {'Kettlebell Swings', 'Burpees', 'Russian Twists'}.contains(c)) return 2;
   return isBarbell(name) ? 4.5 : 3;
 }
 
@@ -65,7 +69,7 @@ Shape shapeOfLog(ExerciseLog log, Exercise? p) => (
       sets: log.reps.length,
       reps: log.targets.fold(0, max),
       kg: log.weights.fold(0.0, max),
-      rest: p?.restSeconds ?? log.restSeconds ?? exerciseCatalogue[log.name]?.$5 ?? 120,
+      rest: p?.restSeconds ?? log.restSeconds ?? exerciseCatalogue[catalogueName(log.name)]?.$5 ?? 120,
       cardio: log.cardio,
       minutes: log.targetReps,
       km: log.targetKm,
@@ -187,20 +191,20 @@ Duration sessionLeft(Session s, Pace pace, DateTime now) =>
 /// "noch ≈ 25 Min · fertig gegen 19:40", or null when nothing is left.
 String? leftLabel(Session s, Pace pace, DateTime now) {
   final left = sessionLeft(s, pace, now);
-  return left <= Duration.zero ? null : 'noch ${aboutLabel(left)} · fertig gegen ${timeOfDay(now.add(left))}';
+  return left <= Duration.zero ? null : '${tr.leftAbout(aboutLabel(left))} · ${tr.doneAround(timeOfDay(now.add(left)))}';
 }
 
 /// "≈ 8 Min", "≈ 1:05 h"; at least one minute.
 String aboutLabel(Duration d) {
   final m = max(1, (d.inSeconds / 60).round());
-  return m < 60 ? '≈ $m Min' : '≈ ${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')} h';
+  return m < 60 ? tr.aboutMinutes(m) : '≈ ${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')} h';
 }
 
 /// Time taken: "7 Min", "1:05 h"; at least one minute.
 String takenLabel(Duration d) => aboutLabel(d).substring(2);
 
-/// "19:40".
-String timeOfDay(DateTime t) => '${t.hour}:${t.minute.toString().padLeft(2, '0')}';
+/// "19:40" / "7:40 PM".
+String timeOfDay(DateTime t) => DateFormat.jm(appLocale.languageCode).format(t);
 
 /// How long exercise [name] took in [s], for the recap and the history: "7 Min", with [perSet] also the
 /// typical time from set to set ("7 Min · alle 2:40 Min ein Satz"). Null without timestamps.
@@ -210,5 +214,5 @@ String? timeTaken(Session s, String name, {bool perSet = false}) {
   if (m == null) return null;
   if (!perSet || m.gaps.isEmpty) return takenLabel(m.total);
   final avg = m.gaps.fold(0, (sum, g) => sum + g.inSeconds) ~/ m.gaps.length;
-  return '${takenLabel(m.total)} · alle ${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')} Min ein Satz';
+  return tr.everySet(takenLabel(m.total), '${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')}');
 }

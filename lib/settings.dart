@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'language.dart';
 import 'loading.dart';
 import 'main.dart';
 import 'model.dart';
@@ -95,7 +96,7 @@ class _SyncSettingsState extends State<SyncSettings> {
       remote = await sync.fetchRemote();
       if (remote == null) {
         sync.conflict.value = false; // gone meanwhile: the next push creates it
-        throw 'Auf GitHub liegt noch keine ${GitHubSync.path}.';
+        throw tr.syncNoFileYet(GitHubSync.path);
       }
     });
     final sha = remote?.sha;
@@ -116,13 +117,12 @@ class _SyncSettingsState extends State<SyncSettings> {
       case 'restore':
         await run(() => store.importJson(theirs, merge: store.sessions.isNotEmpty, beforeSave: () => sync.adopt(sha)));
         if (mounted && error == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Von GitHub wiederhergestellt')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr.syncRestored)));
         }
       case 'overwrite':
         final more = (theirs?['sessions'] as List?)?.length ?? 0;
         if (more > store.sessions.length &&
-            !await confirm(context, 'Auf GitHub liegen mehr Trainings ($more) als hier (${store.sessions.length}). '
-                'Wirklich überschreiben? Der alte Stand bleibt nur in der Git-Historie des Repos.')) {
+            !await confirm(context, tr.syncOverwriteMore(more, store.sessions.length))) {
           return;
         }
         await run(() async {
@@ -151,19 +151,14 @@ class _SyncSettingsState extends State<SyncSettings> {
     return ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Training', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          for (final (key, icon, title, subtitle, on) in const [
-            ('rest.sound', Icons.volume_up_outlined, 'Ton', 'Signalton, wenn die Pause bei 0 ankommt', true),
-            ('rest.vibrate', Icons.vibration, 'Vibration', 'Kurz vibrieren, wenn die Pause bei 0 ankommt', true),
-            ('session.autoFinish', Icons.timer_off_outlined, 'Automatisch beenden',
-                'Nach 30 Min ohne Aktivität endet das Training beim letzten Satz', true),
-            ('session.keepScreenOn', Icons.light_mode_outlined, 'Bildschirm anlassen',
-                'Während des Trainings geht das Display nicht aus', true),
-            ('session.showWhenLocked', Icons.lock_open_outlined, 'Über dem Sperrbildschirm zeigen',
-                'Während des Trainings ohne Entsperren auf die Pause schauen', true),
-            ('session.askRir', Icons.battery_5_bar_outlined, 'Reserve abfragen',
-                'Nach dem letzten Satz einer Übung: Wie viele Wiederholungen gingen noch? Hilft bei Plateaus. '
-                    'Übungen im Auto-Modus fragen immer', false),
+          Text(tr.settingsTraining, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          for (final (key, icon, title, subtitle, on) in [
+            ('rest.sound', Icons.volume_up_outlined, tr.settingsSound, tr.settingsSoundHint, true),
+            ('rest.vibrate', Icons.vibration, tr.settingsVibrate, tr.settingsVibrateHint, true),
+            ('session.autoFinish', Icons.timer_off_outlined, tr.settingsAutoFinish, tr.settingsAutoFinishHint, true),
+            ('session.keepScreenOn', Icons.light_mode_outlined, tr.settingsKeepScreenOn, tr.settingsKeepScreenOnHint, true),
+            ('session.showWhenLocked', Icons.lock_open_outlined, tr.settingsShowWhenLocked, tr.settingsShowWhenLockedHint, true),
+            ('session.askRir', Icons.battery_5_bar_outlined, tr.settingsAskRir, tr.settingsAskRirHint, false),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -179,8 +174,8 @@ class _SyncSettingsState extends State<SyncSettings> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.hourglass_top),
-            title: const Text('Vorlauf bei Zeitübungen'),
-            subtitle: const Text('Zeit zum Aufnehmen der Gewichte, bevor die Sekunden zählen'),
+            title: Text(tr.settingsLeadIn),
+            subtitle: Text(tr.settingsLeadInHint),
             trailing: DropdownButton<int>(
               value: prefs.getInt('timed.leadIn') ?? 10,
               items: [for (final n in const [0, 5, 10, 15]) DropdownMenuItem(value: n, child: Text('$n s'))],
@@ -192,11 +187,10 @@ class _SyncSettingsState extends State<SyncSettings> {
             ),
           ),
           const Divider(height: 32),
-          Text('Startseite', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          for (final (key, icon, title, subtitle) in const [
-            ('home.tasks', Icons.insights_outlined, 'Hinweise zum Training',
-                'Wenn die Statistik etwas findet: Ausgelassenes, Balance, Plateau, Wochenziel'),
-            ('home.insights', Icons.emoji_events_outlined, 'Erfolge', 'Rekorde, Fortschritt und Meilensteine des letzten Trainings'),
+          Text(tr.settingsHome, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          for (final (key, icon, title, subtitle) in [
+            ('home.tasks', Icons.insights_outlined, tr.settingsTasks, tr.settingsTasksHint),
+            ('home.insights', Icons.emoji_events_outlined, tr.settingsInsights, tr.settingsInsightsHint),
           ])
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -210,9 +204,9 @@ class _SyncSettingsState extends State<SyncSettings> {
               },
             ),
           const Divider(height: 32),
-          Text('Serie', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text(tr.settingsStreak, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 4),
-          Text('Trainings pro Woche, damit die Woche für deine Serie zählt', style: text.bodyMedium),
+          Text(tr.settingsStreakHint, style: text.bodyMedium),
           const SizedBox(height: 8),
           SegmentedButton<int>(
             showSelectedIcon: false,
@@ -225,7 +219,33 @@ class _SyncSettingsState extends State<SyncSettings> {
             },
           ),
           const Divider(height: 32),
-          Text('Einheit', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text(tr.settingsLanguage, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          const SizedBox(height: 8),
+          // null = the system's: German where it speaks German, English elsewhere.
+          SegmentedButton<String?>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: null,
+                label: Text(tr.settingsLanguageSystem(
+                    languageName(localeFor(WidgetsBinding.instance.platformDispatcher.locale)))),
+              ),
+              for (final l in L10n.supportedLocales)
+                ButtonSegment(value: l.languageCode, label: Text(languageName(l))),
+            ],
+            selected: {prefs.getString('language')},
+            onSelectionChanged: (v) async {
+              final choice = v.single;
+              if (choice == null) {
+                await prefs.remove('language');
+              } else {
+                await prefs.setString('language', choice);
+              }
+              language.value = languageFromSetting(choice);
+            },
+          ),
+          const Divider(height: 32),
+          Text(tr.settingsUnit, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 8),
           // null = automatic: lb in the US, Liberia and Myanmar, kg elsewhere (by the phone's region).
           SegmentedButton<String?>(
@@ -233,7 +253,7 @@ class _SyncSettingsState extends State<SyncSettings> {
             segments: [
               ButtonSegment(
                 value: null,
-                label: Text('Automatisch (${unitForRegion(WidgetsBinding.instance.platformDispatcher.locale.countryCode).name})'),
+                label: Text(tr.settingsUnitAuto(unitForRegion(WidgetsBinding.instance.platformDispatcher.locale.countryCode).name)),
               ),
               const ButtonSegment(value: 'kg', label: Text('kg')),
               const ButtonSegment(value: 'lb', label: Text('lb')),
@@ -251,29 +271,29 @@ class _SyncSettingsState extends State<SyncSettings> {
             },
           ),
           const SizedBox(height: 4),
-          Text('Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.',
+          Text(tr.settingsUnitHint,
               style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const Divider(height: 32),
-          Text('Hantel', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text(tr.settingsBarbell, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 4),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             secondary: const Icon(Icons.local_fire_department_outlined),
-            title: const Text('Aufwärmsätze zeigen'),
-            subtitle: const Text('Vor dem ersten Satz einer Langhantel-Übung: leere Stange, dann 50, 70 und 85 %'),
+            title: Text(tr.settingsWarmup),
+            subtitle: Text(tr.settingsWarmupHint),
             value: showWarmup,
             onChanged: (v) async {
               await prefs.setBool('session.warmup', v);
               setState(() {});
             },
           ),
-          Text('Stange und Scheiben für „Pro Seite“ beim Gewicht und für die Aufwärmsätze', style: text.bodyMedium),
+          Text(tr.settingsBarPlatesHint, style: text.bodyMedium),
           const SizedBox(height: 8),
           // Kept per unit: a 20 kg bar isn't a 45 lb one.
           SegmentedButton<double>(
             showSelectedIcon: false,
             segments: [
-              for (final b in barChoices[unit.value]!) ButtonSegment(value: b, label: Text('Stange ${plateNum(b)} $unitLabel')),
+              for (final b in barChoices[unit.value]!) ButtonSegment(value: b, label: Text(tr.settingsBar('${plateNum(b)} $unitLabel'))),
             ],
             selected: {barWeight},
             onSelectionChanged: (v) async {
@@ -282,7 +302,7 @@ class _SyncSettingsState extends State<SyncSettings> {
             },
           ),
           const SizedBox(height: 12),
-          Text('Scheiben', style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text(tr.settingsPlates, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (final p in plateChoices[unit.value]!)
@@ -298,96 +318,87 @@ class _SyncSettingsState extends State<SyncSettings> {
               ),
           ]),
           const Divider(height: 32),
-          Text('Daten', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text(tr.settingsData, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.share_outlined),
-            title: const Text('An KI senden / exportieren'),
-            subtitle: const Text('Alle Daten als JSON, der Analyse-Prompt kommt in die Zwischenablage'),
+            title: Text(tr.settingsExport),
+            subtitle: Text(tr.settingsExportHint),
             onTap: () async {
               final messenger = ScaffoldMessenger.of(context);
               await export();
-              messenger.showSnackBar(const SnackBar(content: Text('Prompt kopiert: im Chat einfügen, falls er fehlt')));
+              messenger.showSnackBar(SnackBar(content: Text(tr.settingsExportDone)));
             },
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.cloud_download_outlined),
-            title: const Text('Von GitHub wiederherstellen'),
-            subtitle: Text(sync.configured
-                ? 'Trainings und Pläne aus ${sync.repo} holen, nach einer Neuinstallation oder vom anderen Gerät'
-                : 'Erst unten GitHub-Sync einrichten'),
+            title: Text(tr.settingsRestore),
+            subtitle: Text(sync.configured ? tr.settingsRestoreHint(sync.repo) : tr.settingsRestoreNoSync),
             enabled: sync.configured && !busy,
             onTap: resolve,
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.download_outlined),
-            title: const Text('Plan von KI übernehmen'),
-            subtitle: const Text('JSON-Block aus dem Chat einfügen, mit Vorschau vor dem Speichern'),
+            title: Text(tr.settingsPlanImport),
+            subtitle: Text(tr.settingsPlanImportHint),
             onTap: () => openPlanImport(context),
           ),
           // CC-BY-SA asks for the source to be named, MIT for its notice to ship (on the licence page).
           InkWell(
             onTap: () => showLicensePage(context: context, applicationName: 'FerroLog'),
-            child: Text(
-                'Muskeln der Übungen: wger.de (CC-BY-SA), free-exercise-db · '
-                'Körperkarte: react-native-body-highlighter (MIT) · Lizenzen',
+            child: Text(tr.settingsCredits,
                 style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           const Divider(height: 32),
-          Text('GitHub-Sync', style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+          Text(tr.syncTitle, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 8),
-          const Text(
-            'FerroLog speichert deine Trainingsdaten als ferrolog.json in einem privaten '
-            'GitHub-Repo. Dort kann deine KI sie lesen. FerroLog bekommt nur Zugriff auf '
-            'diese eine Datei in dem Repo, das du freigibst.',
-          ),
+          Text(tr.syncIntro),
           const SizedBox(height: 16),
           if (code != null) ...[
-            Text('Gib diesen Code auf GitHub ein (ist schon kopiert):', style: text.bodyMedium),
+            Text(tr.syncEnterCode, style: text.bodyMedium),
             const SizedBox(height: 8),
             SelectableText(code.userCode, style: text.displaySmall, textAlign: TextAlign.center),
             TextButton(onPressed: () => open(code.verificationUri), child: Text(code.verificationUri)),
-            const Text('Danach einfach zurück in die App wechseln.', textAlign: TextAlign.center),
+            Text(tr.syncThenBack, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             const Center(child: CircularProgressIndicator()),
           ] else if (!sync.loggedIn)
             FilledButton.icon(
               icon: const Icon(Icons.login),
-              label: const Text('Mit GitHub anmelden'),
+              label: Text(tr.syncLogin),
               onPressed: busy ? null : login,
             )
           else ...[
             Row(children: [
               const Icon(Icons.check_circle_outline),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Mit GitHub verbunden')),
+              Expanded(child: Text(tr.syncConnected)),
               TextButton(
                 onPressed: busy ? null : () => run(() async => sync.logout()),
-                child: const Text('Abmelden'),
+                child: Text(tr.syncLogout),
               ),
             ]),
             if (repos != null && repos.isEmpty) ...[
               const SizedBox(height: 8),
-              step(1, 'Daten-Repo anlegen', 'Privates Repo „ferrolog-data“ auf GitHub erstellen',
+              step(1, tr.syncStepRepo, tr.syncStepRepoHint,
                   done: false,
                   onTap: () => open('https://github.com/new?name=ferrolog-data&visibility=private'
-                      '&description=FerroLog+Trainingsdaten')),
-              step(2, 'FerroLog Zugriff geben', '„Only select repositories“ → ferrolog-data wählen',
+                      '&description=${tr.syncRepoDescription}')),
+              step(2, tr.syncStepAccess, tr.syncStepAccessHint,
                   done: false, onTap: () => open('https://github.com/apps/$githubAppSlug/installations/new')),
-              const Text('Danach zurück in die App wechseln, FerroLog findet das Repo dann selbst.'),
+              Text(tr.syncFindsRepo),
               const SizedBox(height: 8),
               // GitHub's mobile site answers the install form with a 404; on desktop it works.
               Text(
-                'Zeigt GitHub beim Installieren eine 404? Dann Schritt 2 am PC öffnen: '
-                'github.com/apps/$githubAppSlug/installations/new',
+                tr.sync404(githubAppSlug),
                 style: text.bodySmall,
               ),
             ],
             if (repos != null && repos.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(repos.length == 1 ? 'Repo' : 'Repo auswählen', style: text.titleSmall),
+              Text(repos.length == 1 ? tr.syncRepo : tr.syncPickRepo, style: text.titleSmall),
               const SizedBox(height: 8),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final r in repos)
@@ -396,13 +407,13 @@ class _SyncSettingsState extends State<SyncSettings> {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: const Icon(Icons.add),
-                label: const Text('Weiteres Repo freigeben'),
+                label: Text(tr.syncAnotherRepo),
                 onPressed: () => open('https://github.com/apps/$githubAppSlug/installations/new'),
               ),
               if (sync.configured)
                 FilledButton.icon(
                   icon: const Icon(Icons.sync),
-                  label: const Text('Jetzt synchronisieren'),
+                  label: Text(tr.syncNow),
                   onPressed: busy ? null : () => run(() => sync.push(store.exportJson())),
                 ),
             ],
@@ -416,7 +427,7 @@ class _SyncSettingsState extends State<SyncSettings> {
             builder: (_, c, _) => c
                 ? Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton(onPressed: busy ? null : resolve, child: const Text('Konflikt lösen')),
+                    child: TextButton(onPressed: busy ? null : resolve, child: Text(tr.syncResolve)),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -432,7 +443,7 @@ class _ResolveDialog extends StatelessWidget {
   const _ResolveDialog({required this.theirs, required this.problem});
 
   static String _count(int n, DateTime? last) =>
-      '$n ${n == 1 ? 'Training' : 'Trainings'}${last == null ? '' : ', letztes am ${dateLabel(last)}'}';
+      last == null ? tr.trainingsCount(n) : tr.syncLastOn(tr.trainingsCount(n), dateLabel(last));
 
   @override
   Widget build(BuildContext context) {
@@ -440,25 +451,25 @@ class _ResolveDialog extends StatelessWidget {
     final dates = [for (final s in remote ?? const []) if (s case {'date': final String d}) DateTime.tryParse(d)].nonNulls;
     final last = dates.isEmpty ? null : dates.reduce((a, b) => a.isAfter(b) ? a : b);
     return AlertDialog(
-      title: const Text('Daten auf GitHub'),
+      title: Text(tr.syncDialogTitle),
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(remote == null ? 'Auf GitHub: nicht lesbar. $problem' : 'Auf GitHub: ${_count(remote.length, last)}'),
+        Text(remote == null ? tr.syncDialogUnreadable(problem ?? '') : tr.syncDialogRemote(_count(remote.length, last))),
         const SizedBox(height: 4),
-        Text('Auf diesem Gerät: ${_count(store.sessions.length, store.sessions.firstOrNull?.date)}'),
+        Text(tr.syncDialogLocal(_count(store.sessions.length, store.sessions.firstOrNull?.date))),
         const SizedBox(height: 12),
         Text(
           store.sessions.isEmpty
-              ? 'Wiederherstellen holt Trainings und Pläne von GitHub.'
-              : 'Wiederherstellen holt Trainings und Pläne von GitHub und behält die Trainings, die nur hier sind.',
+              ? tr.syncDialogRestoreAll
+              : tr.syncDialogRestoreKeep,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ]),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-        TextButton(onPressed: () => Navigator.pop(context, 'overwrite'), child: const Text('GitHub überschreiben')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr.cancel)),
+        TextButton(onPressed: () => Navigator.pop(context, 'overwrite'), child: Text(tr.syncOverwrite)),
         FilledButton(
           onPressed: remote == null ? null : () => Navigator.pop(context, 'restore'),
-          child: const Text('Von GitHub wiederherstellen'),
+          child: Text(tr.settingsRestore),
         ),
       ],
     );

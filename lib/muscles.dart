@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscle_data.dart';
@@ -10,26 +11,45 @@ import 'muscle_data.dart';
 /// The muscles an exercise is tagged with (the free-exercise-db set). The order is the bit order of
 /// [Muscles] and of tool/exercise_muscles.py; append only.
 enum Muscle {
-  chest('Brust'),
-  shoulders('Schultern'),
-  triceps('Trizeps'),
-  biceps('Bizeps'),
-  forearms('Unterarme'),
-  lats('Latissimus'),
-  middleBack('Mittlerer Rücken'),
-  lowerBack('Unterer Rücken'),
-  traps('Trapez'),
-  neck('Nacken'),
-  abdominals('Bauch'),
-  quadriceps('Quadrizeps'),
-  hamstrings('Beinbeuger'),
-  glutes('Gesäß'),
-  calves('Waden'),
-  adductors('Adduktoren'),
-  abductors('Abduktoren');
+  chest,
+  shoulders,
+  triceps,
+  biceps,
+  forearms,
+  lats,
+  middleBack,
+  lowerBack,
+  traps,
+  neck,
+  abdominals,
+  quadriceps,
+  hamstrings,
+  glutes,
+  calves,
+  adductors,
+  abductors;
 
-  const Muscle(this.label);
-  final String label;
+  /// The name in the app's language.
+  String get label => switch (this) {
+        Muscle.chest => tr.muscleChest,
+        Muscle.shoulders => tr.muscleShoulders,
+        Muscle.triceps => tr.muscleTriceps,
+        Muscle.biceps => tr.muscleBiceps,
+        Muscle.forearms => tr.muscleForearms,
+        Muscle.lats => tr.muscleLats,
+        Muscle.middleBack => tr.muscleMiddleBack,
+        Muscle.lowerBack => tr.muscleLowerBack,
+        Muscle.traps => tr.muscleTraps,
+        Muscle.neck => tr.muscleNeck,
+        Muscle.abdominals => tr.muscleAbdominals,
+        Muscle.quadriceps => tr.muscleQuadriceps,
+        Muscle.hamstrings => tr.muscleHamstrings,
+        Muscle.glutes => tr.muscleGlutes,
+        Muscle.calves => tr.muscleCalves,
+        Muscle.adductors => tr.muscleAdductors,
+        Muscle.abductors => tr.muscleAbductors,
+      };
+
   int get bit => 1 << index;
 }
 
@@ -137,7 +157,7 @@ final Map<String, Muscles> _catalogue = {
     ('Umsetzen', [Muscle.glutes, Muscle.hamstrings, Muscle.traps], [Muscle.quadriceps, Muscle.shoulders, Muscle.lowerBack, Muscle.calves]),
     ('Reißen', [Muscle.glutes, Muscle.hamstrings, Muscle.shoulders], [Muscle.quadriceps, Muscle.traps, Muscle.lowerBack, Muscle.triceps]),
   ])
-    for (final n in [name, ...?exerciseAliases[name]]) searchKey(n): (_bits(p), _bits(s)),
+    for (final n in [name, ?exerciseNamesEn[name], ...?exerciseAliases[name]]) searchKey(n): (_bits(p), _bits(s)),
 };
 
 /// Last resort for own exercises: word parts in German or English, first match wins.
@@ -236,35 +256,41 @@ List<(String, double)> exercisesFor(Muscle m, Iterable<Session> sessions) {
 
 /// The pairs [balances] checks, all by done sets per week: side [a] against side [b], balanced while
 /// b / a lies within [low]–[high] (guide values from training practice, not medical limits; the user
-/// can change them, see [guideOf]). [aLabel] and [bLabel] name what's counted, [note] what counts half.
+/// can change them, see [guideOf]). [a] and [b] are the muscle groups ([aObject] and [bObject] as the
+/// object of a sentence), [aLabel] and [bLabel] name what's counted, [note] what counts half.
 enum Pair {
-  pushPullFlat('Brust', 'Oberer Rücken', 'Drücken', 'Rudern', 1, 1.5),
-  pushPullOverhead('Schultern', 'Latissimus', 'Über Kopf drücken', 'Klimmzüge, Latzug', 1, double.infinity),
-  rearDelts(
-    'Vordere Schulter',
-    'Hintere Schulter',
-    'Vordere Schulter',
-    'hintere Schulter',
-    .5,
-    double.infinity,
-    note: 'Drückübungen zählen halb',
-  ),
-  quadsHamstrings('Quadrizeps', 'Hintere Oberschenkel', 'Quadrizeps', 'hintere Oberschenkel', .6, double.infinity),
-  rotators(
-    'Innenrotation',
-    'Außenrotation',
-    'Innenrotation',
-    'Außenrotation',
-    .5,
-    double.infinity,
-    note: 'Drückübungen zählen halb',
-  ),
-  core('Bauch', 'Unterer Rücken', 'Bauch', 'unterer Rücken', .75, 1.35, note: 'Kreuzheben und Kniebeuge zählen halb');
+  pushPullFlat(1, 1.5),
+  pushPullOverhead(1, double.infinity),
+  rearDelts(.5, double.infinity),
+  quadsHamstrings(.6, double.infinity),
+  rotators(.5, double.infinity),
+  core(.75, 1.35);
 
-  const Pair(this.a, this.b, this.aLabel, this.bLabel, this.low, this.high, {this.note});
-  final String a, b, aLabel, bLabel;
+  const Pair(this.low, this.high);
   final double low, high;
-  final String? note;
+
+  ({String a, String b, String aObject, String bObject, String aLabel, String bLabel, String? note}) get _texts =>
+      switch (this) {
+        pushPullFlat => (a: tr.groupChest, b: tr.groupUpperBack, aObject: tr.objChest, bObject: tr.objUpperBack,
+            aLabel: tr.sidePush, bLabel: tr.sideRow, note: null),
+        pushPullOverhead => (a: tr.groupShoulders, b: tr.groupLats, aObject: tr.objShoulders, bObject: tr.objLats,
+            aLabel: tr.sideOverhead, bLabel: tr.sidePullUps, note: null),
+        rearDelts => (a: tr.groupFrontDelts, b: tr.groupRearDelts, aObject: tr.objFrontDelts, bObject: tr.objRearDelts,
+            aLabel: tr.sideFrontDelts, bLabel: tr.sideRearDelts, note: tr.notePressHalf),
+        quadsHamstrings => (a: tr.groupQuads, b: tr.groupHamstrings, aObject: tr.objQuads, bObject: tr.objHamstrings,
+            aLabel: tr.sideQuads, bLabel: tr.sideHamstrings, note: null),
+        rotators => (a: tr.groupInternalRot, b: tr.groupExternalRot, aObject: tr.objInternalRot,
+            bObject: tr.objExternalRot, aLabel: tr.sideInternalRot, bLabel: tr.sideExternalRot, note: tr.notePressHalf),
+        core => (a: tr.groupAbs, b: tr.groupLowerBack, aObject: tr.objAbs, bObject: tr.objLowerBack,
+            aLabel: tr.sideAbs, bLabel: tr.sideLowerBack, note: tr.noteHingeSquatHalf),
+      };
+  String get a => _texts.a;
+  String get b => _texts.b;
+  String get aObject => _texts.aObject;
+  String get bObject => _texts.bObject;
+  String get aLabel => _texts.aLabel;
+  String get bLabel => _texts.bLabel;
+  String? get note => _texts.note;
 }
 
 /// The user's own guide values, by pair; the rest keep [Pair.low] and [Pair.high]. Loaded at start.
@@ -318,12 +344,15 @@ class Balance {
 
   double get ratio => aValue == 0 ? double.infinity : bValue / aValue;
 
-  /// The muscle group that falls behind, or null when balanced.
-  String? get lagging => ratio < low
-      ? bGroup
+  /// The side that falls behind (0 = a, 1 = b), or null when balanced.
+  int? get laggingSide => ratio < low
+      ? 1
       : ratio > high
-      ? aGroup
+      ? 0
       : null;
+
+  /// The muscle group that falls behind, or null when balanced.
+  String? get lagging => switch (laggingSide) { 0 => aGroup, 1 => bGroup, _ => null };
 }
 
 // Lifts compared by strength, matched on the name; dumbbells (weight per hand), split and front squats,
@@ -465,7 +494,7 @@ List<(String, double, double)> strengthTrends(List<Session> sessions) {
   }
 
   final result = <(String, double, double)>[];
-  for (final (name, b, a) in [('Rudern : Bankdrücken', _row, _press), ('Kreuzheben : Kniebeuge', _hinge, _squat)]) {
+  for (final (name, b, a) in [(tr.ratioRowBench, _row, _press), (tr.ratioHingeSquat, _hinge, _squat)]) {
     final (a0, b0, a1, b1) = (
       level(sessions.reversed, a),
       level(sessions.reversed, b),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_drawing/path_drawing.dart';
 
 import 'body_shapes.dart';
+import 'language.dart';
 import 'muscles.dart';
 
 /// Front and back of a body with muscles filled in by how much they work, 0 (grey) to 1 (full colour).
@@ -45,7 +46,7 @@ class BodyMap extends StatelessWidget {
           child: CustomPaint(size: size, painter: painter),
         ),
         const SizedBox(height: 4),
-        Text(v == _View.front ? 'Vorne' : 'Hinten', style: label),
+        Text(v == _View.front ? tr.front : tr.back, style: label),
       ]);
     }
 

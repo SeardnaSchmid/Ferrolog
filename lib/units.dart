@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'language.dart';
+
 /// Weights are always stored in kg; the unit only changes how they're shown and typed.
 enum WeightUnit { kg, lb }
 
@@ -28,11 +30,11 @@ double shown(double kg) => switch (unit.value) {
 /// Displayed number → kg, unrounded so a typed 225 lb shows as 225 lb again.
 double toKg(double value) => unit.value == WeightUnit.lb ? value / lbPerKg : value;
 
-/// Weight without unit, German decimal comma: 82.5 kg → "82,5" (or "181,9" in lb). Assistance (a
+/// Weight without unit, decimal mark by language: 82.5 kg → "82,5" / "82.5" (or "181,9" in lb). Assistance (a
 /// machine taking weight off, e.g. for pull-ups) is negative: "−10".
 String weightNum(double kg) {
   final v = shown(kg);
-  return (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString()).replaceAll('.', ',').replaceAll('-', '−');
+  return decimal(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString()).replaceAll('-', '−');
 }
 
 /// Weight with unit, e.g. "82,5 kg".
@@ -52,10 +54,10 @@ const kmPerMile = 1.609344;
 /// Distance unit: miles alongside lb, km otherwise.
 String get distanceLabel => unit.value == WeightUnit.lb ? 'mi' : 'km';
 
-/// km → shown number (km or mi), one decimal, German comma: 5.0 → "5", 5.25 → "5,3".
+/// km → shown number (km or mi), one decimal, decimal mark by language: 5.0 → "5", 5.25 → "5,3".
 String distanceNum(double km) {
   final v = ((unit.value == WeightUnit.lb ? km / kmPerMile : km) * 10).roundToDouble() / 10;
-  return (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString()).replaceAll('.', ',');
+  return decimal(v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString());
 }
 
 /// Typed distance in the shown unit → km; null if empty or invalid.
@@ -66,7 +68,7 @@ double? parseDistance(String s) => switch (double.tryParse(s.trim().replaceAll('
 
 /// "25 Min · 5,2 km" for planned or done cardio.
 String cardioLabel(int? minutes, double? km) =>
-    [if (minutes != null && minutes > 0) '$minutes Min', if (km != null) '${distanceNum(km)} $distanceLabel'].join(' · ');
+    [if (minutes != null && minutes > 0) tr.minutes(minutes), if (km != null) '${distanceNum(km)} $distanceLabel'].join(' · ');
 
 /// Step for the −/+ buttons in the current unit: the plan's increment, but whole plate steps in lb
 /// (2.5 kg → 5 lb, 1.25 kg → 2.5 lb, 5 kg → 10 lb).
@@ -80,10 +82,10 @@ double stepShown(double incrementKg) {
 String volumeLabel(double kg) {
   final v = shown(kg);
   if (v < 1000) return '${v.round()} $unitLabel';
-  final k = (v / 1000).toStringAsFixed(1).replaceAll('.', ',').replaceAll(RegExp(r',0$'), ''); // 10,0 t → 10 t
+  final k = decimal((v / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')); // 10,0 t → 10 t
   return unit.value == WeightUnit.kg ? '$k t' : '${k}k lb';
 }
 
 /// "48 Min", "1:05 h".
 String durationLabel(Duration d) =>
-    d.inMinutes < 60 ? '${d.inMinutes} Min' : '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')} h';
+    d.inMinutes < 60 ? tr.minutes(d.inMinutes) : '${d.inHours}:${(d.inMinutes % 60).toString().padLeft(2, '0')} h';

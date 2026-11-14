@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
+import 'language.dart';
 import 'main.dart';
 import 'plan_import.dart';
 
@@ -12,7 +14,7 @@ import 'plan_import.dart';
 Future<void> openPlanImport(BuildContext context) async {
   final messenger = ScaffoldMessenger.of(context);
   if (store.active != null) {
-    messenger.showSnackBar(const SnackBar(content: Text('Erst das laufende Training beenden')));
+    messenger.showSnackBar(SnackBar(content: Text(tr.finishTrainingFirst)));
     return;
   }
   var clip = '';
@@ -32,9 +34,9 @@ Future<void> openPlanImport(BuildContext context) async {
   );
   if (undo == null) return;
   messenger.showSnackBar(SnackBar(
-    content: const Text('Plan übernommen'),
+    content: Text(tr.planTaken),
     duration: const Duration(seconds: 10),
-    action: SnackBarAction(label: 'Rückgängig', onPressed: undo),
+    action: SnackBarAction(label: tr.undo, onPressed: undo),
   ));
 }
 
@@ -63,7 +65,7 @@ class _PasteDialogState extends State<_PasteDialog> {
       if (file == null) return;
       controller.text = utf8.decode(await file.readAsBytes(), allowMalformed: true);
     } catch (e) {
-      setState(() => error = 'Die Datei ließ sich nicht lesen: $e');
+      setState(() => error = tr.fileUnreadable(e));
       return;
     }
     if (mounted) check();
@@ -79,15 +81,14 @@ class _PasteDialogState extends State<_PasteDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Plan von KI übernehmen'),
+        title: Text(tr.settingsPlanImport),
         content: SizedBox(
           width: 480,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Füg den JSON-Codeblock aus dem Chat ein oder öffne ihn als Datei. Vor dem Speichern siehst '
-                  'du jede Änderung.'),
+              Text(tr.planPasteHint),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -106,14 +107,14 @@ class _PasteDialogState extends State<_PasteDialog> {
               TextButton.icon(
                 onPressed: open,
                 icon: const Icon(Icons.file_open_outlined),
-                label: const Text('Datei öffnen (.json, .txt)'),
+                label: Text(tr.openFile),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-          FilledButton(onPressed: check, child: const Text('Prüfen')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr.cancel)),
+          FilledButton(onPressed: check, child: Text(tr.check)),
         ],
       );
 }
@@ -132,14 +133,14 @@ class PlanImportPage extends StatelessWidget {
     final basedOn = plan.basedOn;
 
     (IconData, Color, String) look(Change ch) => switch (ch) {
-          Change.added => (Icons.add_circle_outline, c.primary, 'Neu'),
-          Change.removed => (Icons.remove_circle_outline, c.error, 'Fällt weg'),
-          Change.changed => (Icons.edit_outlined, c.tertiary, 'Geändert'),
-          Change.same => (Icons.check, c.onSurfaceVariant, 'Unverändert'),
+          Change.added => (Icons.add_circle_outline, c.primary, tr.changeNew),
+          Change.removed => (Icons.remove_circle_outline, c.error, tr.changeRemoved),
+          Change.changed => (Icons.edit_outlined, c.tertiary, tr.changeChanged),
+          Change.same => (Icons.check, c.onSurfaceVariant, tr.changeSame),
         };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Plan von KI')),
+      appBar: AppBar(title: Text(tr.planFromAi)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -150,16 +151,16 @@ class PlanImportPage extends StatelessWidget {
               color: c.errorContainer,
               child: ListTile(
                 leading: Icon(Icons.history, color: c.onErrorContainer),
-                title: Text('Seit dem Export hast du trainiert',
+                title: Text(tr.planStale,
                     style: TextStyle(color: c.onErrorContainer, fontWeight: FontWeight.w600)),
                 subtitle: Text(
-                    'Der Plan beruht auf dem Stand vom ${basedOn.day}.${basedOn.month}. Die Gewichte können veraltet sein.',
+                    tr.planStaleHint(DateFormat.Md(appLocale.languageCode).format(basedOn)),
                     style: TextStyle(color: c.onErrorContainer)),
               ),
             ),
           ],
           if (plan.empty)
-            const Padding(padding: EdgeInsets.only(top: 24), child: Text('Der Plan ändert nichts an deinen Workouts.')),
+            Padding(padding: const EdgeInsets.only(top: 24), child: Text(tr.planEmpty)),
           for (final w in changed) ...[
             const SizedBox(height: 16),
             Card(
@@ -186,11 +187,11 @@ class PlanImportPage extends StatelessWidget {
           ],
           if (same.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text('Unverändert: ${same.map((w) => w.name).join(', ')}',
+            Text(tr.planUnchanged(same.map((w) => w.name).join(', ')),
                 style: text.bodyMedium?.copyWith(color: c.onSurfaceVariant)),
           ],
           const SizedBox(height: 16),
-          Text('Deine Trainings bleiben, wie sie sind. Nach dem Übernehmen kannst du es einmal rückgängig machen.',
+          Text(tr.planKeepsTrainings,
               style: text.bodySmall?.copyWith(color: c.onSurfaceVariant)),
         ],
       ),
@@ -199,7 +200,7 @@ class PlanImportPage extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
             icon: const Icon(Icons.check),
-            label: const Text('Übernehmen'),
+            label: Text(tr.takeOver),
             onPressed: plan.empty
                 ? null
                 : () async {
@@ -228,7 +229,7 @@ class _ExerciseRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final unchanged = e.change == Change.same;
     final lines = [
-      if (e.movedTo case final n?) 'Jetzt an Platz $n',
+      if (e.movedTo case final n?) tr.movedTo(n),
       ...e.details,
     ];
     return Padding(

@@ -1,3 +1,7 @@
+import 'package:flutter/widgets.dart';
+
+import 'language.dart';
+
 /// Workout templates for "new workout": a program with one or more days, each day a list of
 /// (catalogue exercise, sets, reps). Weights come from your own data or the catalogue.
 class Program {
@@ -21,9 +25,14 @@ class Day {
   const Day(this.name, this.workoutName, this.exercises, {this.upTo = const {}});
 }
 
-const programs = [
+/// The templates in the app's language, the same objects while it stays.
+List<Program> get programs => _programs[appLocale] ??= _build();
+
+final _programs = <Locale, List<Program>>{};
+
+List<Program> _build() => [
   // Every training the same, so one, two or three trainings a week still train everything.
-  Program('Full Body Kraft', [
+  Program(tr.programFullBodyStrength, [
     Day('Full Body', 'Full Body', [
       ('Kniebeuge', 3, 5),
       ('Bankdrücken', 3, 5),
@@ -34,7 +43,7 @@ const programs = [
       ('Face Pulls', 2, 12),
       ('Farmers Walk', 3, 30), // 20–30 m, about 30 s
     ], upTo: {'Kreuzheben': 5, 'Langhantelrudern': 8, 'Klimmzüge': 8, 'Face Pulls': 15, 'Farmers Walk': 45}),
-  ], note: 'Jedes Training gleich, 1–3× pro Woche, 48–72 h Erholung dazwischen. 8–12 Wochen dabei bleiben.'),
+  ], note: tr.programFullBodyNote),
   Program('Starting Strength', [
     Day('A', 'Starting Strength A', [('Kniebeuge', 3, 5), ('Bankdrücken', 3, 5), ('Kreuzheben', 1, 5)]),
     Day('B', 'Starting Strength B', [('Kniebeuge', 3, 5), ('Schulterdrücken', 3, 5), ('Kreuzheben', 1, 5)]),
@@ -42,8 +51,8 @@ const programs = [
   Program('StrongLifts 5×5', [
     Day('A', 'StrongLifts A', [('Kniebeuge', 5, 5), ('Bankdrücken', 5, 5), ('Langhantelrudern', 5, 5)]),
     Day('B', 'StrongLifts B', [('Kniebeuge', 5, 5), ('Schulterdrücken', 5, 5), ('Kreuzheben', 1, 5)]),
-  ], note: 'A und B abwechselnd, 3× pro Woche.'),
-  Program('Push/Pull/Beine', [
+  ], note: tr.programStrongLiftsNote),
+  Program(tr.programPpl, [
     Day('Push', 'Push', [
       ('Bankdrücken', 3, 8),
       ('Schulterdrücken', 3, 8),
@@ -51,22 +60,22 @@ const programs = [
       ('Trizepsdrücken am Kabel', 3, 12),
     ]),
     Day('Pull', 'Pull', [('Klimmzüge', 3, 8), ('Langhantelrudern', 3, 8), ('Face Pulls', 3, 15), ('Bizepscurls', 3, 10)]),
-    Day('Beine', 'Beine', [
+    Day(tr.dayLegs, tr.dayLegs, [
       ('Kniebeuge', 3, 8),
       ('Rumänisches Kreuzheben', 3, 8),
       ('Beinpresse', 3, 10),
       ('Wadenheben', 3, 15),
     ]),
   ]),
-  Program('Ober/Unter', [
-    Day('Oberkörper', 'Oberkörper', [
+  Program(tr.programUpperLower, [
+    Day(tr.dayUpper, tr.dayUpper, [
       ('Bankdrücken', 3, 8),
       ('Langhantelrudern', 3, 8),
       ('Schulterdrücken', 3, 8),
       ('Latzug', 3, 10),
       ('Bizepscurls', 3, 10),
     ]),
-    Day('Unterkörper', 'Unterkörper', [
+    Day(tr.dayLower, tr.dayLower, [
       ('Kniebeuge', 3, 8),
       ('Rumänisches Kreuzheben', 3, 8),
       ('Ausfallschritte', 3, 10),
@@ -74,8 +83,8 @@ const programs = [
       ('Wadenheben', 3, 15),
     ]),
   ]),
-  Program('Ganzkörper', [
-    Day('Ganzkörper', 'Ganzkörper', [
+  Program(tr.programFullBody, [
+    Day(tr.programFullBody, tr.programFullBody, [
       ('Kniebeuge', 3, 8),
       ('Bankdrücken', 3, 8),
       ('Langhantelrudern', 3, 8),

@@ -1,3 +1,4 @@
+import 'language.dart';
 import 'main.dart';
 import 'units.dart';
 
@@ -54,7 +55,7 @@ List<double>? platesPerSide(double total, {double bar = 20, required List<double
 }
 
 /// A shown weight as typed: "82,5", "2,5", "45".
-String plateNum(double v) => (v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v').replaceAll('.', ',');
+String plateNum(double v) => decimal(v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v');
 
 /// The warm-up for a work set of [kg] with the user's bar, in the shown unit.
 List<(double, int)> warmupFor(double kg) => warmupSets(shown(kg),
@@ -62,7 +63,7 @@ List<(double, int)> warmupFor(double kg) => warmupSets(shown(kg),
 
 /// "Pro Seite: 25 + 10 + 2,5" for [kg] with the user's bar and plates.
 String perSideLabel(double kg) => switch (platesPerSide(shown(kg), bar: barWeight, plates: availablePlates)) {
-      null => 'Mit deinen Scheiben nicht ladbar',
-      [] => 'Nur die Stange',
-      final side => 'Pro Seite: ${side.map(plateNum).join(' + ')}',
+      null => tr.platesNotLoadable,
+      [] => tr.platesBarOnly,
+      final side => tr.platesPerSide(side.map(plateNum).join(' + ')),
     };

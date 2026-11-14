@@ -10,7 +10,10 @@ dependencies:
   file_picker: ^13.3.3
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   http: ^1.6.0
+  intl: any
   path_drawing: ^1.0.1
   share_plus: ^13.3.1
   shared_preferences: ^2.5.5
@@ -23,3 +26,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

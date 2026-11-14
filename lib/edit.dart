@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'language.dart';
 import 'main.dart';
 import 'body_map.dart';
 import 'model.dart';
@@ -38,7 +39,7 @@ class _EditWorkoutState extends State<EditWorkout> {
   /// Shows a template day's exercises right away (WYSIWYG). Asks first if the list was edited by hand.
   Future<void> applyDay(Program p, Day? d) async {
     if (changedByHand && w.exercises.isNotEmpty) {
-      if (!await confirm(context, 'Deine Änderungen an der Übungsliste ersetzen?')) return;
+      if (!await confirm(context, tr.replaceExercisesAsk)) return;
     }
     setState(() {
       program = d == null ? null : p;
@@ -46,7 +47,7 @@ class _EditWorkoutState extends State<EditWorkout> {
       custom = d == null;
       w.exercises = [
         for (final (name, sets, reps) in d?.exercises ?? const <(String, int, int)>[])
-          knownExercise(name, sets: sets, reps: reps)..maxReps = d!.upTo[name],
+          knownExercise(exerciseLabel(name), sets: sets, reps: reps)..maxReps = d!.upTo[name],
       ];
       changedByHand = false;
       final next = d?.workoutName;
@@ -88,14 +89,14 @@ class _EditWorkoutState extends State<EditWorkout> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(isNew ? 'Neues Workout' : 'Workout bearbeiten'),
+        title: Text(isNew ? tr.newWorkout : tr.editWorkout),
         actions: [
           if (!isNew)
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: 'Workout löschen',
+              tooltip: tr.deleteWorkout,
               onPressed: () async {
-                if (!await confirm(context, '„${w.name}“ löschen? Der Verlauf bleibt erhalten.')) return;
+                if (!await confirm(context, tr.deleteWorkoutAsk(w.name))) return;
                 store.deleteWorkout(w);
                 if (context.mounted) Navigator.pop(context);
               },
@@ -104,7 +105,7 @@ class _EditWorkoutState extends State<EditWorkout> {
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
               onPressed: () async {
-                if (w.name.trim().isEmpty) w.name = 'Neues Workout';
+                if (w.name.trim().isEmpty) w.name = tr.newWorkout;
                 final names = {for (final e in w.exercises) e.name};
                 for (final MapEntry(key: from, value: to) in renames.entries) {
                   if (names.contains(to)) await store.renameExercise(from, to);
@@ -112,7 +113,7 @@ class _EditWorkoutState extends State<EditWorkout> {
                 await store.saveWorkout(w);
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Speichern'),
+              child: Text(tr.save),
             ),
           ),
         ],
@@ -125,10 +126,10 @@ class _EditWorkoutState extends State<EditWorkout> {
               controller: nameField,
               autofocus: isNew,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'z. B. Workout A',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: tr.name,
+                hintText: tr.example(tr.workoutA),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (v) => w.name = v,
             ),
@@ -141,12 +142,12 @@ class _EditWorkoutState extends State<EditWorkout> {
               padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
               child: Row(children: [
                 Expanded(
-                  child: Text(n == 1 ? '1 Übung steigert in festen Schritten' : '$n Übungen steigern in festen Schritten',
+                  child: Text(tr.fixedSteps(n),
                       style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Alle automatisch'),
+                  label: Text(tr.allAuto),
                   onPressed: () => setState(() {
                     for (final e in w.exercises) {
                       if (!e.cardio && !e.noWeight) e.auto = true;
@@ -162,7 +163,7 @@ class _EditWorkoutState extends State<EditWorkout> {
               padding: const EdgeInsets.only(bottom: 24),
               footer: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: DashedAddButton('Übung', editExercise),
+                child: DashedAddButton(tr.exercise, editExercise),
               ),
               onReorder: (from, to) => setState(() {
                 changedByHand = true;
@@ -175,12 +176,12 @@ class _EditWorkoutState extends State<EditWorkout> {
                     key: ObjectKey(e),
                     title: Text(e.name),
                     subtitle: Text(e.cardio
-                        ? 'Cardio · ${cardioLabel(e.reps, e.km)}'
+                        ? tr.cardioLine(cardioLabel(e.reps, e.km))
                         : [
                             setsLabel(e.repsPerSet, e.maxReps),
                             if (!e.noWeight) weightLabel(e.weight),
-                            if (e.auto && !e.noWeight) 'automatisch'
-                            else if (e.up && !e.noWeight) '+${weightLabel(e.increment)} bei Erfolg',
+                            if (e.auto && !e.noWeight) tr.auto
+                            else if (e.up && !e.noWeight) tr.onSuccess(weightLabel(e.increment)),
                           ].join(' · ')),
                     onTap: () => editExercise(i),
                     trailing: Row(
@@ -188,7 +189,7 @@ class _EditWorkoutState extends State<EditWorkout> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.delete_outline),
-                          tooltip: 'Übung entfernen',
+                          tooltip: tr.removeExercise,
                           onPressed: () => setState(() {
                             w.exercises.remove(e);
                             changedByHand = true;
@@ -213,7 +214,7 @@ class _EditWorkoutState extends State<EditWorkout> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Vorlage', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.onSurfaceVariant)),
+        Text(tr.template, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.onSurfaceVariant)),
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final x in programs)
@@ -226,7 +227,7 @@ class _EditWorkoutState extends State<EditWorkout> {
           ChoiceChip(
             showCheckmark: false,
             avatar: const Icon(Icons.edit, size: 14),
-            label: const Text('Custom'),
+            label: Text(tr.custom),
             selected: custom,
             onSelected: (_) => applyDay(programs.first, null),
           ),
@@ -255,7 +256,7 @@ class _EditWorkoutState extends State<EditWorkout> {
         ],
         if (custom) ...[
           const SizedBox(height: 6),
-          Text('Leg deine Übungen unten mit „+ Übung“ an.', style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+          Text(tr.customHint, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
         ],
       ]),
     );
@@ -275,12 +276,11 @@ Future<bool> transferHistory(BuildContext context, Workout w, String from, Strin
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          title: Text('Verlauf von „$from“ auf „$to“ übertragen?'),
-          content: Text('Übertragen: Statistik, Rekorde und Trainings laufen unter „$to“ weiter, auch in anderen '
-              'Workouts. Neue Übung: „$to“ beginnt ohne Verlauf, „$from“ bleibt im Verlauf, wie es war.'),
+          title: Text(tr.transferAsk(from, to)),
+          content: Text(tr.transferHint(from, to)),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Neue Übung')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Übertragen')),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr.newExercise)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr.transfer)),
           ],
         ),
       ) ??
@@ -328,8 +328,8 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
   }
 
   List<String> get knownNames => {
-        ...exerciseCatalogue.keys,
-        ...cardioCatalogue.keys,
+        ...exerciseCatalogue.keys.map(exerciseLabel),
+        ...cardioCatalogue.keys.map(exerciseLabel),
         for (final w in store.workouts) ...w.exercises.map((e) => e.name),
         ...store.loggedExercises,
       }.toList()
@@ -432,27 +432,27 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
               Expanded(
-                child: Text(e.name.trim().isEmpty ? 'Satz' : e.name.trim(),
+                child: Text(e.name.trim().isEmpty ? tr.set : e.name.trim(),
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               ),
-              Text('Satz ${i + 1} von ${rs.length}', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+              Text(tr.setOf(i + 1, rs.length), style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
             ]),
             const SizedBox(height: 16),
             Row(children: [
               Expanded(
                 // Typing doesn't rebuild the sheet, so the field keeps focus; ± swap in the new value.
                 child: e.timed
-                    ? BigStepper(maxReps == null ? 'Sekunden' : 'Sekunden mindestens', '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
+                    ? BigStepper(maxReps == null ? tr.seconds : tr.secondsAtLeast, '$r', () => setSheet(() => r = max(5, (r - 1) ~/ 5 * 5)),
                         () => setSheet(() => r = min(600, r ~/ 5 * 5 + 5)),
                         onTyped: (v) => r = (int.tryParse(v) ?? r).clamp(1, 600))
-                    : BigStepper(maxReps == null ? 'Wiederholungen' : 'Wdh. mindestens', '$r',
+                    : BigStepper(maxReps == null ? tr.reps : tr.repsAtLeast, '$r',
                         () => setSheet(() => r = max(1, r - 1)), () => setSheet(() => r = min(50, r + 1)),
                         onTyped: (v) => r = (int.tryParse(v) ?? r).clamp(1, 50)),
               ),
               if (!noWeight) ...[
                 const SizedBox(width: 12),
                 Expanded(
-                  child: BigStepper('Gewicht ($unitLabel)', weightNum(w), () => setSheet(() => w = nudged(w, -1)),
+                  child: BigStepper(tr.weightIn(unitLabel), weightNum(w), () => setSheet(() => w = nudged(w, -1)),
                       () => setSheet(() => w = nudged(w, 1)),
                       decimal: true,
                       signed: true,
@@ -465,15 +465,15 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ]),
             if (!noWeight && w < 0) ...[
               const SizedBox(height: 8),
-              Text('Unter 0: Unterstützung, z. B. am Klimmzug-Gerät. Steigern heißt weniger Hilfe, Richtung 0.',
+              Text(tr.assistHint,
                   style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ],
             const SizedBox(height: 16),
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: false, label: Text('Dieser Satz')),
-                ButtonSegment(value: true, label: Text('Alle Sätze')),
+              segments: [
+                ButtonSegment(value: false, label: Text(tr.thisSet)),
+                ButtonSegment(value: true, label: Text(tr.allSets)),
               ],
               selected: {all},
               onSelectionChanged: (v) => setSheet(() => all = v.single),
@@ -483,7 +483,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               if (rs.length > 1) ...[
                 IconButton.outlined(
                   icon: Icon(Icons.delete_outline, color: c.error),
-                  tooltip: 'Satz löschen',
+                  tooltip: tr.deleteSet,
                   onPressed: () {
                     delete = true;
                     Navigator.pop(context, true);
@@ -495,7 +495,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Schließen'),
+                  child: Text(tr.close),
                 ),
               ),
               const SizedBox(width: 12),
@@ -503,7 +503,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Speichern'),
+                  child: Text(tr.save),
                 ),
               ),
             ]),
@@ -535,11 +535,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       padding: const EdgeInsets.all(14),
       decoration: card,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Muskeln', style: TextStyle(fontWeight: FontWeight.w500)),
+        Text(tr.muscles, style: const TextStyle(fontWeight: FontWeight.w500)),
         // An own exercise nothing is known about: without muscles it's missing from the statistics.
         if (muscles == null && musclesOf(e.name) == null && e.name.trim().isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text('Unbekannte Übung: Ohne Muskeln fehlt sie in Balance und Muskelkarte. Bitte antippen, was sie trainiert.',
+          Text(tr.unknownExercise,
               style: muted.copyWith(color: Theme.of(context).colorScheme.tertiary, fontWeight: FontWeight.w500)),
         ],
         const SizedBox(height: 12),
@@ -559,7 +559,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ),
         ]),
         const SizedBox(height: 8),
-        Text('Antippen: Hauptmuskel ✓ → hilft mit ½ → aus. Für die Statistik.', style: muted),
+        Text(tr.musclesHint, style: muted),
       ]),
     );
   }
@@ -601,14 +601,14 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     );
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Schließen', onPressed: () => Navigator.pop(context)),
-        title: Text(isNew ? 'Übung hinzufügen' : 'Übung bearbeiten'),
+        leading: IconButton(icon: const Icon(Icons.close), tooltip: tr.close, onPressed: () => Navigator.pop(context)),
+        title: Text(isNew ? tr.addExercise : tr.editExercise),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
               onPressed: e.name.trim().isEmpty || duplicate ? null : () => Navigator.pop(context, result()),
-              child: Text(isNew ? 'Hinzufügen' : widget.forTraining ? 'Übernehmen' : 'Speichern'),
+              child: Text(isNew ? tr.add : widget.forTraining ? tr.takeOver : tr.save),
             ),
           ),
         ],
@@ -621,9 +621,9 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             autofocus: isNew,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
-              hintText: 'Übung suchen oder eigene eingeben',
+              hintText: tr.searchExercise,
               errorText: duplicate
-                  ? 'Steht schon in diesem Workout. Für mehr Sätze oder andere Gewichte pro Satz die vorhandene bearbeiten.'
+                  ? tr.duplicateExercise
                   : null,
               errorMaxLines: 3,
               prefixIcon: const Icon(Icons.search),
@@ -643,7 +643,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             if (typed && sugg.isEmpty && e.name.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text('Kein Treffer – eigener Name wird übernommen', style: muted),
+                child: Text(tr.noMatch, style: muted),
               ),
           ]),
           if (filledFrom != null) ...[
@@ -651,15 +651,15 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             Row(children: [
               Icon(Icons.auto_awesome, size: 14, color: c.primary),
               const SizedBox(width: 6),
-              Flexible(child: Text('Standardwerte für $filledFrom übernommen', style: muted)),
+              Flexible(child: Text(tr.defaultsFrom(filledFrom!), style: muted)),
             ]),
           ],
           const SizedBox(height: 18),
           SegmentedButton<bool>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: false, icon: Icon(Icons.fitness_center), label: Text('Kraft')),
-              ButtonSegment(value: true, icon: Icon(Icons.directions_run), label: Text('Cardio')),
+            segments: [
+              ButtonSegment(value: false, icon: const Icon(Icons.fitness_center), label: Text(tr.strength)),
+              ButtonSegment(value: true, icon: const Icon(Icons.directions_run), label: Text(tr.cardio)),
             ],
             selected: {e.cardio},
             onSelectionChanged: (v) => setCardio(v.single),
@@ -669,9 +669,9 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             // One goal: how long or how far. What was actually done is logged in the training.
             SegmentedButton<bool>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: false, icon: Icon(Icons.timer_outlined), label: Text('Dauer')),
-                ButtonSegment(value: true, icon: Icon(Icons.route_outlined), label: Text('Distanz')),
+              segments: [
+                ButtonSegment(value: false, icon: const Icon(Icons.timer_outlined), label: Text(tr.durationGoal)),
+                ButtonSegment(value: true, icon: const Icon(Icons.route_outlined), label: Text(tr.distance)),
               ],
               selected: {byDistance},
               onSelectionChanged: (v) => setState(() {
@@ -682,20 +682,20 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ),
             const SizedBox(height: 18),
             if (byDistance)
-              BigStepper('Ziel ($distanceLabel)', distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
+              BigStepper(tr.goalIn(distanceLabel), distanceNum(e.km ?? 5), () => setState(() => e.km = nudgedKm(-1)),
                   () => setState(() => e.km = nudgedKm(1)),
                   decimal: true, onTyped: (v) => e.km = parseDistance(v) ?? e.km)
             else
-              BigStepper('Ziel (Min)', '${max(1, e.reps)}', () => setState(() => e.reps = max(1, e.reps - 1)),
+              BigStepper(tr.goalMinutes, '${max(1, e.reps)}', () => setState(() => e.reps = max(1, e.reps - 1)),
                   () => setState(() => e.reps = min(600, e.reps + 1)),
                   // Typing doesn't rebuild, so the field keeps focus; the steppers swap in the new value.
                   onTyped: (v) => e.reps = (int.tryParse(v) ?? e.reps).clamp(1, 600)),
           ] else ...[
           SegmentedButton<bool>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: false, icon: Icon(Icons.fitness_center), label: Text('Mit Gewicht')),
-              ButtonSegment(value: true, icon: Icon(Icons.accessibility_new), label: Text('Ohne Gewicht')),
+            segments: [
+              ButtonSegment(value: false, icon: const Icon(Icons.fitness_center), label: Text(tr.withWeight)),
+              ButtonSegment(value: true, icon: const Icon(Icons.accessibility_new), label: Text(tr.withoutWeight)),
             ],
             selected: {noWeight},
             onSelectionChanged: (v) => setState(() => noWeight = v.single),
@@ -704,9 +704,9 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           // Held or carried for a time (plank, farmer's walk): seconds instead of reps.
           SegmentedButton<bool>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: false, icon: Icon(Icons.repeat), label: Text('Wiederholungen')),
-              ButtonSegment(value: true, icon: Icon(Icons.timer_outlined), label: Text('Zeit')),
+            segments: [
+              ButtonSegment(value: false, icon: const Icon(Icons.repeat), label: Text(tr.reps)),
+              ButtonSegment(value: true, icon: const Icon(Icons.timer_outlined), label: Text(tr.time)),
             ],
             selected: {e.timed},
             onSelectionChanged: (v) => setState(() {
@@ -718,12 +718,14 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           ),
           const SizedBox(height: 18),
           Row(children: [
-            const Expanded(child: Text('Sätze', style: TextStyle(fontWeight: FontWeight.w500))),
+            Expanded(child: Text(tr.sets, style: const TextStyle(fontWeight: FontWeight.w500))),
             Flexible(
               child: Text(
                   isNew
-                      ? 'Satz antippen zum Ändern'
-                      : '${widget.forTraining ? 'Dieses' : 'Nächstes'} Training · antippen zum Ändern',
+                      ? tr.tapSetToChange
+                      : widget.forTraining
+                          ? tr.thisTrainingTap
+                          : tr.nextTrainingTap,
                   textAlign: TextAlign.end,
                   style: muted),
             ),
@@ -741,25 +743,24 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                     seconds: e.timed,
                     weight: noWeight ? null : ws[i],
                     onTap: () => editSet(i)),
-              if (rs.length < 12) SizedBox(width: w, child: DashedAddButton('Satz', addSet, height: noWeight ? 56 : 94)),
+              if (rs.length < 12) SizedBox(width: w, child: DashedAddButton(tr.set, addSet, height: noWeight ? 56 : 94)),
             ]);
           }),
           const SizedBox(height: 10),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(e.timed ? 'Zeit-Spanne' : 'Wiederholungs-Spanne'),
+            title: Text(e.timed ? tr.timeRange : tr.repRange),
             subtitle: Text(maxReps == null
                 ? e.timed
-                    ? 'Aus · feste Zeit'
-                    : 'Aus · feste Wiederholungen'
-                : '${setsLabel(rs, maxReps, seconds: e.timed)} · Gewicht steigt erst, wenn alle Sätze '
-                    '$maxReps ${e.timed ? 's' : 'Wdh.'} schaffen'),
+                    ? tr.rangeOffTime
+                    : tr.rangeOffReps
+                : (e.timed ? tr.rangeOnSeconds : tr.rangeOnReps)(setsLabel(rs, maxReps, seconds: e.timed), maxReps!)),
             value: maxReps != null,
             onChanged: (on) => setState(() => maxReps = on ? rangeTop(rs.reduce(max), seconds: e.timed) : null),
           ),
           if (maxReps case final top?)
             Row(children: [
-              Expanded(child: Text(e.timed ? 'Bis Sekunden' : 'Bis Wiederholungen', style: TextStyle(color: c.onSurfaceVariant))),
+              Expanded(child: Text(e.timed ? tr.upToSeconds : tr.upToReps, style: TextStyle(color: c.onSurfaceVariant))),
               IconButton.filledTonal(
                 icon: const Icon(Icons.remove, size: 20),
                 onPressed: () => setState(() => maxReps = max(rs.reduce(max), top - (e.timed ? 5 : 1))),
@@ -784,7 +785,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               Row(children: [
                 Icon(Icons.timer_outlined, size: 20, color: c.onSurfaceVariant),
                 const SizedBox(width: 10),
-                const Expanded(child: Text('Pause', style: TextStyle(fontWeight: FontWeight.w500))),
+                Expanded(child: Text(tr.rest, style: const TextStyle(fontWeight: FontWeight.w500))),
                 Text(clock(e.restSeconds), style: TextStyle(fontWeight: FontWeight.w500, color: c.primary)),
               ]),
               const SizedBox(height: 12),
@@ -794,21 +795,21 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 current: e.restSeconds.toDouble(),
                 label: (v) => clock(v.round()),
                 set: (v) => e.restSeconds = v.round(),
-                hint: 'z. B. 2:30',
-                unitText: 'min:s oder s',
+                hint: tr.example('2:30'),
+                unitText: tr.minSecOrSec,
                 parse: parseDuration,
               ),
               const SizedBox(height: 14),
-              Text('Nach nicht geschafftem Satz', style: muted.copyWith(fontWeight: FontWeight.w500)),
+              Text(tr.afterMissedSet, style: muted.copyWith(fontWeight: FontWeight.w500)),
               const SizedBox(height: 8),
               chips(
                 key: 'failpause',
                 presets: const [0, 120, 180, 240, 300], // 0 = same as above
                 current: (e.failRestSeconds ?? 0).toDouble(),
-                label: (v) => v == 0 ? 'Wie oben' : clock(v.round()),
+                label: (v) => v == 0 ? tr.sameAsAbove : clock(v.round()),
                 set: (v) => e.failRestSeconds = v == 0 ? null : v.round(),
-                hint: 'z. B. 4:00',
-                unitText: 'min:s oder s',
+                hint: tr.example('4:00'),
+                unitText: tr.minSecOrSec,
                 parse: parseDuration,
               ),
             ]),
@@ -820,14 +821,14 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             padding: const EdgeInsets.all(14),
             decoration: card,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Gewicht anpassen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+              Text(tr.adjustWeight, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: true, icon: Icon(Icons.auto_awesome_outlined), label: Text('Automatisch')),
-                    ButtonSegment(value: false, icon: Icon(Icons.tune), label: Text('Fest')),
+                  segments: [
+                    ButtonSegment(value: true, icon: const Icon(Icons.auto_awesome_outlined), label: Text(tr.automatic)),
+                    ButtonSegment(value: false, icon: const Icon(Icons.tune), label: Text(tr.fixed)),
                   ],
                   selected: {e.auto},
                   onSelectionChanged: (v) => setState(() {
@@ -842,7 +843,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 const SizedBox(height: 10),
                 Text(autoNow, style: TextStyle(color: c.onSurfaceVariant, fontWeight: FontWeight.w500, height: 1.4)),
                 const SizedBox(height: 12),
-                Text('Ladestufe', style: TextStyle(color: c.onSurfaceVariant)),
+                Text(tr.loadStep, style: TextStyle(color: c.onSurfaceVariant)),
                 const SizedBox(height: 6),
                 // What this exercise can be loaded in, e.g. a leg press that only takes 5 kg plates.
                 chips(
@@ -853,7 +854,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                   lead: ChoiceChip(
                     showCheckmark: false,
                     avatar: const Icon(Icons.auto_awesome_outlined, size: 14),
-                    label: const Text('Automatisch'),
+                    label: Text(tr.automatic),
                     selected: e.loadStep == null && editing != 'step',
                     onSelected: (_) => setState(() {
                       e.loadStep = null;
@@ -862,7 +863,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                   ),
                   label: (v) => '${weightNum(toKg(v))} $unitLabel',
                   set: (v) => e.loadStep = toKg(v),
-                  hint: unit.value == WeightUnit.kg ? 'z. B. 7,5' : 'z. B. 15',
+                  hint: tr.example(unit.value == WeightUnit.kg ? decimal('7.5') : '15'),
                   unitText: unitLabel,
                   parse: (s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
                     final v? when v > 0 => (v * 100).roundToDouble() / 100,
@@ -874,10 +875,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.trending_up),
-                  title: const Text('Steigerung bei Erfolg'),
+                  title: Text(tr.increaseOnSuccess),
                   subtitle: Text(e.up
-                      ? '+${weightLabel(e.increment)}, wenn alle Sätze geschafft'
-                      : 'Aus · Gewicht bleibt gleich'),
+                      ? tr.increaseOn(weightLabel(e.increment))
+                      : tr.offWeightStays),
                   value: e.up,
                   onChanged: (on) => setState(() {
                     e.up = on;
@@ -889,10 +890,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.trending_down),
-                  title: const Text('Senkung bei Misserfolg'),
+                  title: Text(tr.decreaseOnMiss),
                   subtitle: Text(e.down
-                      ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload}× nicht geschafft'
-                      : 'Aus · Gewicht bleibt gleich'),
+                      ? tr.decreaseOn(weightLabel(e.decrement), e.failsToDeload)
+                      : tr.offWeightStays),
                   value: e.down,
                   onChanged: (on) => setState(() {
                     e.down = on;
@@ -903,7 +904,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                   weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: Text('Senken nach Fehlversuchen in Folge', style: TextStyle(color: c.onSurfaceVariant))),
+                    Expanded(child: Text(tr.decreaseAfter, style: TextStyle(color: c.onSurfaceVariant))),
                     IconButton.filledTonal(
                       icon: const Icon(Icons.remove, size: 20),
                       onPressed: () => setState(() => e.failsToDeload = max(1, e.failsToDeload - 1)),
@@ -935,49 +936,45 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
   }
 
   String get summary {
-    final name = e.name.trim().isEmpty ? 'Neue Übung' : e.name.trim();
+    final name = e.name.trim().isEmpty ? tr.newExercise : e.name.trim();
     if (e.cardio) {
-      final goal = byDistance ? '${distanceNum(e.km ?? 5)} $distanceLabel' : '${e.reps} Min';
-      return '$name: Ziel $goal. Im Training startest du die Stoppuhr mit einem Tipp.';
+      final goal = byDistance ? '${distanceNum(e.km ?? 5)} $distanceLabel' : tr.minutes(e.reps);
+      return tr.summaryCardio(name, goal);
     }
     final plan = noWeight
-        ? '${setsLabel(rs, maxReps)} ohne Gewicht'
+        ? tr.planNoWeight(setsLabel(rs, maxReps))
         : ws.toSet().length == 1
-            ? '${setsLabel(rs, maxReps)} mit ${weightLabel(ws.first)}'
+            ? tr.planWithWeight(setsLabel(rs, maxReps), weightLabel(ws.first))
             : [for (final (i, w) in ws.indexed) '${rs[i]}×${weightLabel(w)}'].join(', ');
-    if (widget.forTraining) return '$name: $plan. Nur für dieses Training, der Plan bleibt, wie er ist.';
-    if (noWeight) return '$name: $plan.';
-    if (e.auto) return '$name: $plan. Gewicht passt sich automatisch an.';
+    if (widget.forTraining) return tr.summaryTraining(name, plan);
+    if (noWeight) return tr.summaryPlain(name, plan);
+    if (e.auto) return tr.summaryAuto(name, plan);
     return [
-      '$name: $plan.',
-      if (e.up) 'Bei Erfolg +${weightLabel(e.increment)}.',
-      if (e.down) 'Nach ${e.failsToDeload}× Misserfolg −${weightLabel(e.decrement)}.',
-      if (!e.up && !e.down) 'Gewicht wird nicht automatisch angepasst.',
+      tr.summaryPlain(name, plan),
+      if (e.up) tr.summaryUp(weightLabel(e.increment)),
+      if (e.down) tr.summaryDown(e.failsToDeload, weightLabel(e.decrement)),
+      if (!e.up && !e.down) tr.summaryFixed,
     ].join(' ');
   }
 
   /// The auto mode in a few sentences. Nothing to set: the step adapts itself.
   String get autoRules => [
-        'Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es '
-            '(beim zweiten Mal in Folge ein halber Schritt).',
-        if (maxReps == null) 'Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.'
-        else 'Erst wenn alle Sätze oben in der Spanne sind.',
-        'Nicht geschafft: Gewicht bleibt, nach $autoFails× in Folge etwa −10 % und danach kleinere Schritte, '
-            'die mit Reserve wieder wachsen.',
-        'Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), '
-            'nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.',
+        tr.autoRuleDone,
+        if (maxReps == null) tr.autoRuleBridge else tr.autoRuleRange,
+        tr.autoRuleMiss(autoFails),
+        tr.autoRuleBadDay,
       ].join(' ');
 
   /// The current share and what the weight can be loaded in.
   String get autoNow {
     final (grid, from) = store.loadStepOf(e);
-    final pct = (e.state?.pct ?? AutoState.startPct).toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '').replaceAll('.', ',');
-    return 'Gerade +$pct % pro Training · Ladestufe ${weightLabel(grid)} (${switch (from) {
-      LoadSource.plates => 'deine Scheiben',
-      LoadSource.learned => 'aus deinen Gewichten',
-      LoadSource.guess => 'Startwert, lernt mit',
-      LoadSource.set => 'eingestellt',
-    }})';
+    final pct = decimal((e.state?.pct ?? AutoState.startPct).toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), ''));
+    return tr.autoNow(pct, weightLabel(grid), switch (from) {
+      LoadSource.plates => tr.sourcePlates,
+      LoadSource.learned => tr.sourceLearned,
+      LoadSource.guess => tr.sourceGuess,
+      LoadSource.set => tr.sourceSet,
+    });
   }
 
   /// Plate-sized steps for increment/decrement chips, in the shown unit.
@@ -987,7 +984,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         current: shown(kg),
         label: (v) => '$sign${weightNum(toKg(v))} $unitLabel',
         set: (v) => set(toKg(v)),
-        hint: unit.value == WeightUnit.kg ? 'z. B. 1,25' : 'z. B. 7,5',
+        hint: tr.example(decimal(unit.value == WeightUnit.kg ? '1.25' : '7.5')),
         unitText: unitLabel,
         prefix: sign,
         // Comma or point, at most 2 decimals, above 0.
@@ -1034,7 +1031,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ChoiceChip(
           showCheckmark: false,
           avatar: const Icon(Icons.edit, size: 14),
-          label: Text(isPreset ? 'Eigene' : label(current)),
+          label: Text(isPreset ? tr.own : label(current)),
           selected: !isPreset || open,
           onSelected: (_) => setState(() {
             editing = open ? null : key;
@@ -1061,7 +1058,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton(onPressed: ok, child: const Text('OK')),
+          FilledButton(onPressed: ok, child: Text(tr.ok)),
         ]),
       ],
     ]);
@@ -1075,11 +1072,11 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
   final Exercise e;
   if (used != null) {
     e = used.copy()..fails = 0;
-  } else if (cardioCatalogue[name] case (final minutes, final km)) {
+  } else if (cardioCatalogue[catalogueName(name)] case (final minutes, final km)) {
     return Exercise.cardio(name: name, minutes: minutes, km: km);
   } else {
-    final d = exerciseCatalogue[name];
-    e = Exercise(name: name, timed: timedExercises.contains(name));
+    final d = exerciseCatalogue[catalogueName(name)];
+    e = Exercise(name: name, timed: timedExercises.contains(catalogueName(name)));
     if (d != null) {
       e
         ..sets = d.$1
@@ -1087,9 +1084,9 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
         ..weight = d.$3
         ..increment = d.$4
         ..restSeconds = d.$5
-        ..failRestSeconds = heavyLifts.contains(name) ? 120 : null
+        ..failRestSeconds = heavyLifts.contains(catalogueName(name)) ? 120 : null
         // Accessories start with a range: the weight goes up once every set reaches its top.
-        ..maxReps = heavyLifts.contains(name) ? null : rangeTop(d.$2, seconds: e.timed);
+        ..maxReps = heavyLifts.contains(catalogueName(name)) ? null : rangeTop(d.$2, seconds: e.timed);
       if (unit.value == WeightUnit.lb) {
         // Catalogue values are kg; in lb start on round plates (50 kg → 110 lb, +2,5 kg → +5 lb).
         e

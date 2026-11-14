@@ -1,0 +1,2208 @@
+{
+  "@@locale": "de",
+  "appTitle": "FerroLog",
+  "cancel": "Abbrechen",
+  "trainingsCount": "{n, plural, =1{1 Training} other{{n} Trainings}}",
+  "@trainingsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "syncNoFileYet": "Auf GitHub liegt noch keine {path}.",
+  "@syncNoFileYet": {
+    "placeholders": {
+      "path": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncRestored": "Von GitHub wiederhergestellt",
+  "syncOverwriteMore": "Auf GitHub liegen mehr Trainings ({theirs}) als hier ({ours}). Wirklich überschreiben? Der alte Stand bleibt nur in der Git-Historie des Repos.",
+  "@syncOverwriteMore": {
+    "placeholders": {
+      "theirs": {
+        "type": "Object"
+      },
+      "ours": {
+        "type": "Object"
+      }
+    }
+  },
+  "settingsTraining": "Training",
+  "settingsSound": "Ton",
+  "settingsSoundHint": "Signalton, wenn die Pause bei 0 ankommt",
+  "settingsVibrate": "Vibration",
+  "settingsVibrateHint": "Kurz vibrieren, wenn die Pause bei 0 ankommt",
+  "settingsAutoFinish": "Automatisch beenden",
+  "settingsAutoFinishHint": "Nach 30 Min ohne Aktivität endet das Training beim letzten Satz",
+  "settingsKeepScreenOn": "Bildschirm anlassen",
+  "settingsKeepScreenOnHint": "Während des Trainings geht das Display nicht aus",
+  "settingsShowWhenLocked": "Über dem Sperrbildschirm zeigen",
+  "settingsShowWhenLockedHint": "Während des Trainings ohne Entsperren auf die Pause schauen",
+  "settingsAskRir": "Reserve abfragen",
+  "settingsAskRirHint": "Nach dem letzten Satz einer Übung: Wie viele Wiederholungen gingen noch? Hilft bei Plateaus. Übungen im Auto-Modus fragen immer",
+  "settingsLeadIn": "Vorlauf bei Zeitübungen",
+  "settingsLeadInHint": "Zeit zum Aufnehmen der Gewichte, bevor die Sekunden zählen",
+  "settingsHome": "Startseite",
+  "settingsTasks": "Hinweise zum Training",
+  "settingsTasksHint": "Wenn die Statistik etwas findet: Ausgelassenes, Balance, Plateau, Wochenziel",
+  "settingsInsights": "Erfolge",
+  "settingsInsightsHint": "Rekorde, Fortschritt und Meilensteine des letzten Trainings",
+  "settingsStreak": "Serie",
+  "settingsStreakHint": "Trainings pro Woche, damit die Woche für deine Serie zählt",
+  "settingsLanguage": "Sprache",
+  "settingsLanguageSystem": "System ({name})",
+  "@settingsLanguageSystem": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "settingsUnit": "Einheit",
+  "settingsUnitAuto": "Automatisch ({unit})",
+  "@settingsUnitAuto": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "settingsUnitHint": "Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.",
+  "settingsBarbell": "Hantel",
+  "settingsWarmup": "Aufwärmsätze zeigen",
+  "settingsWarmupHint": "Vor dem ersten Satz einer Langhantel-Übung: leere Stange, dann 50, 70 und 85 %",
+  "settingsBarPlatesHint": "Stange und Scheiben für „Pro Seite“ beim Gewicht und für die Aufwärmsätze",
+  "settingsBar": "Stange {weight}",
+  "@settingsBar": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "settingsPlates": "Scheiben",
+  "settingsData": "Daten",
+  "settingsExport": "An KI senden / exportieren",
+  "settingsExportHint": "Alle Daten als JSON, der Analyse-Prompt kommt in die Zwischenablage",
+  "settingsExportDone": "Prompt kopiert: im Chat einfügen, falls er fehlt",
+  "settingsRestore": "Von GitHub wiederherstellen",
+  "settingsRestoreHint": "Trainings und Pläne aus {repo} holen, nach einer Neuinstallation oder vom anderen Gerät",
+  "@settingsRestoreHint": {
+    "placeholders": {
+      "repo": {
+        "type": "Object"
+      }
+    }
+  },
+  "settingsRestoreNoSync": "Erst unten GitHub-Sync einrichten",
+  "settingsPlanImport": "Plan von KI übernehmen",
+  "settingsPlanImportHint": "JSON-Block aus dem Chat einfügen, mit Vorschau vor dem Speichern",
+  "settingsCredits": "Muskeln der Übungen: wger.de (CC-BY-SA), free-exercise-db · Körperkarte: react-native-body-highlighter (MIT) · Lizenzen",
+  "syncTitle": "GitHub-Sync",
+  "syncIntro": "FerroLog speichert deine Trainingsdaten als ferrolog.json in einem privaten GitHub-Repo. Dort kann deine KI sie lesen. FerroLog bekommt nur Zugriff auf diese eine Datei in dem Repo, das du freigibst.",
+  "syncEnterCode": "Gib diesen Code auf GitHub ein (ist schon kopiert):",
+  "syncThenBack": "Danach einfach zurück in die App wechseln.",
+  "syncLogin": "Mit GitHub anmelden",
+  "syncConnected": "Mit GitHub verbunden",
+  "syncLogout": "Abmelden",
+  "syncStepRepo": "Daten-Repo anlegen",
+  "syncStepRepoHint": "Privates Repo „ferrolog-data“ auf GitHub erstellen",
+  "syncRepoDescription": "FerroLog+Trainingsdaten",
+  "syncStepAccess": "FerroLog Zugriff geben",
+  "syncStepAccessHint": "„Only select repositories“ → ferrolog-data wählen",
+  "syncFindsRepo": "Danach zurück in die App wechseln, FerroLog findet das Repo dann selbst.",
+  "sync404": "Zeigt GitHub beim Installieren eine 404? Dann Schritt 2 am PC öffnen: github.com/apps/{slug}/installations/new",
+  "@sync404": {
+    "placeholders": {
+      "slug": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncRepo": "Repo",
+  "syncPickRepo": "Repo auswählen",
+  "syncAnotherRepo": "Weiteres Repo freigeben",
+  "syncNow": "Jetzt synchronisieren",
+  "syncResolve": "Konflikt lösen",
+  "syncLastOn": "{count}, letztes am {date}",
+  "@syncLastOn": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      },
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncDialogTitle": "Daten auf GitHub",
+  "syncDialogUnreadable": "Auf GitHub: nicht lesbar. {problem}",
+  "@syncDialogUnreadable": {
+    "placeholders": {
+      "problem": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncDialogRemote": "Auf GitHub: {count}",
+  "@syncDialogRemote": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncDialogLocal": "Auf diesem Gerät: {count}",
+  "@syncDialogLocal": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncDialogRestoreAll": "Wiederherstellen holt Trainings und Pläne von GitHub.",
+  "syncDialogRestoreKeep": "Wiederherstellen holt Trainings und Pläne von GitHub und behält die Trainings, die nur hier sind.",
+  "syncOverwrite": "GitHub überschreiben",
+  "languageName": "Deutsch",
+  "dateFormat": "dd.MM.yyyy",
+  "minutes": "{n} Min",
+  "@minutes": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "navWorkouts": "Workouts",
+  "navStats": "Statistik",
+  "navHistory": "Verlauf",
+  "navSettings": "Einstellungen",
+  "noWorkoutsYet": "Noch keine Workouts. Leg eins an.",
+  "workoutRunning": " läuft · ",
+  "resume": "Fortsetzen",
+  "elapsedMinutes": "{n} Min.",
+  "@elapsedMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "elapsedHours": "{time} Std.",
+  "@elapsedHours": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "restPaused": " · Pause angehalten",
+  "restLeft": " · Pause {time}",
+  "@restLeft": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "workout": "Workout",
+  "trainingRunning": "Training läuft",
+  "runningSince": "{name} · seit ",
+  "@runningSince": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "discardTraining": "Training verwerfen",
+  "discardTrainingAsk": "Training verwerfen? Nichts wird gespeichert.",
+  "resumeTraining": "Training fortsetzen",
+  "comebackLighter": "Nach der Pause {pct} % leichter zum Einstieg",
+  "@comebackLighter": {
+    "placeholders": {
+      "pct": {
+        "type": "Object"
+      }
+    }
+  },
+  "setMuscles": "Muskeln festlegen, sonst fehlt sie in der Statistik",
+  "lastDone": "zuletzt {when}",
+  "@lastDone": {
+    "placeholders": {
+      "when": {
+        "type": "Object"
+      }
+    }
+  },
+  "edit": "Bearbeiten",
+  "start": "Starten",
+  "running": "LÄUFT",
+  "setsDone": "{done}/{total} Sätze",
+  "@setsDone": {
+    "placeholders": {
+      "done": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      }
+    }
+  },
+  "weeksCount": "{n, plural, =1{1 Woche} other{{n} Wochen}}",
+  "@weeksCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "streakTooltip": "{weeks} in Folge mindestens {goal}× trainiert",
+  "@streakTooltip": {
+    "placeholders": {
+      "weeks": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "today": "heute",
+  "yesterday": "gestern",
+  "daysAgo": "vor {n} Tagen",
+  "@daysAgo": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "noTrainingsYet": "Noch keine Trainings geloggt.",
+  "streakGoal": "Ziel: {goal}× pro Woche",
+  "@streakGoal": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "streakWeeks": "{weeks} in Folge · {goal}× pro Woche",
+  "@streakWeeks": {
+    "placeholders": {
+      "weeks": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "streakWeekDone": "Diese Woche geschafft ({done}/{goal}). Weiter so!",
+  "@streakWeekDone": {
+    "placeholders": {
+      "done": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "streakWeekOpen": "Diese Woche {done}/{goal} · noch {left}",
+  "@streakWeekOpen": {
+    "placeholders": {
+      "done": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      },
+      "left": {
+        "type": "Object"
+      }
+    }
+  },
+  "streakWeekOpenKeep": "Diese Woche {done}/{goal} · noch {left}, um die Serie zu halten",
+  "@streakWeekOpenKeep": {
+    "placeholders": {
+      "done": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      },
+      "left": {
+        "type": "Object"
+      }
+    }
+  },
+  "todayButton": "Heute",
+  "previousMonth": "Voriger Monat",
+  "nextMonth": "Nächster Monat",
+  "trainingsInMonth": "{count} im {month}",
+  "@trainingsInMonth": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      },
+      "month": {
+        "type": "Object"
+      }
+    }
+  },
+  "delete": "Löschen",
+  "deleteTrainingAsk": "Training vom {date} löschen?",
+  "@deleteTrainingAsk": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "deleteTrainingMovesPlan": " Die Plan-Gewichte gehen auf den Stand davor zurück.",
+  "yes": "Ja",
+  "secondsUnit": "s",
+  "progUp": "geschafft",
+  "progUp2": "viel Reserve, doppelter Schritt",
+  "progHalf": "2× am Limit, halber Schritt",
+  "progLimit": "am Limit, Gewicht bleibt",
+  "progBridgeTo": "nächstes Mal {reps} Wdh., bei {to} mehr Gewicht",
+  "@progBridgeTo": {
+    "placeholders": {
+      "reps": {
+        "type": "Object"
+      },
+      "to": {
+        "type": "Object"
+      }
+    }
+  },
+  "progBridge": "erst mehr Wiederholungen",
+  "progRange": "erst alle Wiederholungen",
+  "progMiss": "nicht geschafft",
+  "progReset": "2× nicht geschafft, Wiederholungen zurück",
+  "progBadDay": "schlechter Tag, zählt nicht",
+  "progPain": "Schmerzen: Gewicht bleibt. Kommt es wieder, lass die Übung prüfen.",
+  "progDeload": "{fails}× nicht geschafft, etwa −10 %, kleinere Schritte",
+  "@progDeload": {
+    "placeholders": {
+      "fails": {
+        "type": "Object"
+      }
+    }
+  },
+  "progLighter": "leichter gemacht",
+  "progFewer": "weniger Sätze",
+  "tagSleptBadly": "Schlecht geschlafen",
+  "tagWellRested": "Gut erholt",
+  "tagSore": "Muskelkater",
+  "tagPain": "Schmerzen",
+  "tagSick": "Krank",
+  "tagStress": "Stress",
+  "tagUnmotivated": "Unmotiviert",
+  "tagEnergetic": "Voller Energie",
+  "tagAteLittle": "Wenig gegessen",
+  "tagAlcohol": "Alkohol",
+  "tagCaffeine": "Koffein",
+  "tagLittleTime": "Wenig Zeit",
+  "tagGymBusy": "Studio voll",
+  "tagTravelling": "Unterwegs",
+  "tagTechnique": "Technik-Fokus",
+  "fileNotFerrolog": "Das ist keine FerroLog-Datei (app \"ferrolog\" fehlt).",
+  "fileNoVersion": "Die Datei hat keine gültige Version.",
+  "fileTooNew": "Die Datei hat Version {version}, diese App kennt nur bis {known}. Bitte die App aktualisieren.",
+  "@fileTooNew": {
+    "placeholders": {
+      "version": {
+        "type": "Object"
+      },
+      "known": {
+        "type": "Object"
+      }
+    }
+  },
+  "fileNoData": "Workouts oder Trainings fehlen in der Datei.",
+  "fileBroken": "Die Datei ist beschädigt: {error}",
+  "@fileBroken": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "rirLimit": "am Limit",
+  "rirLeft": "noch {n} übrig",
+  "@rirLeft": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "platesNotLoadable": "Mit deinen Scheiben nicht ladbar",
+  "platesBarOnly": "Nur die Stange",
+  "platesPerSide": "Pro Seite: {plates}",
+  "@platesPerSide": {
+    "placeholders": {
+      "plates": {
+        "type": "Object"
+      }
+    }
+  },
+  "aboutMinutes": "≈ {n} Min",
+  "@aboutMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "everySet": "{taken} · alle {time} Min ein Satz",
+  "@everySet": {
+    "placeholders": {
+      "taken": {
+        "type": "Object"
+      },
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncConflict": "Konflikt: Daten auf GitHub sind neuer oder fremd",
+  "syncLoginFailed": "GitHub-Login fehlgeschlagen (HTTP {code})",
+  "@syncLoginFailed": {
+    "placeholders": {
+      "code": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncNoClientId": "githubClientId in lib/sync.dart ist nicht gesetzt (siehe README).",
+  "syncCodeExpired": "Code abgelaufen, bitte neu anmelden.",
+  "syncDenied": "Anmeldung abgelehnt.",
+  "syncLoginError": "GitHub-Login: {error}",
+  "@syncLoginError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncDone": "Synchronisiert {time}",
+  "@syncDone": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncError": "Fehler {time}: {error}",
+  "@syncError": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      },
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncExpired": "Anmeldung abgelaufen, bitte neu anmelden",
+  "syncNoWrite": "Keine Schreibrechte – hat FerroLog Zugriff auf das Repo?",
+  "syncNotFound": "Repo nicht gefunden – hat FerroLog Zugriff darauf?",
+  "recapRecord": "Neuer Rekord! 🏆",
+  "recapAllDone": "Alles geschafft! 💪",
+  "recapBackoff": "nach der Pause −{pct} %",
+  "@recapBackoff": {
+    "placeholders": {
+      "pct": {
+        "type": "Object"
+      }
+    }
+  },
+  "recapVolume": "Volumen",
+  "recapHeaviest": "Schwerster",
+  "recapDuration": "Dauer",
+  "recapTitle": "Zusammenfassung",
+  "editTraining": "Training bearbeiten",
+  "recapNextWeight": "  Gewicht fürs nächste Mal",
+  "recapHowWasIt": "Wie war’s?",
+  "moodBad": "Schlecht",
+  "moodOkay": "Okay",
+  "moodGood": "Gut",
+  "bodyWeight": "Körpergewicht ({unit})",
+  "@bodyWeight": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "bodyWeightStale": "Zuletzt vor {days} Tagen eingetragen. Einmal im Monat hält die Statistik aktuell.",
+  "@bodyWeightStale": {
+    "placeholders": {
+      "days": {
+        "type": "Object"
+      }
+    }
+  },
+  "optional": "Optional",
+  "bodyWeightSame": "Wie zuletzt? ± übernimmt den Wert.",
+  "recapAddNote": "Notiz: Schlaf, Alkohol, Stress …",
+  "recapCircumstances": "Umstände",
+  "recapNoteHint": "Sonst noch was? (optional)",
+  "done": "Fertig",
+  "editDayHelp": "Tag des Trainings",
+  "next": "Weiter",
+  "editStartHelp": "Beginn",
+  "ok": "OK",
+  "discardChanges": "Änderungen verwerfen?",
+  "editStartAt": "{date} · Beginn {time}",
+  "@editStartAt": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      },
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "cardioGoal": "Cardio · Ziel {goal}",
+  "@cardioGoal": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "insteadOf": "statt {name}",
+  "@insteadOf": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "notDone": "Nicht gemacht",
+  "rirQuestionShort": "Gingen noch",
+  "save": "Speichern",
+  "editReplans": "Die Plan-Gewichte werden neu berechnet.",
+  "editHistoryOnly": "Ältere Trainings ändern nur Verlauf und Statistik, nicht den Plan.",
+  "less": "Weniger",
+  "more": "Mehr",
+  "setOfGoal": "Satz {n} von {total} · Ziel {goal}",
+  "@setOfGoal": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "cardWeekGoal": "WOCHENZIEL",
+  "cardSkipped": "AUSGELASSEN · LETZTE 4 WOCHEN",
+  "cardBalance": "BALANCE · LETZTE 28 TAGE",
+  "cardPlateau": "PLATEAU",
+  "cardAllGood": "Alles im Lot",
+  "cardSeeStats": " · Statistik ansehen",
+  "cardTitle": "Dein Training",
+  "cardFromStats": "aus deiner Statistik",
+  "cardWhyWhat": "Warum und was tun →",
+  "cardWhy": "WARUM",
+  "cardAdvice": "EMPFEHLUNG",
+  "fixMoveUp": "In {workout} vorziehen",
+  "@fixMoveUp": {
+    "placeholders": {
+      "workout": {
+        "type": "Object"
+      }
+    }
+  },
+  "fixDropSet": "1 Satz weniger {exercise}",
+  "@fixDropSet": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      }
+    }
+  },
+  "fixInEditor": "Im Editor anpassen",
+  "later": "Später",
+  "sourceBalance": "Balance in der Statistik ansehen",
+  "sourceWeeks": "Wochen in der Statistik ansehen",
+  "sourceExercise": "{exercise} in der Statistik ansehen",
+  "@sourceExercise": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      }
+    }
+  },
+  "sourceHistory": "Im Verlauf ansehen",
+  "fixMovedUp": "{exercise} in {workout} vorgezogen",
+  "@fixMovedUp": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      },
+      "workout": {
+        "type": "Object"
+      }
+    }
+  },
+  "setsCount": "{n, plural, =1{1 Satz} other{{n} Sätze}}",
+  "@setsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "fixDroppedSet": "{exercise} in {workout}: jetzt {sets}",
+  "@fixDroppedSet": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      },
+      "workout": {
+        "type": "Object"
+      },
+      "sets": {
+        "type": "Object"
+      }
+    }
+  },
+  "undo": "Rückgängig",
+  "finishTrainingFirst": "Erst das laufende Training beenden",
+  "planTaken": "Plan übernommen",
+  "fileUnreadable": "Die Datei ließ sich nicht lesen: {error}",
+  "@fileUnreadable": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "planPasteHint": "Füg den JSON-Codeblock aus dem Chat ein oder öffne ihn als Datei. Vor dem Speichern siehst du jede Änderung.",
+  "openFile": "Datei öffnen (.json, .txt)",
+  "check": "Prüfen",
+  "changeNew": "Neu",
+  "changeRemoved": "Fällt weg",
+  "changeChanged": "Geändert",
+  "changeSame": "Unverändert",
+  "planFromAi": "Plan von KI",
+  "planStale": "Seit dem Export hast du trainiert",
+  "planStaleHint": "Der Plan beruht auf dem Stand vom {date}. Die Gewichte können veraltet sein.",
+  "@planStaleHint": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "planEmpty": "Der Plan ändert nichts an deinen Workouts.",
+  "planUnchanged": "Unverändert: {names}",
+  "@planUnchanged": {
+    "placeholders": {
+      "names": {
+        "type": "Object"
+      }
+    }
+  },
+  "planKeepsTrainings": "Deine Trainings bleiben, wie sie sind. Nach dem Übernehmen kannst du es einmal rückgängig machen.",
+  "takeOver": "Übernehmen",
+  "movedTo": "Jetzt an Platz {n}",
+  "@movedTo": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "front": "Vorne",
+  "back": "Hinten",
+  "muscleChest": "Brust",
+  "muscleShoulders": "Schultern",
+  "muscleTriceps": "Trizeps",
+  "muscleBiceps": "Bizeps",
+  "muscleForearms": "Unterarme",
+  "muscleLats": "Latissimus",
+  "muscleMiddleBack": "Mittlerer Rücken",
+  "muscleLowerBack": "Unterer Rücken",
+  "muscleTraps": "Trapez",
+  "muscleNeck": "Nacken",
+  "muscleAbdominals": "Bauch",
+  "muscleQuadriceps": "Quadrizeps",
+  "muscleHamstrings": "Beinbeuger",
+  "muscleGlutes": "Gesäß",
+  "muscleCalves": "Waden",
+  "muscleAdductors": "Adduktoren",
+  "muscleAbductors": "Abduktoren",
+  "groupChest": "Brust",
+  "groupUpperBack": "Oberer Rücken",
+  "groupShoulders": "Schultern",
+  "groupLats": "Latissimus",
+  "groupFrontDelts": "Vordere Schulter",
+  "groupRearDelts": "Hintere Schulter",
+  "groupQuads": "Quadrizeps",
+  "groupHamstrings": "Hintere Oberschenkel",
+  "groupInternalRot": "Innenrotation",
+  "groupExternalRot": "Außenrotation",
+  "groupAbs": "Bauch",
+  "groupLowerBack": "Unterer Rücken",
+  "objChest": "die Brust",
+  "objUpperBack": "den oberen Rücken",
+  "objShoulders": "die Schultern",
+  "objLats": "den Latissimus",
+  "objFrontDelts": "die vordere Schulter",
+  "objRearDelts": "die hintere Schulter",
+  "objQuads": "den Quadrizeps",
+  "objHamstrings": "die hinteren Oberschenkel",
+  "objInternalRot": "die Innenrotation",
+  "objExternalRot": "die Außenrotation",
+  "objAbs": "den Bauch",
+  "objLowerBack": "den unteren Rücken",
+  "sidePush": "Drücken",
+  "sideRow": "Rudern",
+  "sideOverhead": "Über Kopf drücken",
+  "sidePullUps": "Klimmzüge, Latzug",
+  "sideFrontDelts": "Vordere Schulter",
+  "sideRearDelts": "hintere Schulter",
+  "sideQuads": "Quadrizeps",
+  "sideHamstrings": "hintere Oberschenkel",
+  "sideInternalRot": "Innenrotation",
+  "sideExternalRot": "Außenrotation",
+  "sideAbs": "Bauch",
+  "sideLowerBack": "unterer Rücken",
+  "notePressHalf": "Drückübungen zählen halb",
+  "noteHingeSquatHalf": "Kreuzheben und Kniebeuge zählen halb",
+  "ratioRowBench": "Rudern : Bankdrücken",
+  "ratioHingeSquat": "Kreuzheben : Kniebeuge",
+  "weekDaysLeft": "noch {n} Tage",
+  "@weekDaysLeft": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "weekTomorrowLast": "morgen ist der letzte Tag",
+  "weekTodayLast": "heute ist der letzte Tag",
+  "weekTitle": "{n, plural, =1{Noch 1 Training diese Woche} other{Noch {n} Trainings diese Woche}}",
+  "@weekTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "weekEvidence": "{done} von {goal} geschafft, {when}",
+  "@weekEvidence": {
+    "placeholders": {
+      "done": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      },
+      "when": {
+        "type": "Object"
+      }
+    }
+  },
+  "weekWhy": "Dein Wochenziel sind {goal} Trainings.",
+  "@weekWhy": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "weekAdviceDays": "Mit einem Training in den nächsten Tagen bleibt die Serie.",
+  "weekAdviceTomorrow": "Mit einem Training morgen bleibt die Serie.",
+  "weekAdviceToday": "Mit einem Training heute bleibt die Serie.",
+  "skippedEndAlways": ", jedes Mal als letzte Übung",
+  "skippedEndMostly": ", meist als letzte Übung",
+  "skippedConsequence": " Folge für die Balance: {evidence}.",
+  "@skippedConsequence": {
+    "placeholders": {
+      "evidence": {
+        "type": "Object"
+      }
+    }
+  },
+  "skippedTitle": "{name} {n}× ausgelassen",
+  "@skippedTitle": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "skippedEvidence": "In 4 Wochen{end}",
+  "@skippedEvidence": {
+    "placeholders": {
+      "end": {
+        "type": "Object"
+      }
+    }
+  },
+  "skippedWhy": "In {n} von {of} Trainings komplett weggelassen{end}.{consequence}",
+  "@skippedWhy": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "of": {
+        "type": "Object"
+      },
+      "end": {
+        "type": "Object"
+      },
+      "consequence": {
+        "type": "Object"
+      }
+    }
+  },
+  "skippedAdviceMove": "{name} vor die Zusatzübungen ziehen. Gleiches Volumen, es fällt nur nicht mehr hinten runter.",
+  "@skippedAdviceMove": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "skippedAdvice": "{name} früher im Training einplanen oder bewusst aus dem Plan nehmen.",
+  "@skippedAdvice": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "remedyRearDelts": "Face Pulls oder Reverse Flys",
+  "remedyAbs": "Plank oder Ab Wheel",
+  "remedyNoteExternal": " Face Pulls decken beides ab: Außenrotation und hintere Schulter. Am Ende eines Oberkörper-Trainings einplanen.",
+  "remedyNoteRearDelts": " Face Pulls decken beides ab: hintere Schulter und Außenrotation.",
+  "balanceAdviceEarlier": "Geplant ist es ausgeglichen, aber Sätze fallen weg. {side} früher im Training einplanen.",
+  "@balanceAdviceEarlier": {
+    "placeholders": {
+      "side": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceAdviceDrop": "Ein Satz weniger {exercise} in {workout} gleicht aus, ohne mehr Arbeit.",
+  "@balanceAdviceDrop": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      },
+      "workout": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceAdviceKeep": "Grundübungen bleiben wie geplant, {exercise} nicht auslassen und weiter steigern.",
+  "@balanceAdviceKeep": {
+    "placeholders": {
+      "exercise": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceAdviceNothing": "Nichts im Plan trainiert {group} direkt.",
+  "@balanceAdviceNothing": {
+    "placeholders": {
+      "group": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceAdviceSuggest": "Nichts im Plan trainiert {group} direkt, zum Beispiel {suggest}.{note}",
+  "@balanceAdviceSuggest": {
+    "placeholders": {
+      "group": {
+        "type": "Object"
+      },
+      "suggest": {
+        "type": "Object"
+      },
+      "note": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceEvidence": "{ratio} · {a} {aValue} : {b} {bValue} Sätze/Woche",
+  "@balanceEvidence": {
+    "placeholders": {
+      "ratio": {
+        "type": "Object"
+      },
+      "a": {
+        "type": "Object"
+      },
+      "aValue": {
+        "type": "Object"
+      },
+      "b": {
+        "type": "Object"
+      },
+      "bValue": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceWhy": "{a} gegen {b}, Richtwert {range}. Gezählt werden die gemachten Sätze der letzten 28 Tage{note}.",
+  "@balanceWhy": {
+    "placeholders": {
+      "a": {
+        "type": "Object"
+      },
+      "b": {
+        "type": "Object"
+      },
+      "range": {
+        "type": "Object"
+      },
+      "note": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceTitle": "{group} kommt zu kurz",
+  "@balanceTitle": {
+    "placeholders": {
+      "group": {
+        "type": "Object"
+      }
+    }
+  },
+  "guideFrom": "ab {pct} %",
+  "@guideFrom": {
+    "placeholders": {
+      "pct": {
+        "type": "Object"
+      }
+    }
+  },
+  "plateauDeloadAfter": "Automatischer Deload nach {n} Fehlschlägen in Folge (bisher {fails}).",
+  "@plateauDeloadAfter": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "fails": {
+        "type": "Object"
+      }
+    }
+  },
+  "plateauDeloadOff": "Automatischer Deload ist aus.",
+  "plateauTitle": "{name} steht bei {weight}",
+  "@plateauTitle": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "plateauEvidence": "{n} Trainings ohne Steigerung",
+  "@plateauEvidence": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "plateauLighter": "Zuletzt einen Satz leichter gemacht, das hält das Gewicht.",
+  "plateauReserve": "Zuletzt gingen noch {n} Wiederholungen.",
+  "@plateauReserve": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "plateauReserveMany": "4 oder mehr",
+  "plateauLimit": "Die letzten 2 Trainings am Limit, keine Wiederholung mehr übrig.",
+  "plateauAdviceTechnique": "Das Gewicht ist nicht die Grenze: Technik, Konzentration und genug Pause prüfen und die Sätze ausreizen. Ein Deload ist nicht nötig.",
+  "plateauAdviceDeload": "Zweimal am Limit: ein Deload um etwa 10 % hilft, danach wieder aufbauen.",
+  "plateauAdviceHold": "Gewicht halten, auf saubere Technik und genug Pause achten. Klappt es in 2 Trainings nicht, kann ein Deload helfen.",
+  "recordTitle": "Rekord: {name} {weight}",
+  "@recordTitle": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "recordEvidence": "Schwerer als je zuvor",
+  "gainTitle": "Fortschritt: {name} {from} → {to}",
+  "@gainTitle": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "from": {
+        "type": "Object"
+      },
+      "to": {
+        "type": "Object"
+      }
+    }
+  },
+  "since": "Seit {date}",
+  "@since": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "milestoneTitle": "{n}. Training geschafft",
+  "@milestoneTitle": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "monthTitle": "Rekordmonat: {n} Trainings",
+  "@monthTitle": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "monthEvidence": "So viele wie noch nie",
+  "programFullBodyStrength": "Full Body Kraft",
+  "programFullBodyNote": "Jedes Training gleich, 1–3× pro Woche, 48–72 h Erholung dazwischen. 8–12 Wochen dabei bleiben.",
+  "programStrongLiftsNote": "A und B abwechselnd, 3× pro Woche.",
+  "programPpl": "Push/Pull/Beine",
+  "dayLegs": "Beine",
+  "programUpperLower": "Ober/Unter",
+  "dayUpper": "Oberkörper",
+  "dayLower": "Unterkörper",
+  "programFullBody": "Ganzkörper",
+  "replaceExercisesAsk": "Deine Änderungen an der Übungsliste ersetzen?",
+  "newWorkout": "Neues Workout",
+  "editWorkout": "Workout bearbeiten",
+  "deleteWorkout": "Workout löschen",
+  "deleteWorkoutAsk": "„{name}“ löschen? Der Verlauf bleibt erhalten.",
+  "@deleteWorkoutAsk": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "name": "Name",
+  "example": "z. B. {value}",
+  "@example": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "workoutA": "Workout A",
+  "fixedSteps": "{n, plural, =1{1 Übung steigert in festen Schritten} other{{n} Übungen steigern in festen Schritten}}",
+  "@fixedSteps": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "allAuto": "Alle automatisch",
+  "exercise": "Übung",
+  "cardioLine": "Cardio · {goal}",
+  "@cardioLine": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "auto": "automatisch",
+  "onSuccess": "+{weight} bei Erfolg",
+  "@onSuccess": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "removeExercise": "Übung entfernen",
+  "template": "Vorlage",
+  "custom": "Custom",
+  "customHint": "Leg deine Übungen unten mit „+ Übung“ an.",
+  "transferAsk": "Verlauf von „{from}“ auf „{to}“ übertragen?",
+  "@transferAsk": {
+    "placeholders": {
+      "from": {
+        "type": "Object"
+      },
+      "to": {
+        "type": "Object"
+      }
+    }
+  },
+  "transferHint": "Übertragen: Statistik, Rekorde und Trainings laufen unter „{to}“ weiter, auch in anderen Workouts. Neue Übung: „{to}“ beginnt ohne Verlauf, „{from}“ bleibt im Verlauf, wie es war.",
+  "@transferHint": {
+    "placeholders": {
+      "to": {
+        "type": "Object"
+      },
+      "from": {
+        "type": "Object"
+      }
+    }
+  },
+  "newExercise": "Neue Übung",
+  "transfer": "Übertragen",
+  "set": "Satz",
+  "setOf": "Satz {n} von {total}",
+  "@setOf": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      }
+    }
+  },
+  "seconds": "Sekunden",
+  "secondsAtLeast": "Sekunden mindestens",
+  "reps": "Wiederholungen",
+  "repsAtLeast": "Wdh. mindestens",
+  "weightIn": "Gewicht ({unit})",
+  "@weightIn": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "assistHint": "Unter 0: Unterstützung, z. B. am Klimmzug-Gerät. Steigern heißt weniger Hilfe, Richtung 0.",
+  "thisSet": "Dieser Satz",
+  "allSets": "Alle Sätze",
+  "deleteSet": "Satz löschen",
+  "close": "Schließen",
+  "muscles": "Muskeln",
+  "unknownExercise": "Unbekannte Übung: Ohne Muskeln fehlt sie in Balance und Muskelkarte. Bitte antippen, was sie trainiert.",
+  "musclesHint": "Antippen: Hauptmuskel ✓ → hilft mit ½ → aus. Für die Statistik.",
+  "addExercise": "Übung hinzufügen",
+  "editExercise": "Übung bearbeiten",
+  "add": "Hinzufügen",
+  "searchExercise": "Übung suchen oder eigene eingeben",
+  "duplicateExercise": "Steht schon in diesem Workout. Für mehr Sätze oder andere Gewichte pro Satz die vorhandene bearbeiten.",
+  "noMatch": "Kein Treffer – eigener Name wird übernommen",
+  "defaultsFrom": "Standardwerte für {name} übernommen",
+  "@defaultsFrom": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "strength": "Kraft",
+  "cardio": "Cardio",
+  "durationGoal": "Dauer",
+  "distance": "Distanz",
+  "goalIn": "Ziel ({unit})",
+  "@goalIn": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "goalMinutes": "Ziel (Min)",
+  "withWeight": "Mit Gewicht",
+  "withoutWeight": "Ohne Gewicht",
+  "time": "Zeit",
+  "sets": "Sätze",
+  "tapSetToChange": "Satz antippen zum Ändern",
+  "thisTrainingTap": "Dieses Training · antippen zum Ändern",
+  "nextTrainingTap": "Nächstes Training · antippen zum Ändern",
+  "timeRange": "Zeit-Spanne",
+  "repRange": "Wiederholungs-Spanne",
+  "rangeOffTime": "Aus · feste Zeit",
+  "rangeOffReps": "Aus · feste Wiederholungen",
+  "rangeOnSeconds": "{sets} · Gewicht steigt erst, wenn alle Sätze {top} s schaffen",
+  "@rangeOnSeconds": {
+    "placeholders": {
+      "sets": {
+        "type": "Object"
+      },
+      "top": {
+        "type": "Object"
+      }
+    }
+  },
+  "rangeOnReps": "{sets} · Gewicht steigt erst, wenn alle Sätze {top} Wdh. schaffen",
+  "@rangeOnReps": {
+    "placeholders": {
+      "sets": {
+        "type": "Object"
+      },
+      "top": {
+        "type": "Object"
+      }
+    }
+  },
+  "upToSeconds": "Bis Sekunden",
+  "upToReps": "Bis Wiederholungen",
+  "rest": "Pause",
+  "minSecOrSec": "min:s oder s",
+  "afterMissedSet": "Nach nicht geschafftem Satz",
+  "sameAsAbove": "Wie oben",
+  "adjustWeight": "Gewicht anpassen",
+  "automatic": "Automatisch",
+  "fixed": "Fest",
+  "loadStep": "Ladestufe",
+  "increaseOnSuccess": "Steigerung bei Erfolg",
+  "increaseOn": "+{weight}, wenn alle Sätze geschafft",
+  "@increaseOn": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "offWeightStays": "Aus · Gewicht bleibt gleich",
+  "decreaseOnMiss": "Senkung bei Misserfolg",
+  "decreaseOn": "−{weight} nach {n}× nicht geschafft",
+  "@decreaseOn": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "decreaseAfter": "Senken nach Fehlversuchen in Folge",
+  "summaryCardio": "{name}: Ziel {goal}. Im Training startest du die Stoppuhr mit einem Tipp.",
+  "@summaryCardio": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "planNoWeight": "{sets} ohne Gewicht",
+  "@planNoWeight": {
+    "placeholders": {
+      "sets": {
+        "type": "Object"
+      }
+    }
+  },
+  "planWithWeight": "{sets} mit {weight}",
+  "@planWithWeight": {
+    "placeholders": {
+      "sets": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryTraining": "{name}: {plan}. Nur für dieses Training, der Plan bleibt, wie er ist.",
+  "@summaryTraining": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "plan": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryPlain": "{name}: {plan}.",
+  "@summaryPlain": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "plan": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryAuto": "{name}: {plan}. Gewicht passt sich automatisch an.",
+  "@summaryAuto": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "plan": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryUp": "Bei Erfolg +{weight}.",
+  "@summaryUp": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryDown": "Nach {n}× Misserfolg −{weight}.",
+  "@summaryDown": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryFixed": "Gewicht wird nicht automatisch angepasst.",
+  "autoRuleDone": "Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es (beim zweiten Mal in Folge ein halber Schritt).",
+  "autoRuleBridge": "Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.",
+  "autoRuleRange": "Erst wenn alle Sätze oben in der Spanne sind.",
+  "autoRuleMiss": "Nicht geschafft: Gewicht bleibt, nach {n}× in Folge etwa −10 % und danach kleinere Schritte, die mit Reserve wieder wachsen.",
+  "@autoRuleMiss": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "autoRuleBadDay": "Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.",
+  "autoNow": "Gerade +{pct} % pro Training · Ladestufe {step} ({source})",
+  "@autoNow": {
+    "placeholders": {
+      "pct": {
+        "type": "Object"
+      },
+      "step": {
+        "type": "Object"
+      },
+      "source": {
+        "type": "Object"
+      }
+    }
+  },
+  "sourcePlates": "deine Scheiben",
+  "sourceLearned": "aus deinen Gewichten",
+  "sourceGuess": "Startwert, lernt mit",
+  "sourceSet": "eingestellt",
+  "own": "Eigene",
+  "leftAbout": "noch {about}",
+  "@leftAbout": {
+    "placeholders": {
+      "about": {
+        "type": "Object"
+      }
+    }
+  },
+  "doneAround": "fertig gegen {time}",
+  "@doneAround": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "alreadyInTraining": "Schon im Training",
+  "kindStays": "Nach dem ersten Satz bleibt die Art, wie sie ist",
+  "moveUp": "Nach oben",
+  "moveDown": "Nach unten",
+  "remove": "Entfernen",
+  "noSetsDiscard": "Keine Sätze geloggt. Training verwerfen?",
+  "notAllSetsFinish": "Nicht alle Sätze erledigt. Trotzdem beenden?",
+  "discard": "Verwerfen",
+  "finish": "Beenden",
+  "stripPickUp": "AUFNEHMEN",
+  "stripHold": "HALTEN",
+  "holdGoal": "Ziel {goal} s",
+  "@holdGoal": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "stop": "Stopp",
+  "pause": "Anhalten",
+  "resumeRest": "Weiter",
+  "restart": "Neu starten",
+  "restOf": "von {time}",
+  "@restOf": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "restGoal": "Ziel {time}",
+  "@restGoal": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "stripPaused": "ANGEHALTEN",
+  "stripRest": "PAUSE",
+  "stripSoon": "GLEICH WEITER",
+  "stripGo": "LOS",
+  "stripLate": "ÜBERZOGEN",
+  "rirQuestion": "Wie viele gingen noch?",
+  "restLine": "Pause {time}",
+  "@restLine": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "now": "JETZT",
+  "warmup": "Aufwärmen: {sets}",
+  "@warmup": {
+    "placeholders": {
+      "sets": {
+        "type": "Object"
+      }
+    }
+  },
+  "startStopwatch": " Start",
+  "enterDistance": "Distanz eintragen",
+  "rangeDone": "{goal} geschafft · nächstes Mal schwerer",
+  "@rangeDone": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "rangeIncreaseAt": "Steigerung bei {goal}",
+  "@rangeIncreaseAt": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "rangeAllTop": "Steigerung bei {goal} · bisher alle oben",
+  "@rangeAllTop": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "rangeMissingReps": "Steigerung bei {goal} · noch {n} Wdh.",
+  "@rangeMissingReps": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "rangeMissingSeconds": "Steigerung bei {goal} · noch {n} s",
+  "@rangeMissingSeconds": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "weightBetween": "Gewicht zwischen {min} und {max}",
+  "@weightBetween": {
+    "placeholders": {
+      "min": {
+        "type": "Object"
+      },
+      "max": {
+        "type": "Object"
+      }
+    }
+  },
+  "applyTo": "Übernehmen für",
+  "openSets": "Offene Sätze",
+  "minutesUnit": "Min",
+  "distanceOptional": "Distanz (optional)",
+  "hintsCount": "{n, plural, =1{1 Hinweis} other{{n} Hinweise}}",
+  "@hintsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "pairsBalanced": "  · {ok} von {total} ausgewogen",
+  "@pairsBalanced": {
+    "placeholders": {
+      "ok": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      }
+    }
+  },
+  "allPairsBalanced": "Alle Muskelpaare ausgewogen",
+  "balanceScaleHint": "Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.",
+  "strengthTrend": "Kraft im Verlauf",
+  "trendUp": "↗ steigt",
+  "trendDown": "↘ sinkt",
+  "trendFlat": "→ stabil",
+  "strengthTrendHint": "Verhältnis aus dem geschätzten 1RM über 90 Tage. Zeigt deine Entwicklung, keinen Vergleich mit Literaturwerten.",
+  "balanceDetail": "{a} {aSets} · {b} {bSets} Sätze pro Woche{note}. {group} bei {ratio}, Richtwert {range}.",
+  "@balanceDetail": {
+    "placeholders": {
+      "a": {
+        "type": "Object"
+      },
+      "aSets": {
+        "type": "Object"
+      },
+      "b": {
+        "type": "Object"
+      },
+      "bSets": {
+        "type": "Object"
+      },
+      "note": {
+        "type": "Object"
+      },
+      "group": {
+        "type": "Object"
+      },
+      "ratio": {
+        "type": "Object"
+      },
+      "range": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanced": "✓ Ausgewogen",
+  "verdictSlightly": "{strong} etwas mehr trainiert als {weak}",
+  "@verdictSlightly": {
+    "placeholders": {
+      "strong": {
+        "type": "Object"
+      },
+      "weak": {
+        "type": "Object"
+      }
+    }
+  },
+  "verdictClearly": "{strong} deutlich mehr trainiert als {weak}",
+  "@verdictClearly": {
+    "placeholders": {
+      "strong": {
+        "type": "Object"
+      },
+      "weak": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceInfoTitle": "Balance: was dahintersteckt",
+  "infoProven": "Was belegt ist",
+  "infoProven1": "Mehr Sätze pro Muskel und Woche bringen mehr Muskelwachstum, abgestuft nach unter 5, 5–9 und 10+ Sätzen [1].",
+  "infoProven2": "Hilfsmuskeln anteilig zu zählen bildet das Volumen genauer ab: 5 Sätze Curls und 5 Sätze Rudern ergeben 7,5 Bizeps-Sätze [2].",
+  "infoUncertain": "Was unsicher ist",
+  "infoUncertain1": "Ob Ungleichgewichte zwischen Drücken und Ziehen das Verletzungsrisiko erhöhen, ist nicht untersucht.",
+  "infoUncertain2": "Für das Verhältnis Beinbeuger zu Quadrizeps gibt es nur sehr begrenzte Evidenz als Risikofaktor [3].",
+  "infoUncertain3": "Deshalb zeigt FerroLog Hinweise, keine Warnungen.",
+  "infoGuides": "Woher die Richtwerte kommen",
+  "infoGuides1": "Drücken : Ziehen 1:1 bis 1:1,5 ist eine Trainerempfehlung, kein Studienwert. Regeln wie 2:1 oder 3:1 sind Faustregeln [4].",
+  "infoGuides2": "Beinbeuger ab 60 % lehnt sich an Labormessungen an (H:Q > 0,6) [5]. Die stammen aus der Isokinetik und lassen sich nicht direkt auf Kniebeuge und Kreuzheben übertragen.",
+  "infoGuides3": "Freizeitsportler drücken in Tests 1,5- bis 2,7-mal so viel, wie sie ziehen [6].",
+  "infoGuides4": "Bei der Schulter liegt die Außenrotation in Kraftmessungen bei 86–99 % der Innenrotation [7]. Für Sätze gibt es keinen Studienwert, der Richtwert ist bewusst niedrig angesetzt.",
+  "infoGuides5": "Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.",
+  "infoMath": "Wie FerroLog rechnet",
+  "infoMath1": "Jede Übung zählt voll für ihre Hauptgruppe und halb für Hilfsmuskeln.",
+  "infoMath2": "Sätze pro Woche, gemittelt über die letzten 28 Tage, je Paar als Verhältnis.",
+  "infoMath3": "Kraftverhältnisse (geschätztes 1RM) nur als Verlauf, nicht gegen Literaturwerte.",
+  "infoMath4": "Alle Richtwerte kannst du anpassen.",
+  "infoScale": "So liest du die Waage",
+  "infoScale1": "Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.",
+  "infoScale2": "Der Richtwert stammt aus der Trainingspraxis und ist keine medizinische Grenze. Hilfsmuskeln zählen halb.",
+  "adjustGuides": "Richtwerte anpassen",
+  "sources": "QUELLEN",
+  "guides": "Richtwerte",
+  "guidesHint": "Seite rechts im Verhältnis zur Seite links, in Prozent der Sätze.",
+  "resetDefaults": "Auf Standard zurücksetzen",
+  "sourceShoulderNorms": "Handdynamometer-Normwerte, Schulterrotation",
+  "sourceTrunk": "Rumpf-Ausdauer Flexion/Extension (MMU)",
+  "piNoJson": "Kein JSON gefunden. Kopier den ganzen Codeblock aus dem Chat.",
+  "piBrokenJson": "Das JSON ist unvollständig oder fehlerhaft: {error}",
+  "@piBrokenJson": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "piIsExport": "Das ist ein Export mit allen Daten, kein Plan. Nimm den JSON-Block aus der Antwort der KI.",
+  "piNotPlan": "Das ist kein FerroLog-Plan (app \"ferrolog\", kind \"plan\" fehlt).",
+  "piVersion": "Version {v} kennt diese App nicht.",
+  "@piVersion": {
+    "placeholders": {
+      "v": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNoWorkouts": "Der Plan enthält keine Workouts.",
+  "piWorkoutNotObject": "Workout {n} ist kein Objekt.",
+  "@piWorkoutNotObject": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "piWorkoutTwice": "Workout {id} steht zweimal im Plan.",
+  "@piWorkoutTwice": {
+    "placeholders": {
+      "id": {
+        "type": "Object"
+      }
+    }
+  },
+  "piDeleteMissing": "Das Workout zum Löschen ({name}) gibt es nicht.",
+  "@piDeleteMissing": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "piWorkoutNoName": "Workout {n} hat keinen Namen.",
+  "@piWorkoutNoName": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNoExercises": "„{name}“ hat keine Übungen.",
+  "@piNoExercises": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "piExerciseWhere": "„{name}“, Übung {n}",
+  "@piExerciseWhere": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "piExerciseTwice": "„{name}“ hat „{exercise}“ zweimal. Mehr Sätze oder setWeights statt einer zweiten Übung.",
+  "@piExerciseTwice": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "exercise": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNotObject": "{where} ist kein Objekt.",
+  "@piNotObject": {
+    "placeholders": {
+      "where": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNoName": "{where} hat keinen Namen.",
+  "@piNoName": {
+    "placeholders": {
+      "where": {
+        "type": "Object"
+      }
+    }
+  },
+  "piQuoted": "„{name}“",
+  "@piQuoted": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNotInt": "{label}: \"{key}\" fehlt oder ist keine ganze Zahl.",
+  "@piNotInt": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "key": {
+        "type": "Object"
+      }
+    }
+  },
+  "piNoWeight": "{label}: \"weight\" fehlt.",
+  "@piNoWeight": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "piBadType": "{label}: Art \"{type}\" gibt es nicht.",
+  "@piBadType": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "type": {
+        "type": "Object"
+      }
+    }
+  },
+  "piBadSets": "{label}: Sätze oder Wiederholungen ungültig.",
+  "@piBadSets": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "piSetWeights": "{label}: setWeights passt nicht zu {n} Sätzen.",
+  "@piSetWeights": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "piSetReps": "{label}: setReps passt nicht zu {n} Sätzen.",
+  "@piSetReps": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "piMaxReps": "{label}: maxReps muss über reps liegen.",
+  "@piMaxReps": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "piMinWeight": "{label}: Gewicht unter {min} kg.",
+  "@piMinWeight": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "min": {
+        "type": "Object"
+      }
+    }
+  },
+  "piBadMuscle": "{label}: Muskel \"{muscle}\" gibt es nicht.",
+  "@piBadMuscle": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      },
+      "muscle": {
+        "type": "Object"
+      }
+    }
+  },
+  "aspectName": "Name",
+  "aspectKind": "Art",
+  "aspectWeight": "Gewicht",
+  "aspectIncrease": "Steigerung",
+  "aspectDeload": "Entlastung",
+  "off": "aus",
+  "deloadAfter": "−{weight} nach {n} Fehlversuchen",
+  "@deloadAfter": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      },
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "restAfterMiss": "nach Fehlversuch {s} s",
+  "@restAfterMiss": {
+    "placeholders": {
+      "s": {
+        "type": "Object"
+      }
+    }
+  },
+  "timedKind": "auf Zeit",
+  "noWeightShort": "ohne Gewicht",
+  "days30": "30 Tage",
+  "days90": "90 Tage",
+  "year1": "1 Jahr",
+  "allTime": "Gesamt",
+  "statsEmpty": "Statistiken gibt’s nach dem ersten Training.",
+  "noTrainingInPeriod": "Kein Training in diesem Zeitraum.",
+  "background": "Hintergrund",
+  "strengthProgress": "Kraftentwicklung",
+  "chartWeightHint": "Arbeitsgewicht, wie es die Progression vorgibt; Zacken nach unten sind Deloads. ▲ = Rückschritt.",
+  "chartE1rmHint": "Veränderung des geschätzten 1RM (aus allen Sätzen) seit dem ersten Training im Zeitraum, der Baseline. ▲ = Rückschritt: weniger geschafft als zuletzt oder als schon einmal bei diesem Gewicht.",
+  "exercises": "Übungen",
+  "statusLast4Weeks": "Status: letzte 4 Wochen",
+  "exercisesCount": "{n, plural, =1{1 Übung} other{{n} Übungen}}",
+  "@exercisesCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "stuckCount": "{n, plural, =1{1 hängt fest} other{{n} hängen fest}}",
+  "@stuckCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "perWeek": "Pro Woche",
+  "goalWeeksHit": "Ziel {goal} · {hit} von {weeks} Wochen",
+  "@goalWeeksHit": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      },
+      "hit": {
+        "type": "Object"
+      },
+      "weeks": {
+        "type": "Object"
+      }
+    }
+  },
+  "avgDuration": "Ø Dauer",
+  "volumeVsBefore": "{delta} % zum Zeitraum davor",
+  "@volumeVsBefore": {
+    "placeholders": {
+      "delta": {
+        "type": "Object"
+      }
+    }
+  },
+  "withRecord": "Mit Rekord",
+  "xOfY": "{x} von {y}",
+  "@xOfY": {
+    "placeholders": {
+      "x": {
+        "type": "Object"
+      },
+      "y": {
+        "type": "Object"
+      }
+    }
+  },
+  "noNewBest": "kein neues Höchstgewicht",
+  "week": "Woche",
+  "month": "Monat",
+  "trainingsPerWeek": "Trainings pro Woche",
+  "lineGoalWeek": "Linie: Ziel {goal}× pro Woche",
+  "@lineGoalWeek": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineGoalMonth": "Schnitt je Monat · Linie: Ziel {goal}× pro Woche",
+  "@lineGoalMonth": {
+    "placeholders": {
+      "goal": {
+        "type": "Object"
+      }
+    }
+  },
+  "minutesPerTrainingAvg": "Minuten pro Training, Schnitt je {per} · Linie: Schnitt im Zeitraum",
+  "@minutesPerTrainingAvg": {
+    "placeholders": {
+      "per": {
+        "type": "Object"
+      }
+    }
+  },
+  "tonnesPer": "Tonnen je {per}",
+  "@tonnesPer": {
+    "placeholders": {
+      "per": {
+        "type": "Object"
+      }
+    }
+  },
+  "kLbPer": "Tausend lb je {per}",
+  "@kLbPer": {
+    "placeholders": {
+      "per": {
+        "type": "Object"
+      }
+    }
+  },
+  "records": "Rekorde",
+  "recordsPer": "Neue Höchstgewichte je {per}, über alle Übungen",
+  "@recordsPer": {
+    "placeholders": {
+      "per": {
+        "type": "Object"
+      }
+    }
+  },
+  "balanceDaysLabel": "{n} Tage",
+  "@balanceDaysLabel": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "setsPerMuscle": "Sätze je Muskel",
+  "perWeekLower": "pro Woche",
+  "notTrained": "Nicht trainiert: {names}",
+  "@notTrained": {
+    "placeholders": {
+      "names": {
+        "type": "Object"
+      }
+    }
+  },
+  "musclesUnder10": "{n, plural, =1{1 Muskel unter 10 Sätzen} other{{n} Muskeln unter 10 Sätzen}}",
+  "@musclesUnder10": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "tapMuscle": "Tippe auf einen Muskel für seine Übungen",
+  "under5": "unter 5",
+  "over20": "über 20",
+  "muscleBarsHint": "Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.",
+  "musclesNote": "Kraftprogramme wie 5×5 lassen bewusst Muskeln aus. Hilfsmuskeln zählen halb.",
+  "setsPerWeek": "{n} Sätze pro Woche",
+  "@setsPerWeek": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "noExerciseForMuscle": "Keine Übung im Zeitraum trainiert diesen Muskel.",
+  "setsN": "{n} Sätze",
+  "@setsN": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "cardioPerWeek": "Cardio pro Woche",
+  "minutesTitle": "Minuten",
+  "avgMinPerWeek": "Ø {n} Min pro Woche",
+  "@avgMinPerWeek": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineCardioTotal": "{n} · {cardio} gesamt",
+  "@lineCardioTotal": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "cardio": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineSets": "{n} · {sets}",
+  "@lineSets": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "sets": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineSetsUpTo": "{n} · {sets} · bis {weight}",
+  "@lineSetsUpTo": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "sets": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineSetsLast": "{n} · {sets} · zuletzt {weight}",
+  "@lineSetsLast": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "sets": {
+        "type": "Object"
+      },
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "lineVolume": "{n} · Gesamt {volume}",
+  "@lineVolume": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      },
+      "volume": {
+        "type": "Object"
+      }
+    }
+  },
+  "trendNew": "neu",
+  "trendRising": "steigt",
+  "trendSteady": "stabil",
+  "trendStuck": "hängt fest",
+  "mergeWith": "„{name}“ zusammenführen mit",
+  "@mergeWith": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "noOtherExercise": "Keine andere Übung mit Verlauf.",
+  "mergeAsk": "Alle Trainings von „{name}“ heißen danach „{target}“, auch in den Workouts. Das lässt sich nicht rückgängig machen.",
+  "@mergeAsk": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      },
+      "target": {
+        "type": "Object"
+      }
+    }
+  },
+  "mergeMenu": "Mit anderer Übung zusammenführen",
+  "skippedOn": "Ausgelassen am {dates}",
+  "@skippedOn": {
+    "placeholders": {
+      "dates": {
+        "type": "Object"
+      }
+    }
+  },
+  "weight": "Gewicht",
+  "bestE1rm": "Bestes 1RM {weight}",
+  "@bestE1rm": {
+    "placeholders": {
+      "weight": {
+        "type": "Object"
+      }
+    }
+  },
+  "measureWeightHint": "Arbeitsgewicht ({unit}). ▲ = Rückschritt.",
+  "@measureWeightHint": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "measureE1rmHint": "Geschätztes 1RM aus allen Sätzen ({unit}). ▲ = Rückschritt.",
+  "@measureE1rmHint": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "measureVolumeHint": "Volumen: Gewicht × Wiederholungen ({unit}). ▲ = Rückschritt.",
+  "@measureVolumeHint": {
+    "placeholders": {
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "minutesPerTraining": "Minuten pro Training",
+  "cardioTotal": "Gesamt: {minutes} in {trainings}",
+  "@cardioTotal": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      },
+      "trainings": {
+        "type": "Object"
+      }
+    }
+  }
+}

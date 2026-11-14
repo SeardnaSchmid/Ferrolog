@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'edit.dart';
 import 'edit_session.dart';
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'timing.dart';
@@ -83,9 +84,9 @@ class _RecapPageState extends State<RecapPage> {
       _ => null,
     };
     final headline = r.records.isNotEmpty
-        ? 'Neuer Rekord! 🏆'
+        ? tr.recapRecord
         : r.succeeded == s.exercises.length
-            ? 'Alles geschafft! 💪'
+            ? tr.recapAllDone
             : null;
     final records = {for (final (name, _) in r.records) name};
     final heaviest = strength.fold(0.0, (m, e) => e.setsDone > 0 && e.weight > m ? e.weight : m);
@@ -121,7 +122,7 @@ class _RecapPageState extends State<RecapPage> {
           ),
           // The auto mode says why.
           if ([
-            if (l.backoff case final pct?) 'nach der Pause −$pct %',
+            if (l.backoff case final pct?) tr.recapBackoff(pct),
             if (l.progression case final p?) progressionLabel(p, e),
           ].join(', ')
               case final why when why.isNotEmpty)
@@ -153,11 +154,11 @@ class _RecapPageState extends State<RecapPage> {
         );
     final figures = [
       if (r.volume > 0) ...[
-        figure(volumeLabel(r.volume), 'Volumen', delta == null ? null : '${delta >= 0 ? '+' : ''}$delta %',
+        figure(volumeLabel(r.volume), tr.recapVolume, delta == null ? null : '${delta >= 0 ? '+' : ''}$delta %',
             delta != null && delta < 0 ? c.tertiary : c.primary),
-        figure(weightLabel(heaviest), 'Schwerster'),
+        figure(weightLabel(heaviest), tr.recapHeaviest),
       ],
-      if (s.duration case final d? when d.inMinutes > 0) figure(durationLabel(d), 'Dauer'),
+      if (s.duration case final d? when d.inMinutes > 0) figure(durationLabel(d), tr.recapDuration),
     ];
 
     // Big tap targets: a sweaty thumb right after training.
@@ -191,10 +192,10 @@ class _RecapPageState extends State<RecapPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Zusammenfassung'), actions: [
+      appBar: AppBar(title: Text(tr.recapTitle), actions: [
         IconButton(
           icon: const Icon(Icons.edit_outlined),
-          tooltip: 'Training bearbeiten',
+          tooltip: tr.editTraining,
           onPressed: () async {
             final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EditSessionPage(s)));
             if (saved == true && mounted) setState(() => s = store.sessions.where((x) => x.id == s.id).firstOrNull ?? s);
@@ -219,7 +220,7 @@ class _RecapPageState extends State<RecapPage> {
                   (Icons.arrow_downward, c.tertiary),
                 ])
                   Icon(icon, size: 14, color: color),
-                Text('  Gewicht fürs nächste Mal', style: small),
+                Text(tr.recapNextWeight, style: small),
               ]),
             ),
           // The same card as in the history, so a training always looks the same.
@@ -245,21 +246,21 @@ class _RecapPageState extends State<RecapPage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Text('Wie war’s?', style: title),
+                Text(tr.recapHowWasIt, style: title),
                 const SizedBox(height: 10),
                 Row(children: [
-                  moodTile(1, '😣', 'Schlecht'),
+                  moodTile(1, '😣', tr.moodBad),
                   const SizedBox(width: 8),
-                  moodTile(2, '😐', 'Okay'),
+                  moodTile(2, '😐', tr.moodOkay),
                   const SizedBox(width: 8),
-                  moodTile(3, '😄', 'Gut'),
+                  moodTile(3, '😄', tr.moodGood),
                 ]),
                 const SizedBox(height: 20),
                 Center(
                   child: SizedBox(
                     width: 220,
                     // Last time's weight stays a grey placeholder until ± or typing takes it over.
-                    child: BigStepper('Körpergewicht ($unitLabel)', bodyWeight == null ? '' : weightNum(bodyWeight!),
+                    child: BigStepper(tr.bodyWeight(unitLabel), bodyWeight == null ? '' : weightNum(bodyWeight!),
                         () => nudge(-1), () => nudge(1),
                         decimal: true,
                         hint: lastWeight == null ? null : weightNum(lastWeight!),
@@ -270,11 +271,11 @@ class _RecapPageState extends State<RecapPage> {
                 if (bodyWeight == null) ...[
                   const SizedBox(height: 6),
                   if (weightStale case final days?)
-                    Text('Zuletzt vor $days Tagen eingetragen. Einmal im Monat hält die Statistik aktuell.',
+                    Text(tr.bodyWeightStale(days),
                         textAlign: TextAlign.center,
                         style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600))
                   else
-                    Text(lastWeight == null ? 'Optional' : 'Wie zuletzt? ± übernimmt den Wert.',
+                    Text(lastWeight == null ? tr.optional : tr.bodyWeightSame,
                         textAlign: TextAlign.center, style: small),
                 ],
                 const SizedBox(height: 12),
@@ -282,19 +283,19 @@ class _RecapPageState extends State<RecapPage> {
                   Align(
                     child: TextButton.icon(
                       icon: const Icon(Icons.add),
-                      label: const Text('Notiz: Schlaf, Alkohol, Stress …'),
+                      label: Text(tr.recapAddNote),
                       onPressed: () => setState(() => noteOpen = true),
                     ),
                   )
                 else ...[
-                  const Text('Umstände', style: title),
+                  Text(tr.recapCircumstances, style: title),
                   const SizedBox(height: 8),
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     for (final MapEntry(key: tag, value: emoji) in noteTags.entries)
                       FilterChip(
                         showCheckmark: false,
                         visualDensity: VisualDensity.compact,
-                        label: Text('$emoji $tag'),
+                        label: Text('$emoji ${tagLabel(tag)}'),
                         selected: tags.contains(tag),
                         onSelected: (on) => setState(() => on ? tags.add(tag) : tags.remove(tag)),
                       ),
@@ -305,9 +306,9 @@ class _RecapPageState extends State<RecapPage> {
                     minLines: 1,
                     maxLines: 4,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      hintText: 'Sonst noch was? (optional)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: tr.recapNoteHint,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -324,7 +325,7 @@ class _RecapPageState extends State<RecapPage> {
           child: FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             onPressed: () => Navigator.pop(context),
-            child: const Text('Fertig'),
+            child: Text(tr.done),
           ),
         ),
       ),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
@@ -159,22 +160,22 @@ class PlanImport {
 /// the current plans; a [FormatException] says in German what's wrong.
 PlanImport parsePlanImport(String text) {
   final start = text.indexOf('{'), end = text.lastIndexOf('}');
-  if (start < 0 || end < start) throw const FormatException('Kein JSON gefunden. Kopier den ganzen Codeblock aus dem Chat.');
+  if (start < 0 || end < start) throw FormatException(tr.piNoJson);
   final Object? j;
   try {
     j = jsonDecode(text.substring(start, end + 1));
   } on FormatException catch (e) {
-    throw FormatException('Das JSON ist unvollständig oder fehlerhaft: ${e.message}');
+    throw FormatException(tr.piBrokenJson(e.message));
   }
   if (j is Map<String, dynamic> && j['app'] == 'ferrolog' && j['kind'] == null && j.containsKey('sessions')) {
-    throw const FormatException('Das ist ein Export mit allen Daten, kein Plan. Nimm den JSON-Block aus der Antwort der KI.');
+    throw FormatException(tr.piIsExport);
   }
   if (j is! Map<String, dynamic> || j['app'] != 'ferrolog' || j['kind'] != 'plan') {
-    throw const FormatException('Das ist kein FerroLog-Plan (app "ferrolog", kind "plan" fehlt).');
+    throw FormatException(tr.piNotPlan);
   }
-  if (j['version'] case final v? when v != 1) throw FormatException('Version $v kennt diese App nicht.');
+  if (j['version'] case final v? when v != 1) throw FormatException(tr.piVersion(v));
   final entries = j['workouts'];
-  if (entries is! List || entries.isEmpty) throw const FormatException('Der Plan enthält keine Workouts.');
+  if (entries is! List || entries.isEmpty) throw FormatException(tr.piNoWorkouts);
 
   final current = {for (final w in store.workouts) w.id: w};
   final replaced = <String, Workout?>{}; // by id; null = deleted
@@ -182,12 +183,12 @@ PlanImport parsePlanImport(String text) {
   final muscles = <String, dynamic>{};
   final diff = <WorkoutDiff>[];
   for (final (i, raw) in entries.indexed) {
-    if (raw is! Map<String, dynamic>) throw FormatException('Workout ${i + 1} ist kein Objekt.');
+    if (raw is! Map<String, dynamic>) throw FormatException(tr.piWorkoutNotObject(i + 1));
     final id = raw['id']?.toString();
     final old = current[id];
-    if (id != null && replaced.containsKey(id)) throw FormatException('Workout $id steht zweimal im Plan.');
+    if (id != null && replaced.containsKey(id)) throw FormatException(tr.piWorkoutTwice(id));
     if (raw['delete'] == true) {
-      if (old == null) throw FormatException('Das Workout zum Löschen (${raw['name'] ?? id}) gibt es nicht.');
+      if (old == null) throw FormatException(tr.piDeleteMissing(raw['name'] ?? id));
       replaced[id!] = null;
       diff.add(WorkoutDiff(old.name, Change.removed, [
         for (final e in old.exercises) ExerciseDiff(e.name, Change.removed, const []),
@@ -195,16 +196,16 @@ PlanImport parsePlanImport(String text) {
       continue;
     }
     final name = raw['name'];
-    if (name is! String || name.trim().isEmpty) throw FormatException('Workout ${i + 1} hat keinen Namen.');
+    if (name is! String || name.trim().isEmpty) throw FormatException(tr.piWorkoutNoName(i + 1));
     final list = raw['exercises'];
-    if (list is! List || list.isEmpty) throw FormatException('„$name“ hat keine Übungen.');
+    if (list is! List || list.isEmpty) throw FormatException(tr.piNoExercises(name));
     final why = <String, String>{};
     final exercises = [
-      for (final (k, e) in list.indexed) _exercise(e, '„$name“, Übung ${k + 1}', old, why, muscles),
+      for (final (k, e) in list.indexed) _exercise(e, tr.piExerciseWhere(name, k + 1), old, why, muscles),
     ];
     for (final (k, e) in exercises.indexed) {
       if (exercises.take(k).any((x) => searchKey(x.name) == searchKey(e.name))) {
-        throw FormatException('„$name“ hat „${e.name}“ zweimal. Mehr Sätze oder setWeights statt einer zweiten Übung.');
+        throw FormatException(tr.piExerciseTwice(name, e.name));
       }
     }
     final w = Workout(id: old?.id, name: name.trim(), exercises: exercises);
@@ -233,15 +234,15 @@ const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 
 /// One exercise from the AI: what it left out from the plan's exercise of that name ([_kept]) or the app's
 /// defaults, and [Exercise.fails] kept. Its why and muscles go into [why] and [muscles].
 Exercise _exercise(Object? raw, String where, Workout? old, Map<String, String> why, Map<String, dynamic> muscles) {
-  if (raw is! Map<String, dynamic>) throw FormatException('$where ist kein Objekt.');
+  if (raw is! Map<String, dynamic>) throw FormatException(tr.piNotObject(where));
   final name = raw['name'];
-  if (name is! String || name.trim().isEmpty) throw FormatException('$where hat keinen Namen.');
-  final label = '„${name.trim()}“';
+  if (name is! String || name.trim().isEmpty) throw FormatException(tr.piNoName(where));
+  final label = tr.piQuoted(name.trim());
   for (final k in const ['sets', 'reps']) {
-    if (raw[k] is! int) throw FormatException('$label: "$k" fehlt oder ist keine ganze Zahl.');
+    if (raw[k] is! int) throw FormatException(tr.piNotInt(label, k));
   }
-  if (raw['weight'] is! num && raw['type'] != 'cardio') throw FormatException('$label: "weight" fehlt.');
-  if (raw['type'] case final t? when t != 'cardio' && t != 'timed') throw FormatException('$label: Art "$t" gibt es nicht.');
+  if (raw['weight'] is! num && raw['type'] != 'cardio') throw FormatException(tr.piNoWeight(label));
+  if (raw['type'] case final t? when t != 'cardio' && t != 'timed') throw FormatException(tr.piBadType(label, t));
   final k = searchKey(name);
   final prev = [...?old?.exercises, for (final w in store.workouts) ...w.exercises].where((x) => searchKey(x.name) == k).firstOrNull;
   final Exercise e;
@@ -258,18 +259,18 @@ Exercise _exercise(Object? raw, String where, Workout? old, Map<String, String> 
   } catch (x) {
     throw FormatException('$label: $x');
   }
-  if (e.sets < 1 || e.reps < 0) throw FormatException('$label: Sätze oder Wiederholungen ungültig.');
-  if (e.setWeights case final w? when w.length != e.sets) throw FormatException('$label: setWeights passt nicht zu ${e.sets} Sätzen.');
-  if (e.setReps case final r? when r.length != e.sets) throw FormatException('$label: setReps passt nicht zu ${e.sets} Sätzen.');
-  if (e.maxReps case final m? when m <= e.reps) throw FormatException('$label: maxReps muss über reps liegen.');
-  if (e.weights.any((w) => w < minWeight)) throw FormatException('$label: Gewicht unter ${minWeight.round()} kg.');
+  if (e.sets < 1 || e.reps < 0) throw FormatException(tr.piBadSets(label));
+  if (e.setWeights case final w? when w.length != e.sets) throw FormatException(tr.piSetWeights(label, e.sets));
+  if (e.setReps case final r? when r.length != e.sets) throw FormatException(tr.piSetReps(label, e.sets));
+  if (e.maxReps case final m? when m <= e.reps) throw FormatException(tr.piMaxReps(label));
+  if (e.weights.any((w) => w < minWeight)) throw FormatException(tr.piMinWeight(label, minWeight.round()));
 
   if (raw['why'] case final String w when w.trim().isNotEmpty) why[k] = w.trim();
   if (raw['muscles'] case final Map<String, dynamic> m when musclesOf(e.name) == null) {
     List<String> ids(Object? l) => [
           for (final n in l is List ? l : const [])
             if (Muscle.values.asNameMap().containsKey(n)) n as String
-            else throw FormatException('$label: Muskel "$n" gibt es nicht.'),
+            else throw FormatException(tr.piBadMuscle(label, n)),
         ];
     muscles[e.name] = {'primary': ids(m['primary']), 'secondary': ids(m['secondary'])};
   }
@@ -298,7 +299,7 @@ WorkoutDiff _diff(Workout? old, Workout neu, Map<String, String> why) {
     final details = [
       for (final (label, f) in _aspects)
         if (f(was) != f(e)) '$label: ${_or(f(was))} → ${_or(f(e))}',
-      if (was.name != e.name) 'Name: ${was.name} → ${e.name}',
+      if (was.name != e.name) '${tr.aspectName}: ${was.name} → ${e.name}',
     ];
     final moved = oldOrder.indexOf(k) != newOrder.indexOf(k) ? i + 1 : null;
     rows.add(ExerciseDiff(e.name, details.isEmpty && moved == null ? Change.same : Change.changed, details,
@@ -316,16 +317,16 @@ String _or(String s) => s.isEmpty ? '–' : s;
 /// "3×5 · 120 kg", what a plan exercise is in short.
 String planLabel(Exercise e) => [_kind(e), _scheme(e), _load(e)].where((s) => s.isNotEmpty).join(' · ');
 
-final List<(String, String Function(Exercise))> _aspects = [
-  ('Art', _kind),
-  ('Sätze', _scheme),
-  ('Gewicht', _load),
-  ('Steigerung', (e) => e.cardio ? '' : e.auto ? 'automatisch' : e.up ? '+${weightLabel(e.increment)}' : 'aus'),
-  ('Entlastung', (e) => e.cardio || e.auto ? '' : e.down ? '−${weightLabel(e.decrement)} nach ${e.failsToDeload} Fehlversuchen' : 'aus'),
-  ('Pause', (e) => [if (e.restSeconds > 0) '${e.restSeconds} s', if (e.failRestSeconds case final f?) 'nach Fehlversuch $f s'].join(', ')),
+List<(String, String Function(Exercise))> get _aspects => [
+  (tr.aspectKind, _kind),
+  (tr.sets, _scheme),
+  (tr.aspectWeight, _load),
+  (tr.aspectIncrease, (e) => e.cardio ? '' : e.auto ? tr.auto : e.up ? '+${weightLabel(e.increment)}' : tr.off),
+  (tr.aspectDeload, (e) => e.cardio || e.auto ? '' : e.down ? tr.deloadAfter(weightLabel(e.decrement), e.failsToDeload) : tr.off),
+  (tr.rest, (e) => [if (e.restSeconds > 0) '${e.restSeconds} s', if (e.failRestSeconds case final f?) tr.restAfterMiss(f)].join(', ')),
 ];
 
-String _kind(Exercise e) => e.cardio ? 'Cardio' : e.timed ? 'auf Zeit' : '';
+String _kind(Exercise e) => e.cardio ? tr.cardio : e.timed ? tr.timedKind : '';
 
 String _scheme(Exercise e) {
   if (e.cardio) return cardioLabel(e.km == null ? e.reps : null, e.km);
@@ -337,7 +338,7 @@ String _scheme(Exercise e) {
 String _load(Exercise e) => e.cardio
     ? ''
     : e.noWeight
-        ? 'ohne Gewicht'
+        ? tr.noWeightShort
         : e.setWeights != null
             ? '${e.setWeights!.map(weightNum).join('/')} $unitLabel'
             : weightLabel(e.weight);

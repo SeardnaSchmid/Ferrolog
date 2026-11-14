@@ -5,6 +5,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +15,7 @@ import 'body_shapes.dart';
 import 'derived.dart';
 import 'edit.dart';
 import 'edit_session.dart';
+import 'language.dart';
 import 'model.dart';
 import 'muscles.dart';
 import 'plan_import.dart';
@@ -41,6 +45,8 @@ Future<void> main() async {
   prefs = await SharedPreferences.getInstance();
   loadBalanceGuides();
   weeklyGoal.value = prefs.getInt('streak.perWeek') ?? 3;
+  language.value = languageFromSetting(prefs.getString('language'));
+  await initializeDateFormatting();
   unit.value = unitFromSetting(prefs.getString('unit'), WidgetsBinding.instance.platformDispatcher.locale.countryCode);
   sync = GitHubSync(prefs);
   // Only build the export (with its statistics) when there's somewhere to send it.
@@ -55,10 +61,11 @@ Future<void> main() async {
   runApp(const Ferrolog());
 }
 
-/// The prompt that goes with the export, in the system language: German, else English, asking for an
+/// The prompt that goes with the export, in the app's language: German, else English, asking for an
 /// answer in the language of [locale].
 String analysisPrompt([Locale? locale]) {
-  final l = locale ?? PlatformDispatcher.instance.locale; // no binding needed, so tests can export too
+  // A language picked in the settings wins over the system's. No binding needed, so tests can export too.
+  final l = locale ?? language.value ?? PlatformDispatcher.instance.locale;
   return switch (l.languageCode) {
     'de' => 'Hier sind meine Trainingsdaten aus FerroLog als JSON. Die Felder oben in der Datei:\n'
         '- "instructions": diese Anleitung\n'
@@ -102,8 +109,8 @@ String analysisPrompt([Locale? locale]) {
         '3. Finally exactly one JSON code block in the "planImport" format (see "planImport.about" and '
         '"planImport.example"), so I can take it over into FerroLog.\n\n'
         '## General\n'
-        'The guide values in the data come from training practice, not medical limits. Some texts in the data '
-        '(findings, muscle names) may be in German. Answer briefly, in the language of my system (${l.toLanguageTag()}).',
+        'The guide values in the data come from training practice, not medical limits. Exercise and workout '
+        'names are the user\'s own and may be in German. Answer briefly, in the language of my system (${l.toLanguageTag()}).',
   };
 }
 
@@ -167,11 +174,18 @@ class Ferrolog extends StatelessWidget {
       );
     }
 
-    return MaterialApp(
-      title: 'FerroLog',
-      theme: theme(Brightness.light),
-      darkTheme: theme(Brightness.dark),
-      home: const Home(),
+    // A new language rebuilds everything: the texts come from the global [tr], not from the context.
+    return ValueListenableBuilder(
+      valueListenable: language,
+      builder: (context, _, _) => MaterialApp(
+        title: 'FerroLog',
+        theme: theme(Brightness.light),
+        darkTheme: theme(Brightness.dark),
+        locale: appLocale,
+        supportedLocales: L10n.supportedLocales,
+        localizationsDelegates: const [L10n.delegate, ...GlobalMaterialLocalizations.delegates],
+        home: Home(key: ValueKey(appLocale)),
+      ),
     );
   }
 }
@@ -227,11 +241,11 @@ class _HomeState extends State<Home> {
             NavigationBar(
               selectedIndex: tab,
               onDestinationSelected: (i) => tab = i,
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.fitness_center), label: 'Workouts'),
-                NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Statistik'),
-                NavigationDestination(icon: Icon(Icons.history), label: 'Verlauf'),
-                NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Einstellungen'),
+              destinations: [
+                NavigationDestination(icon: const Icon(Icons.fitness_center), label: tr.navWorkouts),
+                NavigationDestination(icon: const Icon(Icons.bar_chart), label: tr.navStats),
+                NavigationDestination(icon: const Icon(Icons.history), label: tr.navHistory),
+                NavigationDestination(icon: const Icon(Icons.settings_outlined), label: tr.navSettings),
               ],
             ),
           ],
@@ -248,13 +262,13 @@ class WorkoutList extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = store.active;
     if (store.workouts.isEmpty && active == null) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Noch keine Workouts. Leg eins an.'),
-            SizedBox(height: 16),
-            AddWorkoutButton(),
+            Text(tr.noWorkoutsYet),
+            const SizedBox(height: 16),
+            const AddWorkoutButton(),
           ]),
         ),
       );
@@ -268,7 +282,7 @@ class WorkoutList extends StatelessWidget {
         ],
         // What the statistics found; not while training, then only "Fortsetzen" counts.
         if (active == null) TrainingCard(),
-        if (store.workouts.isNotEmpty) const SectionHeader('Workouts', ''),
+        if (store.workouts.isNotEmpty) SectionHeader(tr.navWorkouts, ''),
         for (final w in store.workouts) WorkoutCard(w),
         const SizedBox(height: 8),
         const AddWorkoutButton(),
@@ -298,7 +312,7 @@ class ActiveBar extends StatelessWidget {
               child: Text.rich(
                 TextSpan(children: [
                   TextSpan(text: session.workoutName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const TextSpan(text: ' läuft · '),
+                  TextSpan(text: tr.workoutRunning),
                   WidgetSpan(
                     alignment: PlaceholderAlignment.baseline,
                     baseline: TextBaseline.alphabetic,
@@ -311,7 +325,7 @@ class ActiveBar extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SessionPage(session))),
-              child: const Text('Fortsetzen'),
+              child: Text(tr.resume),
             ),
           ]),
         ),
@@ -359,7 +373,7 @@ class Elapsed extends StatelessWidget {
         stream: Stream.periodic(const Duration(seconds: 5)),
         builder: (context, _) {
           final m = DateTime.now().difference(start).inMinutes;
-          return Text(m < 60 ? '$m Min.' : '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')} Std.', style: style);
+          return Text(m < 60 ? tr.elapsedMinutes(m) : tr.elapsedHours('${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')}'), style: style);
         },
       );
 }
@@ -401,9 +415,9 @@ class RestLeft extends StatelessWidget {
         builder: (context, _) {
           final left = session.restLeft(DateTime.now());
           if (left == null) return const SizedBox();
-          if (session.restPausedAt != null) return Text(' · Pause angehalten', style: style);
+          if (session.restPausedAt != null) return Text(tr.restPaused, style: style);
           if (left <= 0) return const SizedBox();
-          return Text(' · Pause ${clock(left)}', style: style);
+          return Text(tr.restLeft(clock(left)), style: style);
         },
       );
 }
@@ -414,7 +428,7 @@ class AddWorkoutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DashedAddButton(
-        'Workout',
+        tr.workout,
         () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditWorkout(Workout(name: '')))),
       );
 }
@@ -507,7 +521,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    Text('Training läuft',
+                    Text(tr.trainingRunning,
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.onPrimaryContainer)),
                     Icon(Icons.expand_more, size: 18, color: c.onPrimaryContainer.withValues(alpha: .7)),
                     RestLeft(s,
@@ -516,7 +530,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
                   ]),
                   Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: '${s.workoutName} · seit '),
+                      TextSpan(text: tr.runningSince(s.workoutName)),
                       WidgetSpan(
                         alignment: PlaceholderAlignment.baseline,
                         baseline: TextBaseline.alphabetic,
@@ -529,7 +543,7 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
                   Remaining(s, style: TextStyle(fontSize: 13, color: c.onPrimaryContainer.withValues(alpha: .8))),
                 ]),
               ),
-              FilledButton(onPressed: resume, child: const Text('Fortsetzen')),
+              FilledButton(onPressed: resume, child: Text(tr.resume)),
             ]),
           ),
         ),
@@ -545,15 +559,15 @@ class _ActiveTrainingCardState extends State<ActiveTrainingCard> {
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
-            tooltip: 'Training verwerfen',
+            tooltip: tr.discardTraining,
             onPressed: () async {
-              if (await confirm(context, 'Training verwerfen? Nichts wird gespeichert.')) store.saveActive(null);
+              if (await confirm(context, tr.discardTrainingAsk)) store.saveActive(null);
             },
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
             icon: const Icon(Icons.play_circle_outline),
-            label: const Text('Training fortsetzen'),
+            label: Text(tr.resumeTraining),
             onPressed: resume,
           ),
         ],
@@ -618,7 +632,7 @@ class WorkoutCard extends StatelessWidget {
       timed: {for (final e in workout.exercises) if (e.timed) e.name},
       detail: (name) => !unknown.contains(name)
           ? switch (comeback[name]) {
-              final pct? => Text('Nach der Pause $pct % leichter zum Einstieg',
+              final pct? => Text(tr.comebackLighter(pct),
                   style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
               null => null,
             }
@@ -630,7 +644,7 @@ class WorkoutCard extends StatelessWidget {
                   Icon(Icons.help_outline, size: 14, color: c.tertiary),
                   const SizedBox(width: 4),
                   Flexible(
-                    child: Text('Muskeln festlegen, sonst fehlt sie in der Statistik',
+                    child: Text(tr.setMuscles,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, color: c.tertiary, fontWeight: FontWeight.w500)),
@@ -639,7 +653,7 @@ class WorkoutCard extends StatelessWidget {
               ),
             ),
       subtitle: [
-        if (last != null) 'zuletzt ${ago(last.date)}',
+        if (last != null) tr.lastDone(ago(last.date)),
         if (workout.exercises.isNotEmpty) aboutLabel(currentPace().ofWorkout(workout)),
       ].join(' · '),
       rows: [
@@ -651,13 +665,13 @@ class WorkoutCard extends StatelessWidget {
       actions: [
         IconButton(
           icon: const Icon(Icons.edit_outlined),
-          tooltip: 'Bearbeiten',
+          tooltip: tr.edit,
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditWorkout(workout.copy()))),
         ),
         const SizedBox(width: 8),
         FilledButton.icon(
           icon: const Icon(Icons.play_arrow),
-          label: const Text('Starten'),
+          label: Text(tr.start),
           // Starting another training would replace the running one.
           onPressed: workout.exercises.isEmpty || store.active != null
               ? null
@@ -744,11 +758,11 @@ class OverviewCard extends StatelessWidget {
                 Row(children: [
                   const LiveDot(),
                   const SizedBox(width: 8),
-                  Text('LÄUFT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
+                  Text(tr.running, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
                   Text(' · ', style: TextStyle(color: c.onSurfaceVariant)),
                   Elapsed(live.date, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
                   const Spacer(),
-                  Text('$done/$total Sätze', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.onSurface)),
+                  Text(tr.setsDone(done, total), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.onSurface)),
                   if (onTap != null) Icon(Icons.expand_less, size: 20, color: c.onSurfaceVariant),
                 ]),
                 const SizedBox(height: 8),
@@ -796,7 +810,7 @@ class OverviewCard extends StatelessWidget {
                           constraints: BoxConstraints(maxWidth: box.maxWidth * .7),
                           child: Wrap(alignment: WrapAlignment.end, spacing: 3, runSpacing: 3, children: [
                             for (final (i, r) in reps.indexed)
-                              MiniSetTile(r, targets[i], weights[i], unit: timed.contains(name) ? 's' : ''),
+                              MiniSetTile(r, targets[i], weights[i], unit: timed.contains(name) ? tr.secondsUnit : ''),
                           ]),
                         ),
                       ]);
@@ -839,7 +853,7 @@ class OverviewCard extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   RepPills([for (final j in sets) reps[j]], [for (final j in sets) targets[j]],
-                                      unit: timed.contains(name) ? 's' : ''),
+                                      unit: timed.contains(name) ? tr.secondsUnit : ''),
                                 ],
                               ),
                             ),
@@ -1112,7 +1126,7 @@ class Streak extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     final active = weeks > 0;
     return Tooltip(
-      message: '${weeks == 1 ? '1 Woche' : '$weeks Wochen'} in Folge mindestens ${weeklyGoal.value}× trainiert',
+      message: tr.streakTooltip(tr.weeksCount(weeks), weeklyGoal.value),
       child: Padding(
         padding: const EdgeInsets.only(right: 4),
         child: Material(
@@ -1188,24 +1202,20 @@ class _PlatePainter extends CustomPainter {
   bool shouldRepaint(_PlatePainter old) => old.plate != plate || old.cut != cut;
 }
 
-String dateLabel(DateTime d) =>
-    '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+/// "02.11.2026" / "11/2/2026"
+String dateLabel(DateTime d) => DateFormat(tr.dateFormat, appLocale.languageCode).format(d);
 
-/// "Montag, 2. November"
-String dayLabel(DateTime d) =>
-    '${const ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'][d.weekday - 1]}, '
-    '${d.day}. ${const ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][d.month - 1]}';
+/// "Montag, 2. November" / "Monday, November 2"
+String dayLabel(DateTime d) => DateFormat.MMMMEEEEd(appLocale.languageCode).format(d);
+
+/// "November" / "November"
+String monthLabel(DateTime d) => DateFormat.LLLL(appLocale.languageCode).format(d);
 
 String ago(DateTime d) {
   final now = DateTime.now();
   final days = DateTime(now.year, now.month, now.day).difference(DateTime(d.year, d.month, d.day)).inDays;
-  return switch (days) { <= 0 => 'heute', 1 => 'gestern', _ => 'vor $days Tagen' };
+  return switch (days) { <= 0 => tr.today, 1 => tr.yesterday, _ => tr.daysAgo(days) };
 }
-
-const _months = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-];
 
 /// Month calendar with training days marked; below it the month's (or the tapped day's) trainings.
 class HistoryList extends StatefulWidget {
@@ -1223,7 +1233,7 @@ class _HistoryListState extends State<HistoryList> {
 
   @override
   Widget build(BuildContext context) {
-    if (store.sessions.isEmpty) return const Center(child: Text('Noch keine Trainings geloggt.'));
+    if (store.sessions.isEmpty) return Center(child: Text(tr.noTrainingsYet));
     final c = Theme.of(context).colorScheme;
     final inMonth = store.sessions.where((s) => s.date.year == month.year && s.date.month == month.month).toList();
     final shown = day == null ? inMonth : inMonth.where((s) => sameDay(s.date, day!)).toList();
@@ -1296,16 +1306,15 @@ class _HistoryListState extends State<HistoryList> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(
                     streak.isEmpty
-                        ? 'Ziel: $goal× pro Woche'
-                        : '${streak.length} ${streak.length == 1 ? 'Woche' : 'Wochen'} in Folge · $goal× pro Woche',
+                        ? tr.streakGoal(goal)
+                        : tr.streakWeeks(tr.weeksCount(streak.length), goal),
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: c.onTertiaryContainer),
                   ),
                   Text(
                     thisWeek >= goal
-                        ? 'Diese Woche geschafft ($thisWeek/$goal). Weiter so!'
-                        : 'Diese Woche $thisWeek/$goal · noch ${goal - thisWeek} '
-                            '${goal - thisWeek == 1 ? 'Training' : 'Trainings'}'
-                            '${streak.isEmpty ? '' : ', um die Serie zu halten'}',
+                        ? tr.streakWeekDone(thisWeek, goal)
+                        : (streak.isEmpty ? tr.streakWeekOpen : tr.streakWeekOpenKeep)(
+                            thisWeek, goal, tr.trainingsCount(goal - thisWeek)),
                     style: TextStyle(fontSize: 13, color: c.onTertiaryContainer.withValues(alpha: .8)),
                   ),
                 ]),
@@ -1315,7 +1324,7 @@ class _HistoryListState extends State<HistoryList> {
         Row(children: [
           const SizedBox(width: 6),
           Expanded(
-            child: Text('${_months[month.month - 1]}${month.year == today.year ? '' : ' ${month.year}'}',
+            child: Text('${monthLabel(month)}${month.year == today.year ? '' : ' ${month.year}'}',
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
           ),
           // Back to the current month; hidden while it's already shown.
@@ -1325,18 +1334,19 @@ class _HistoryListState extends State<HistoryList> {
                 month = DateTime(today.year, today.month);
                 day = null;
               }),
-              child: const Text('Heute'),
+              child: Text(tr.todayButton),
             ),
-          IconButton.filledTonal(icon: const Icon(Icons.chevron_left), tooltip: 'Voriger Monat', onPressed: () => go(-1)),
+          IconButton.filledTonal(icon: const Icon(Icons.chevron_left), tooltip: tr.previousMonth, onPressed: () => go(-1)),
           IconButton.filledTonal(
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Nächster Monat',
+            tooltip: tr.nextMonth,
             onPressed: month.year == today.year && month.month == today.month ? null : () => go(1),
           ),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          for (final w in const ['M', 'D', 'M', 'D', 'F', 'S', 'S'])
+          // Narrow weekday names from a known Monday: M D M D F S S / M T W T F S S.
+          for (final w in [for (var i = 0; i < 7; i++) DateFormat('EEEEE', appLocale.languageCode).format(DateTime(2024, 1, 1 + i))])
             Expanded(
               child: Center(child: Text(w, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant))),
             ),
@@ -1358,7 +1368,7 @@ class _HistoryListState extends State<HistoryList> {
             ),
         SectionHeader(
           day == null
-              ? '${inMonth.length} ${inMonth.length == 1 ? 'Training' : 'Trainings'} im ${_months[month.month - 1]}'
+              ? tr.trainingsInMonth(tr.trainingsCount(inMonth.length), monthLabel(month))
               : dayLabel(day!),
           '',
         ),
@@ -1381,23 +1391,22 @@ class _HistoryListState extends State<HistoryList> {
             footer: [
               if (s.mood case final m?) const ['😣', '😐', '😄'][m - 1],
               if (s.bodyWeight case final kg?) weightLabel(kg),
-              for (final t in s.tags) '${noteTags[t] ?? ''} $t'.trim(),
+              for (final t in s.tags) '${noteTags[t] ?? ''} ${tagLabel(t)}'.trim(),
               if (s.note case final n?) '„$n“',
             ].join(' · '),
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Bearbeiten',
+                tooltip: tr.edit,
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditSessionPage(s))),
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline),
-                tooltip: 'Löschen',
+                tooltip: tr.delete,
                 onPressed: () async {
                   final ok = await confirm(
                       context,
-                      'Training vom ${dateLabel(s.date)} löschen?'
-                      '${store.movesPlan(s) ? ' Die Plan-Gewichte gehen auf den Stand davor zurück.' : ''}');
+                      tr.deleteTrainingAsk(dateLabel(s.date)) + (store.movesPlan(s) ? tr.deleteTrainingMovesPlan : ''));
                   if (ok) store.deleteSession(s);
                 },
               ),
@@ -1414,8 +1423,8 @@ Future<bool> confirm(BuildContext context, String question) async =>
       builder: (context) => AlertDialog(
         content: Text(question),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ja')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr.yes)),
         ],
       ),
     ) ??

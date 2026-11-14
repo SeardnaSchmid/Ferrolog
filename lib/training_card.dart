@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'findings.dart';
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'stats.dart';
@@ -62,12 +63,13 @@ const _icons = {
   FindingType.month: Icons.calendar_month_outlined,
 };
 
-const _labels = {
-  FindingType.weekGoal: 'WOCHENZIEL',
-  FindingType.skipped: 'AUSGELASSEN · LETZTE 4 WOCHEN',
-  FindingType.balance: 'BALANCE · LETZTE 28 TAGE',
-  FindingType.plateau: 'PLATEAU',
-};
+String? _label(FindingType t) => switch (t) {
+      FindingType.weekGoal => tr.cardWeekGoal,
+      FindingType.skipped => tr.cardSkipped,
+      FindingType.balance => tr.cardBalance,
+      FindingType.plateau => tr.cardPlateau,
+      _ => null,
+    };
 
 /// Opens where the statistics show a finding.
 void openSource(BuildContext context, StatsTarget t) {
@@ -107,9 +109,9 @@ class TrainingCard extends StatelessWidget {
         child: _Line(
           icon: Icons.check,
           color: c.primary,
-          text: const Text.rich(TextSpan(children: [
-            TextSpan(text: 'Alles im Lot', style: TextStyle(fontWeight: FontWeight.w600)),
-            TextSpan(text: ' · Statistik ansehen'),
+          text: Text.rich(TextSpan(children: [
+            TextSpan(text: tr.cardAllGood, style: const TextStyle(fontWeight: FontWeight.w600)),
+            TextSpan(text: tr.cardSeeStats),
           ])),
           onTap: () => homeTab.value = 1,
         ),
@@ -122,8 +124,8 @@ class TrainingCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(children: [
-              const Expanded(child: Text('Dein Training', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-              Text('aus deiner Statistik', style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+              Expanded(child: Text(tr.cardTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+              Text(tr.cardFromStats, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
             ]),
           ),
           const SizedBox(height: 8),
@@ -174,7 +176,7 @@ class _Top extends StatelessWidget {
             Text(f.evidence,
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.onSurfaceVariant)),
             const SizedBox(height: 2),
-            Text('Warum und was tun →', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.primary)),
+            Text(tr.cardWhyWhat, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.primary)),
           ]),
         ),
       ),
@@ -222,7 +224,7 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              Text(_labels[f.type] ?? '',
+              Text(_label(f.type) ?? '',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.tertiary)),
               const SizedBox(height: 4),
               Text(f.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
@@ -230,13 +232,13 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
               Text(f.evidence, style: body.copyWith(color: c.onSurfaceVariant)),
               if (f.why case final why?) ...[
                 const SizedBox(height: 16),
-                Text('WARUM', style: heading),
+                Text(tr.cardWhy, style: heading),
                 const SizedBox(height: 4),
                 Text(why, style: body),
               ],
               if (f.advice case final advice?) ...[
                 const SizedBox(height: 16),
-                Text('EMPFEHLUNG', style: heading),
+                Text(tr.cardAdvice, style: heading),
                 const SizedBox(height: 4),
                 Text(advice, style: body),
               ],
@@ -250,7 +252,7 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
                         Navigator.pop(sheet);
                         runFix(context, f);
                       },
-                      child: Text(f.fix == Fix.moveUp ? 'In ${f.workout!.name} vorziehen' : '1 Satz weniger ${f.exercise}',
+                      child: Text(f.fix == Fix.moveUp ? tr.fixMoveUp(f.workout!.name) : tr.fixDropSet(f.exercise!),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                   )
@@ -262,7 +264,7 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
                         Navigator.pop(sheet);
                         editExerciseIn(context, plan, f.exercise!);
                       },
-                      child: const Text('Im Editor anpassen'),
+                      child: Text(tr.fixInEditor),
                     ),
                   ),
                 if (f.fix != null || plan != null) const SizedBox(width: 10),
@@ -272,7 +274,7 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
                     Navigator.pop(sheet);
                     snoozeFinding(f.id);
                   },
-                  child: const Text('Später'),
+                  child: Text(tr.later),
                 ),
               ]),
               const SizedBox(height: 8),
@@ -300,10 +302,10 @@ Future<void> showFinding(BuildContext context, Finding f) => showModalBottomShee
     );
 
 String _sourceLabel(StatsTarget t) => switch (t.view) {
-      StatsView.balance => 'Balance in der Statistik ansehen',
-      StatsView.weeks => 'Wochen in der Statistik ansehen',
-      StatsView.exercise => '${t.exercise} in der Statistik ansehen',
-      StatsView.history => 'Im Verlauf ansehen',
+      StatsView.balance => tr.sourceBalance,
+      StatsView.weeks => tr.sourceWeeks,
+      StatsView.exercise => tr.sourceExercise(t.exercise ?? ''),
+      StatsView.history => tr.sourceHistory,
     };
 
 Workout? _workoutWith(String? exercise) =>
@@ -334,10 +336,10 @@ Future<void> runFix(BuildContext context, Finding f) async {
   await store.saveWorkout(changed);
   messenger.showSnackBar(SnackBar(
     content: Text(f.fix == Fix.moveUp
-        ? '$name in ${w.name} vorgezogen'
-        : '$name in ${w.name}: jetzt ${e.sets} ${e.sets == 1 ? 'Satz' : 'Sätze'}'),
+        ? tr.fixMovedUp(name, w.name)
+        : tr.fixDroppedSet(name, w.name, tr.setsCount(e.sets))),
     action: SnackBarAction(
-      label: 'Rückgängig',
+      label: tr.undo,
       onPressed: () async {
         await unsnoozeFinding(f.id);
         await store.saveWorkout(before); // also redraws the card

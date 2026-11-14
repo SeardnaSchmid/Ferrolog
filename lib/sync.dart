@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'language.dart';
 
 /// Client ID of the FerroLog GitHub App (public, safe to commit). Setup in README.
 const githubClientId = 'Iv23lidZNxih8vRT1Cab';
@@ -20,7 +23,7 @@ class SyncConflict implements Exception {
   const SyncConflict(this.sha);
 
   @override
-  String toString() => 'Konflikt: Daten auf GitHub sind neuer oder fremd';
+  String toString() => tr.syncConflict;
 }
 
 /// Pushes the full export JSON to a file in a GitHub repo via the Contents API,
@@ -84,12 +87,12 @@ class GitHubSync {
       headers: {'Accept': 'application/json'},
       body: {'client_id': githubClientId, ...body},
     );
-    if (res.statusCode != 200) throw 'GitHub-Login fehlgeschlagen (HTTP ${res.statusCode})';
+    if (res.statusCode != 200) throw tr.syncLoginFailed(res.statusCode);
     return jsonDecode(res.body);
   }
 
   Future<DeviceCode> startLogin() async {
-    if (githubClientId.isEmpty) throw 'githubClientId in lib/sync.dart ist nicht gesetzt (siehe README).';
+    if (githubClientId.isEmpty) throw tr.syncNoClientId;
     final j = await _oauth('device/code', {});
     return (
       deviceCode: j['device_code'] as String,
@@ -107,7 +110,7 @@ class GitHubSync {
     var interval = code.interval;
     while (true) {
       await Future.delayed((wait ?? (s) => Duration(seconds: s))(interval));
-      if (DateTime.now().isAfter(code.expiresAt)) throw 'Code abgelaufen, bitte neu anmelden.';
+      if (DateTime.now().isAfter(code.expiresAt)) throw tr.syncCodeExpired;
       final Map<String, dynamic> j;
       try {
         j = await _oauth('oauth/access_token', {
@@ -126,11 +129,11 @@ class GitHubSync {
         case 'slow_down':
           interval = j['interval'] ?? interval + 5;
         case 'expired_token':
-          throw 'Code abgelaufen, bitte neu anmelden.';
+          throw tr.syncCodeExpired;
         case 'access_denied':
-          throw 'Anmeldung abgelehnt.';
+          throw tr.syncDenied;
         default:
-          throw 'GitHub-Login: ${j['error_description'] ?? j['error']}';
+          throw tr.syncLoginError(j['error_description'] ?? j['error']);
       }
     }
   }
@@ -176,13 +179,13 @@ class GitHubSync {
       _queued = null;
       try {
         await _put(next);
-        _setStatus('Synchronisiert ${_time(DateTime.now())}');
+        _setStatus(tr.syncDone(_time(DateTime.now())));
       } on SyncConflict catch (e) {
         conflict.value = true;
         _setStatus('$e');
         break;
       } catch (e) {
-        _setStatus('Fehler ${_time(DateTime.now())}: $e');
+        _setStatus(tr.syncError(_time(DateTime.now()), e));
       }
       next = _queued;
     }
@@ -232,9 +235,9 @@ class GitHubSync {
   }
 
   static String _error(http.Response r) => switch (r.statusCode) {
-        401 => 'Anmeldung abgelaufen, bitte neu anmelden',
-        403 => 'Keine Schreibrechte – hat FerroLog Zugriff auf das Repo?',
-        404 => 'Repo nicht gefunden – hat FerroLog Zugriff darauf?',
+        401 => tr.syncExpired,
+        403 => tr.syncNoWrite,
+        404 => tr.syncNotFound,
         _ => 'HTTP ${r.statusCode}',
       };
 
@@ -244,5 +247,5 @@ class GitHubSync {
   }
 
   static String _time(DateTime d) =>
-      '${d.day}.${d.month}. ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      '${DateFormat.Md(appLocale.languageCode).format(d)} ${DateFormat.Hm(appLocale.languageCode).format(d)}';
 }

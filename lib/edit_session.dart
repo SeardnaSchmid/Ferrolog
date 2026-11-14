@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'session.dart';
@@ -64,17 +65,17 @@ class _EditSessionPageState extends State<EditSessionPage> {
       initialDate: draft.date,
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
-      helpText: 'Tag des Trainings',
-      cancelText: 'Abbrechen',
-      confirmText: 'Weiter',
+      helpText: tr.editDayHelp,
+      cancelText: tr.cancel,
+      confirmText: tr.next,
     );
     if (day == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(draft.date),
-      helpText: 'Beginn',
-      cancelText: 'Abbrechen',
-      confirmText: 'OK',
+      helpText: tr.editStartHelp,
+      cancelText: tr.cancel,
+      confirmText: tr.ok,
       builder: (context, child) =>
           MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!),
     );
@@ -96,10 +97,10 @@ class _EditSessionPageState extends State<EditSessionPage> {
       canPop: !changed,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (await confirm(context, 'Änderungen verwerfen?') && context.mounted) Navigator.pop(context);
+        if (await confirm(context, tr.discardChanges) && context.mounted) Navigator.pop(context);
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Training bearbeiten')),
+        appBar: AppBar(title: Text(tr.editTraining)),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           children: [
@@ -107,7 +108,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
               child: ListTile(
                 leading: const Icon(Icons.event_outlined),
                 title: Text(dayLabel(d)),
-                subtitle: Text('${dateLabel(d)} · Beginn ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}'),
+                subtitle: Text(tr.editStartAt(dateLabel(d), '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}')),
                 trailing: const Icon(Icons.edit_outlined),
                 onTap: editDate,
               ),
@@ -120,18 +121,18 @@ class _EditSessionPageState extends State<EditSessionPage> {
                     Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                     Text(
                       log.cardio
-                          ? 'Cardio · Ziel ${cardioLabel(log.targetReps, log.targetKm)}'
+                          ? tr.cardioGoal(cardioLabel(log.targetReps, log.targetKm))
                           : setsLabel(log.targets, log.maxReps, seconds: log.timed),
                       style: muted,
                     ),
-                    if (log.replaces case final r?) Text('statt $r', style: muted),
+                    if (log.replaces case final r?) Text(tr.insteadOf(r), style: muted),
                     const SizedBox(height: 10),
                     if (log.cardio)
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                         onPressed: () => editCardio(log),
                         child: Text(switch (log.reps[0]) {
-                          null => 'Nicht gemacht',
+                          null => tr.notDone,
                           final m => cardioLabel(m, log.km),
                         }),
                       )
@@ -163,7 +164,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                       const SizedBox(height: 10),
                       // The reserve after the last set; the chosen one again takes it off.
                       Row(children: [
-                        Text('Gingen noch', style: muted),
+                        Text(tr.rirQuestionShort, style: muted),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Wrap(spacing: 6, children: [
@@ -193,7 +194,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     onPressed: () => Navigator.maybePop(context),
-                    child: const Text('Abbrechen'),
+                    child: Text(tr.cancel),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -201,15 +202,15 @@ class _EditSessionPageState extends State<EditSessionPage> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     onPressed: save,
-                    child: const Text('Speichern'),
+                    child: Text(tr.save),
                   ),
                 ),
               ]),
               const SizedBox(height: 8),
               Text(
                 store.movesPlan(widget.session)
-                    ? 'Die Plan-Gewichte werden neu berechnet.'
-                    : 'Ältere Trainings ändern nur Verlauf und Statistik, nicht den Plan.',
+                    ? tr.editReplans
+                    : tr.editHistoryOnly,
                 style: muted,
                 textAlign: TextAlign.center,
               ),
@@ -236,7 +237,7 @@ Future<({int? reps})?> showRepsSheet(BuildContext context, ExerciseLog log, int 
               iconSize: 28,
               style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
               icon: Icon(icon),
-              tooltip: dir < 0 ? 'Weniger' : 'Mehr',
+              tooltip: dir < 0 ? tr.less : tr.more,
               onPressed: value + dir < 0 ? null : () => setSheet(() => value += dir),
             );
         return Padding(
@@ -244,7 +245,7 @@ Future<({int? reps})?> showRepsSheet(BuildContext context, ExerciseLog log, int 
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
               Expanded(child: Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-              Text('Satz ${i + 1} von ${log.reps.length} · Ziel ${log.targets[i]}$unit',
+              Text(tr.setOfGoal(i + 1, log.reps.length, '${log.targets[i]}$unit'),
                   style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
             ]),
             const SizedBox(height: 16),
@@ -264,7 +265,7 @@ Future<({int? reps})?> showRepsSheet(BuildContext context, ExerciseLog log, int 
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => Navigator.pop(context, (reps: null)),
-                  child: const Text('Nicht gemacht'),
+                  child: Text(tr.notDone),
                 ),
               ),
               const SizedBox(width: 12),
@@ -272,7 +273,7 @@ Future<({int? reps})?> showRepsSheet(BuildContext context, ExerciseLog log, int 
                 child: FilledButton(
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                   onPressed: () => Navigator.pop(context, (reps: value)),
-                  child: const Text('Speichern'),
+                  child: Text(tr.save),
                 ),
               ),
             ]),

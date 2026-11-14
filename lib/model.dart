@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'language.dart';
 import 'loading.dart' show plateChoices;
 import 'units.dart';
 
@@ -466,22 +467,22 @@ enum Progression { up, up2, half, limit, bridge, range, miss, reset, badDay, pai
 /// For the recap, after next time's weight: "↑ 102,5 kg · viel Reserve". [e] is the plan after the training,
 /// for a bridge's reps.
 String progressionLabel(Progression p, [Exercise? e]) => switch (p) {
-      Progression.up => 'geschafft',
-      Progression.up2 => 'viel Reserve, doppelter Schritt',
-      Progression.half => '2× am Limit, halber Schritt',
-      Progression.limit => 'am Limit, Gewicht bleibt',
+      Progression.up => tr.progUp,
+      Progression.up2 => tr.progUp2,
+      Progression.half => tr.progHalf,
+      Progression.limit => tr.progLimit,
       Progression.bridge => switch (e?.state?.bridgeTo) {
-          final to? => 'nächstes Mal ${e!.reps} Wdh., bei $to mehr Gewicht',
-          null => 'erst mehr Wiederholungen',
+          final to? => tr.progBridgeTo(e!.reps, to),
+          null => tr.progBridge,
         },
-      Progression.range => 'erst alle Wiederholungen',
-      Progression.miss => 'nicht geschafft',
-      Progression.reset => '2× nicht geschafft, Wiederholungen zurück',
-      Progression.badDay => 'schlechter Tag, zählt nicht',
-      Progression.pain => 'Schmerzen: Gewicht bleibt. Kommt es wieder, lass die Übung prüfen.',
-      Progression.deload => '$autoFails× nicht geschafft, etwa −10 %, kleinere Schritte',
-      Progression.lighter => 'leichter gemacht',
-      Progression.fewer => 'weniger Sätze',
+      Progression.range => tr.progRange,
+      Progression.miss => tr.progMiss,
+      Progression.reset => tr.progReset,
+      Progression.badDay => tr.progBadDay,
+      Progression.pain => tr.progPain,
+      Progression.deload => tr.progDeload(autoFails),
+      Progression.lighter => tr.progLighter,
+      Progression.fewer => tr.progFewer,
     };
 
 /// Tags after a training that excuse a miss in the auto mode (twice in a row at most). The mood doesn't:
@@ -773,6 +774,26 @@ const noteTags = {
   'Technik-Fokus': '🎯',
 };
 
+/// A tag of [noteTags] in the app's language; they stay stored by their German label.
+String tagLabel(String tag) => switch (tag) {
+      'Schlecht geschlafen' => tr.tagSleptBadly,
+      'Gut erholt' => tr.tagWellRested,
+      'Muskelkater' => tr.tagSore,
+      'Schmerzen' => tr.tagPain,
+      'Krank' => tr.tagSick,
+      'Stress' => tr.tagStress,
+      'Unmotiviert' => tr.tagUnmotivated,
+      'Voller Energie' => tr.tagEnergetic,
+      'Wenig gegessen' => tr.tagAteLittle,
+      'Alkohol' => tr.tagAlcohol,
+      'Koffein' => tr.tagCaffeine,
+      'Wenig Zeit' => tr.tagLittleTime,
+      'Studio voll' => tr.tagGymBusy,
+      'Unterwegs' => tr.tagTravelling,
+      'Technik-Fokus' => tr.tagTechnique,
+      _ => tag,
+    };
+
 /// What progression changes on a planned exercise, as it was before a training.
 /// [auto] is the auto mode's part: reps, setReps and [AutoState], as JSON; null in the fixed mode.
 typedef PlanState = ({double weight, List<double>? setWeights, int fails, Map<String, dynamic>? auto});
@@ -925,15 +946,15 @@ const dataVersion = 1;
 /// Throws a [FormatException] with a message for the user, before anything is changed.
 Map<String, dynamic> migrate(Object? j) {
   if (j is! Map<String, dynamic> || j['app'] != 'ferrolog') {
-    throw const FormatException('Das ist keine FerroLog-Datei (app "ferrolog" fehlt).');
+    throw FormatException(tr.fileNotFerrolog);
   }
   final version = j['version'];
-  if (version is! int || version < 1) throw const FormatException('Die Datei hat keine gültige Version.');
+  if (version is! int || version < 1) throw FormatException(tr.fileNoVersion);
   if (version > dataVersion) {
-    throw FormatException('Die Datei hat Version $version, diese App kennt nur bis $dataVersion. Bitte die App aktualisieren.');
+    throw FormatException(tr.fileTooNew(version, dataVersion));
   }
   // Steps go here: if (j['version'] == 1) j = _v1to2(j); ...
-  if (j['workouts'] is! List || j['sessions'] is! List) throw const FormatException('Workouts oder Trainings fehlen in der Datei.');
+  if (j['workouts'] is! List || j['sessions'] is! List) throw FormatException(tr.fileNoData);
   return j;
 }
 
@@ -998,7 +1019,7 @@ class Store extends ChangeNotifier {
     try {
       other = Store._empty(_prefs).._load(j);
     } catch (e) {
-      throw FormatException('Die Datei ist beschädigt: $e');
+      throw FormatException(tr.fileBroken(e));
     }
     if (merge) {
       final ids = {for (final s in sessions) s.id};
@@ -1602,6 +1623,99 @@ const exerciseAliases = <String, List<String>>{
   'Treppensteiger': ['Stair Climber', 'Stairmaster', 'Stepper'],
 };
 
+/// English names of the catalogue exercises; the rest (Plank, Face Pulls, …) are the same in both.
+/// The catalogue stays keyed by the German name: that's what older data holds.
+const exerciseNamesEn = <String, String>{
+  'Kniebeuge': 'Squat',
+  'Kreuzheben': 'Deadlift',
+  'Rumänisches Kreuzheben': 'Romanian Deadlift',
+  'Bankdrücken': 'Bench Press',
+  'Schrägbankdrücken': 'Incline Bench Press',
+  'Kurzhantel-Bankdrücken': 'Dumbbell Bench Press',
+  'Schulterdrücken': 'Overhead Press',
+  'Kurzhantel-Schulterdrücken': 'Dumbbell Shoulder Press',
+  'Langhantelrudern': 'Barbell Row',
+  'Kurzhantelrudern': 'Dumbbell Row',
+  'Kabelrudern': 'Cable Row',
+  'Klimmzüge': 'Pull-ups',
+  'Latzug': 'Lat Pulldown',
+  'Beinpresse': 'Leg Press',
+  'Ausfallschritte': 'Lunges',
+  'Beinstrecker': 'Leg Extension',
+  'Beinbeuger': 'Leg Curl',
+  'Wadenheben': 'Calf Raise',
+  'Bizepscurls': 'Biceps Curl',
+  'Hammercurls': 'Hammer Curl',
+  'Trizepsdrücken am Kabel': 'Triceps Pushdown',
+  'French Press': 'Skull Crusher',
+  'Seitheben': 'Lateral Raise',
+  'Butterfly': 'Chest Fly',
+  'Enges Bankdrücken': 'Close-Grip Bench Press',
+  'Negativbankdrücken': 'Decline Bench Press',
+  'Kurzhantel-Schrägbankdrücken': 'Incline Dumbbell Press',
+  'Kurzhantel-Fliegende': 'Dumbbell Fly',
+  'Kabelzug-Crossover': 'Cable Crossover',
+  'Brustpresse': 'Chest Press',
+  'Liegestütze': 'Push-ups',
+  'Überzüge': 'Pullover',
+  'Maschinen-Schulterdrücken': 'Machine Shoulder Press',
+  'Frontheben': 'Front Raise',
+  'Reverse Butterfly': 'Reverse Fly',
+  'Aufrechtes Rudern': 'Upright Row',
+  'T-Bar-Rudern': 'T-Bar Row',
+  'Maschinenrudern': 'Machine Row',
+  'Umgekehrtes Rudern': 'Inverted Row',
+  'Klimmzüge im Untergriff': 'Chin-ups',
+  'Latzug eng': 'Close-Grip Lat Pulldown',
+  'Überzüge am Kabel': 'Straight-Arm Pulldown',
+  'Rückenstrecker': 'Back Extension',
+  'Frontkniebeuge': 'Front Squat',
+  'Hackenschmidt-Kniebeuge': 'Hack Squat',
+  'Sumo-Kreuzheben': 'Sumo Deadlift',
+  'Trap-Bar-Kreuzheben': 'Trap Bar Deadlift',
+  'Kreuzheben mit gestreckten Beinen': 'Stiff-Leg Deadlift',
+  'Einbeiniges Kreuzheben': 'Single-Leg Romanian Deadlift',
+  'Ausfallschritte gehend': 'Walking Lunges',
+  'Adduktorenmaschine': 'Hip Adduction',
+  'Abduktorenmaschine': 'Hip Abduction',
+  'Wadenheben sitzend': 'Seated Calf Raise',
+  'SZ-Curls': 'EZ-Bar Curl',
+  'Langhantelcurls': 'Barbell Curl',
+  'Konzentrationscurls': 'Concentration Curl',
+  'Scottcurls': 'Preacher Curl',
+  'Kabelcurls': 'Cable Curl',
+  'Trizeps-Überkopfdrücken': 'Overhead Triceps Extension',
+  'Trizeps-Kickbacks': 'Triceps Kickback',
+  'Bankdips': 'Bench Dips',
+  'Handgelenkcurls': 'Wrist Curl',
+  'Seitstütz': 'Side Plank',
+  'Beinheben hängend': 'Hanging Leg Raise',
+  'Beinheben liegend': 'Lying Leg Raise',
+  'Kabel-Crunches': 'Cable Crunch',
+  'Umsetzen': 'Power Clean',
+  'Reißen': 'Snatch',
+  'Laufen': 'Running',
+  'Laufband': 'Treadmill',
+  'Radfahren': 'Cycling',
+  'Ergometer-Rudern': 'Rowing',
+  'Crosstrainer': 'Elliptical',
+  'Seilspringen': 'Jump Rope',
+  'Treppensteiger': 'Stair Climber',
+};
+
+/// A catalogue exercise ([exerciseCatalogue], [cardioCatalogue]) under its name in the app's language,
+/// for templates and suggestions. Other names come back as they are.
+String exerciseLabel(String name) => appLocale.languageCode == 'de' ? name : exerciseNamesEn[name] ?? name;
+
+final _catalogueNames = <String, String>{
+  for (final name in [...exerciseCatalogue.keys, ...cardioCatalogue.keys])
+    for (final n in [name, ?exerciseNamesEn[name], ...?exerciseAliases[name]]) searchKey(n): name,
+};
+
+/// The catalogue's (German) name of [name], whatever language or spelling it's in: "Bench Press" →
+/// "Bankdrücken". Own exercises come back as they are.
+String catalogueName(String name) => _catalogueNames[searchKey(name)] ?? name;
+
 /// Lower case, umlauts spelled out, only letters and digits: "Bench-Press" and "bench press"
 /// both become "benchpress", "Bankdrücken" and "bankdruecken" both "bankdruecken".
 String searchKey(String s) => s
@@ -1612,12 +1726,13 @@ String searchKey(String s) => s
     .replaceAll('ß', 'ss')
     .replaceAll(RegExp('[^a-z0-9]'), '');
 
-/// Known names (German) matching [query] in German or English, best matches first.
+/// Known names matching [query] in German or English, best matches first.
 List<String> searchExercises(String query, Iterable<String> names) {
   final q = searchKey(query);
   if (q.isEmpty) return [];
   int score(String name) {
-    final keys = [name, ...?exerciseAliases[name]].map(searchKey);
+    final c = catalogueName(name);
+    final keys = [name, c, ?exerciseNamesEn[c], ...?exerciseAliases[c]].map(searchKey);
     if (keys.any((k) => k.startsWith(q))) return 0;
     if (keys.any((k) => k.contains(q))) return 1;
     return 2;
@@ -1628,7 +1743,7 @@ List<String> searchExercises(String query, Iterable<String> names) {
 
 /// Planned sets and reps: "3×5", "3×5–8", "10/8/6"; with [seconds] "3×30 s".
 /// The answer to "Wie viele gingen noch?": "am Limit", "noch 2 übrig", "noch 4+ übrig".
-String rirLabel(int rir) => rir == 0 ? 'am Limit' : 'noch ${rir >= 4 ? '4+' : rir} übrig';
+String rirLabel(int rir) => rir == 0 ? tr.rirLimit : tr.rirLeft(rir >= 4 ? '4+' : '$rir');
 
 String setsLabel(List<int> reps, int? maxReps, {bool seconds = false}) {
   final range = maxReps == null ? '' : '–$maxReps';
