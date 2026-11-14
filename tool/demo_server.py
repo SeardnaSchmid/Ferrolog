@@ -10,6 +10,10 @@ without muscles. The data lives only here,
 never in the app or a release build. Storage is per port, so other previews keep their data.
 
     python tool/demo_server.py [port]      then open http://localhost:8091 (?reset reseeds)
+
+?reset&lang=en reseeds in English: the app's language set to English and the exercises under their
+English names, as a user who set them up in English would have them (tags stay keyed in German, like
+in the app).
 """
 import datetime as dt
 import http.server
@@ -270,9 +274,36 @@ def demo_data():
     return {'app': 'ferrolog', 'version': 1, 'units': 'kg', 'workouts': workouts, 'sessions': sessions}
 
 
-def seed_script():
+# The demo's exercises under the names the app's English catalogue gives them (exerciseNamesEn).
+ENGLISH = {
+    'Kniebeuge': 'Squat', 'Bankdrücken': 'Bench Press', 'Langhantelrudern': 'Barbell Row',
+    'Bizepscurls': 'Biceps Curl', 'Hammercurls': 'Hammer Curl', 'Rumänisches Kreuzheben': 'Romanian Deadlift',
+    'Schulterdrücken': 'Overhead Press', 'Kreuzheben': 'Deadlift', 'Klimmzüge': 'Pull-ups',
+    'Wadenheben': 'Calf Raise', 'Laufen': 'Running', 'Atemübung': 'Breathing Drill',
+}
+
+
+def in_english(data):
+    """[data] with every exercise name (plans, trainings, swaps, plans before) in English."""
+    def name(n):
+        return ENGLISH.get(n, n)
+    for w in data['workouts']:
+        for e in w['exercises']:
+            e['name'] = name(e['name'])
+    for s in data['sessions']:
+        for e in s['exercises']:
+            e['name'] = name(e['name'])
+            if 'replaces' in e:
+                e['replaces'] = name(e['replaces'])
+        if 'planBefore' in s:
+            s['planBefore'] = {name(k): v for k, v in s['planBefore'].items()}
+    return data
+
+
+def seed_script(english=False):
     # shared_preferences on the web keeps each value JSON-encoded under "flutter.<key>".
-    value = json.dumps(json.dumps(demo_data(), ensure_ascii=False))
+    data = in_english(demo_data()) if english else demo_data()
+    value = json.dumps(json.dumps(data, ensure_ascii=False))
     return (
         '<script>(() => {\n'
         "  const reset = new URLSearchParams(location.search).has('reset');\n"
@@ -282,6 +313,7 @@ def seed_script():
         "  localStorage.setItem('flutter.unit', '\"kg\"');\n"
         # The demo has answered reps in reserve, so it asks for them too.
         "  localStorage.setItem('flutter.session.askRir', 'true');\n"
+        + ("  localStorage.setItem('flutter.language', '\"en\"');\n" if english else '') +
         "  if (reset) history.replaceState(null, '', location.pathname);\n"
         '})();</script>\n'
     )
@@ -294,7 +326,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.split('?')[0] not in ('/', '/index.html'):
             return super().do_GET()
-        html = (WEB / 'index.html').read_text().replace('<body>', '<body>\n' + seed_script(), 1).encode()
+        english = 'lang=en' in self.path
+        html = (WEB / 'index.html').read_text().replace('<body>', '<body>\n' + seed_script(english), 1).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(html)))

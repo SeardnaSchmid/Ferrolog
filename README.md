@@ -24,7 +24,7 @@
   <img src="docs/screenshots/history.png" width="19%" alt="History with calendar and streak">
 </p>
 
-<p align="center"><sub>The app's UI is in German; screenshots show the built-in demo data.</sub></p>
+<p align="center"><sub>Screenshots in English from the built-in demo data; the app speaks German too.</sub></p>
 
 ---
 
@@ -104,7 +104,7 @@ flutter build web
 python tool/demo_server.py 8091
 ```
 
-Then open `http://localhost:8091`; `http://localhost:8091/?reset` reseeds the demo.
+Then open `http://localhost:8091`; `http://localhost:8091/?reset` reseeds the demo, `?reset&lang=en` reseeds it in English.
 
 ## Architecture
 
