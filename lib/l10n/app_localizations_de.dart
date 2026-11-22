@@ -2443,6 +2443,88 @@ class L10nDe extends L10n {
   }
 
   @override
+  String get notifyAllDone => 'Alle Sätze geschafft';
+
+  @override
+  String get notifyFinishHint => 'Training beenden nicht vergessen';
+
+  @override
+  String notifySetTitle(String name, int set, int sets) {
+    return '$name · Satz $set/$sets';
+  }
+
+  @override
+  String notifyRestPaused(String time) {
+    return 'Pause angehalten ($time)';
+  }
+
+  @override
+  String get notifyRestOver => 'Pause vorbei';
+
+  @override
+  String get notifyChannelTraining => 'Laufendes Training';
+
+  @override
+  String get notifyChannelRest => 'Pause vorbei';
+
+  @override
+  String get notifyChannelReminders => 'Erinnerungen';
+
+  @override
+  String notifyStreakTitle(String weeks) {
+    return 'Serie von $weeks in Gefahr';
+  }
+
+  @override
+  String get notifyStreakLastDay =>
+      'Heute ist der letzte Tag für dein Wochenziel.';
+
+  @override
+  String notifyStreakDays(int n) {
+    return 'Noch $n Trainings in $n Tagen: ab heute jeden Tag eins.';
+  }
+
+  @override
+  String notifyBreakTitle(int days) {
+    return 'Seit $days Tagen kein Training';
+  }
+
+  @override
+  String get notifyBreakText => 'Ein kurzes Training bringt dich wieder rein.';
+
+  @override
+  String notifyBreakNext(String workout) {
+    return 'Als Nächstes: $workout';
+  }
+
+  @override
+  String get settingsNotify => 'Benachrichtigungen';
+
+  @override
+  String get settingsNotifyTraining => 'Laufendes Training';
+
+  @override
+  String get settingsNotifyTrainingHint =>
+      'Nächster Satz und Pause als Benachrichtigung, Signal am Ende der Pause auch bei gesperrtem Handy';
+
+  @override
+  String get settingsNotifyStreak => 'Wochenziel in Gefahr';
+
+  @override
+  String get settingsNotifyStreakHint =>
+      'Erinnert am letzten Tag, an dem das Wochenziel noch zu schaffen ist';
+
+  @override
+  String get settingsNotifyBreak => 'Lange Pause';
+
+  @override
+  String get settingsNotifyBreakHint =>
+      'Erinnert 7 und 14 Tage nach dem letzten Training';
+
+  @override
+  String get notifyChannelRestSilent => 'Pause vorbei (ohne Ton)';
+
+  @override
   String get loadStep => 'Kleinster Gewichtsschritt';
 
   @override
@@ -2492,4 +2574,11 @@ class L10nDe extends L10n {
   String autoRuleMiss(Object n) {
     return 'Nach $n verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.';
   }
+
+  @override
+  String get settingsRestWarning => 'Vorwarnung';
+
+  @override
+  String get settingsRestWarningHint =>
+      'Drei kurze Töne 10 Sekunden vor Pausenende';
 }

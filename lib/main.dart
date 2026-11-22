@@ -18,6 +18,7 @@ import 'edit_session.dart';
 import 'language.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'notify.dart';
 import 'plan_import.dart';
 import 'recap.dart';
 import 'session.dart';
@@ -58,6 +59,7 @@ Future<void> main() async {
   // nothing they lack, else the user decides.
   sync.remoteCovered = store.covers;
   await store.autoFinish();
+  initNotifications();
   runApp(const Ferrolog());
 }
 

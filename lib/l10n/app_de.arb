@@ -2159,6 +2159,76 @@
       }
     }
   },
+  "notifyAllDone": "Alle Sätze geschafft",
+  "notifyFinishHint": "Training beenden nicht vergessen",
+  "notifySetTitle": "{name} · Satz {set}/{sets}",
+  "@notifySetTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "set": {
+        "type": "int"
+      },
+      "sets": {
+        "type": "int"
+      }
+    }
+  },
+  "notifyRestPaused": "Pause angehalten ({time})",
+  "@notifyRestPaused": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyRestOver": "Pause vorbei",
+  "notifyChannelTraining": "Laufendes Training",
+  "notifyChannelRest": "Pause vorbei",
+  "notifyChannelReminders": "Erinnerungen",
+  "notifyStreakTitle": "Serie von {weeks} in Gefahr",
+  "@notifyStreakTitle": {
+    "placeholders": {
+      "weeks": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyStreakLastDay": "Heute ist der letzte Tag für dein Wochenziel.",
+  "notifyStreakDays": "Noch {n} Trainings in {n} Tagen: ab heute jeden Tag eins.",
+  "@notifyStreakDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "notifyBreakTitle": "Seit {days} Tagen kein Training",
+  "@notifyBreakTitle": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "notifyBreakText": "Ein kurzes Training bringt dich wieder rein.",
+  "notifyBreakNext": "Als Nächstes: {workout}",
+  "@notifyBreakNext": {
+    "placeholders": {
+      "workout": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsNotify": "Benachrichtigungen",
+  "settingsNotifyTraining": "Laufendes Training",
+  "settingsNotifyTrainingHint": "Nächster Satz und Pause als Benachrichtigung, Signal am Ende der Pause auch bei gesperrtem Handy",
+  "settingsNotifyStreak": "Wochenziel in Gefahr",
+  "settingsNotifyStreakHint": "Erinnert am letzten Tag, an dem das Wochenziel noch zu schaffen ist",
+  "settingsNotifyBreak": "Lange Pause",
+  "settingsNotifyBreakHint": "Erinnert 7 und 14 Tage nach dem letzten Training",
+  "notifyChannelRestSilent": "Pause vorbei (ohne Ton)",
   "loadStep": "Kleinster Gewichtsschritt",
   "loadStepHint": "Um wie viel kannst du das Gesamtgewicht dieser Übung mindestens verändern? Bei 1,25 kg pro Seite sind das 2,5 kg.",
   "loadStepSuggested": "Vorschlag: {step}",
@@ -2201,5 +2271,7 @@
   "autoRuleDone": "Sind alle Sätze geschafft, prüft Auto mit deiner Reserve im letzten Satz, ob die nächste Gewichtsstufe zum Grundziel passt. Ohne Angabe bleibt das Gewicht gleich.",
   "autoRuleBridge": "Ist die nächste Stufe zu schwer und du hast mindestens zwei Wiederholungen Reserve, kommt eine Wiederholung pro Satz dazu. Auto geht bis höchstens drei über dem Grundziel. Beim Wechsel zur nächsten Stufe gilt wieder das Grundziel.",
   "autoRuleTimed": "Bei erfülltem Zeitziel steigt das Gewicht um eine Stufe, wenn der Schritt höchstens 2,5 % beträgt.",
-  "autoRuleMiss": "Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt."
+  "autoRuleMiss": "Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.",
+  "settingsRestWarning": "Vorwarnung",
+  "settingsRestWarningHint": "Drei kurze Töne 10 Sekunden vor Pausenende"
 }

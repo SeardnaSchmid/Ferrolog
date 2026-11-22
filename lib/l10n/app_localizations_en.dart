@@ -2440,6 +2440,88 @@ class L10nEn extends L10n {
   }
 
   @override
+  String get notifyAllDone => 'All sets done';
+
+  @override
+  String get notifyFinishHint => 'Don\'t forget to finish the workout';
+
+  @override
+  String notifySetTitle(String name, int set, int sets) {
+    return '$name · set $set/$sets';
+  }
+
+  @override
+  String notifyRestPaused(String time) {
+    return 'Rest paused ($time)';
+  }
+
+  @override
+  String get notifyRestOver => 'Rest over';
+
+  @override
+  String get notifyChannelTraining => 'Running workout';
+
+  @override
+  String get notifyChannelRest => 'Rest over';
+
+  @override
+  String get notifyChannelReminders => 'Reminders';
+
+  @override
+  String notifyStreakTitle(String weeks) {
+    return 'Streak of $weeks at risk';
+  }
+
+  @override
+  String get notifyStreakLastDay =>
+      'Today is the last day for your weekly goal.';
+
+  @override
+  String notifyStreakDays(int n) {
+    return '$n workouts in $n days: one every day from today.';
+  }
+
+  @override
+  String notifyBreakTitle(int days) {
+    return 'No workout for $days days';
+  }
+
+  @override
+  String get notifyBreakText => 'A short workout gets you back in.';
+
+  @override
+  String notifyBreakNext(String workout) {
+    return 'Next up: $workout';
+  }
+
+  @override
+  String get settingsNotify => 'Notifications';
+
+  @override
+  String get settingsNotifyTraining => 'Running workout';
+
+  @override
+  String get settingsNotifyTrainingHint =>
+      'Next set and rest as a notification, a signal at the end of the rest even with the phone locked';
+
+  @override
+  String get settingsNotifyStreak => 'Weekly goal at risk';
+
+  @override
+  String get settingsNotifyStreakHint =>
+      'Reminds you on the last day the weekly goal can still be made';
+
+  @override
+  String get settingsNotifyBreak => 'Long break';
+
+  @override
+  String get settingsNotifyBreakHint =>
+      'Reminds you 7 and 14 days after the last workout';
+
+  @override
+  String get notifyChannelRestSilent => 'Rest over (no sound)';
+
+  @override
   String get loadStep => 'Smallest weight step';
 
   @override
@@ -2488,4 +2570,11 @@ class L10nEn extends L10n {
   String autoRuleMiss(Object n) {
     return 'After $n missed workouts in a row, weight drops by about 10% in available steps.';
   }
+
+  @override
+  String get settingsRestWarning => 'Advance warning';
+
+  @override
+  String get settingsRestWarningHint =>
+      'Three short beeps 10 seconds before the rest ends';
 }

@@ -3976,6 +3976,138 @@ abstract class L10n {
   /// **'Gesamt: {minutes} in {trainings}'**
   String cardioTotal(Object minutes, Object trainings);
 
+  /// No description provided for @notifyAllDone.
+  ///
+  /// In de, this message translates to:
+  /// **'Alle Sätze geschafft'**
+  String get notifyAllDone;
+
+  /// No description provided for @notifyFinishHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Training beenden nicht vergessen'**
+  String get notifyFinishHint;
+
+  /// No description provided for @notifySetTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'{name} · Satz {set}/{sets}'**
+  String notifySetTitle(String name, int set, int sets);
+
+  /// No description provided for @notifyRestPaused.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause angehalten ({time})'**
+  String notifyRestPaused(String time);
+
+  /// No description provided for @notifyRestOver.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause vorbei'**
+  String get notifyRestOver;
+
+  /// No description provided for @notifyChannelTraining.
+  ///
+  /// In de, this message translates to:
+  /// **'Laufendes Training'**
+  String get notifyChannelTraining;
+
+  /// No description provided for @notifyChannelRest.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause vorbei'**
+  String get notifyChannelRest;
+
+  /// No description provided for @notifyChannelReminders.
+  ///
+  /// In de, this message translates to:
+  /// **'Erinnerungen'**
+  String get notifyChannelReminders;
+
+  /// No description provided for @notifyStreakTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Serie von {weeks} in Gefahr'**
+  String notifyStreakTitle(String weeks);
+
+  /// No description provided for @notifyStreakLastDay.
+  ///
+  /// In de, this message translates to:
+  /// **'Heute ist der letzte Tag für dein Wochenziel.'**
+  String get notifyStreakLastDay;
+
+  /// No description provided for @notifyStreakDays.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch {n} Trainings in {n} Tagen: ab heute jeden Tag eins.'**
+  String notifyStreakDays(int n);
+
+  /// No description provided for @notifyBreakTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Seit {days} Tagen kein Training'**
+  String notifyBreakTitle(int days);
+
+  /// No description provided for @notifyBreakText.
+  ///
+  /// In de, this message translates to:
+  /// **'Ein kurzes Training bringt dich wieder rein.'**
+  String get notifyBreakText;
+
+  /// No description provided for @notifyBreakNext.
+  ///
+  /// In de, this message translates to:
+  /// **'Als Nächstes: {workout}'**
+  String notifyBreakNext(String workout);
+
+  /// No description provided for @settingsNotify.
+  ///
+  /// In de, this message translates to:
+  /// **'Benachrichtigungen'**
+  String get settingsNotify;
+
+  /// No description provided for @settingsNotifyTraining.
+  ///
+  /// In de, this message translates to:
+  /// **'Laufendes Training'**
+  String get settingsNotifyTraining;
+
+  /// No description provided for @settingsNotifyTrainingHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Nächster Satz und Pause als Benachrichtigung, Signal am Ende der Pause auch bei gesperrtem Handy'**
+  String get settingsNotifyTrainingHint;
+
+  /// No description provided for @settingsNotifyStreak.
+  ///
+  /// In de, this message translates to:
+  /// **'Wochenziel in Gefahr'**
+  String get settingsNotifyStreak;
+
+  /// No description provided for @settingsNotifyStreakHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Erinnert am letzten Tag, an dem das Wochenziel noch zu schaffen ist'**
+  String get settingsNotifyStreakHint;
+
+  /// No description provided for @settingsNotifyBreak.
+  ///
+  /// In de, this message translates to:
+  /// **'Lange Pause'**
+  String get settingsNotifyBreak;
+
+  /// No description provided for @settingsNotifyBreakHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Erinnert 7 und 14 Tage nach dem letzten Training'**
+  String get settingsNotifyBreakHint;
+
+  /// No description provided for @notifyChannelRestSilent.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause vorbei (ohne Ton)'**
+  String get notifyChannelRestSilent;
+
   /// No description provided for @loadStep.
   ///
   /// In de, this message translates to:
@@ -4047,6 +4179,18 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.'**
   String autoRuleMiss(Object n);
+
+  /// No description provided for @settingsRestWarning.
+  ///
+  /// In de, this message translates to:
+  /// **'Vorwarnung'**
+  String get settingsRestWarning;
+
+  /// No description provided for @settingsRestWarningHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Drei kurze Töne 10 Sekunden vor Pausenende'**
+  String get settingsRestWarningHint;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

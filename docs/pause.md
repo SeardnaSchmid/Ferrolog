@@ -21,4 +21,4 @@ Die Pause lebte nur in der Trainingsseite. Zurück zum Startbildschirm und wiede
 ## Phasen
 
 1. **Erledigt**: Teil A, Pause gespeichert, Anzeige auf dem Startbildschirm.
-2. Offen: Signal im Hintergrund, kommt mit WP8d (siehe [android.md](android.md)).
+2. **Erledigt**: Signal im Hintergrund mit WP8d, siehe [benachrichtigungen.md](benachrichtigungen.md).

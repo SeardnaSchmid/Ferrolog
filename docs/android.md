@@ -17,5 +17,5 @@ Stand der Umsetzung (WP8 der Improvement-Spec). Wird bei jedem Schritt fortgesch
 1. **Erledigt**: WP8a Trainingsseite über dem Sperrbildschirm.
 2. Offen: WP8b Lautstärketasten loggen Sätze.
 3. Offen: WP8c Eigene Vibrationsmuster.
-4. Offen: WP8d Laufende Benachrichtigung und Live Update (bringt auch das Pausensignal im Hintergrund, Teil B von WP2, siehe [pause.md](pause.md)).
+4. **Erledigt** bis auf die Aktionen: WP8d Laufende Benachrichtigung und Live Update, mit Pausensignal im Hintergrund, siehe [benachrichtigungen.md](benachrichtigungen.md).
 5. Offen: WP8e Health Connect (Puls, Körpergewicht).

@@ -74,11 +74,12 @@ class _SessionPageState extends State<SessionPage> {
       (DateTime.now().difference(h.start).inMilliseconds / 1000).floor();
 
   /// The seconds a timed set aims for at least, and at most (the top of the range).
-  (int, int) holdRange(ExerciseLog log, int set) => (log.targets[set], max(log.targets[set], log.maxReps ?? 0));
+  (int, int) holdRange(ExerciseLog log, int set) =>
+      (log.targets[set], max(log.targets[set], log.maxReps ?? 0));
 
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
-  bool alerted = false;
+  bool alerted = false, warned = false;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
     // Ended elsewhere (finished automatically after a long break, see Store.autoFinish): close.
     if (store.active != s) {
@@ -104,6 +105,14 @@ class _SessionPageState extends State<SessionPage> {
         restAlert();
       }
     }
+    if (lastSetAt != null &&
+        pausedAt == null &&
+        !warned &&
+        restLeft > 0 &&
+        restLeft <= 10) {
+      warned = true;
+      if (prefs.getBool('rest.warning') ?? true) restAlert(warning: true);
+    }
     // Rest over: sound and/or vibration once, as configured in the settings.
     if (lastSetAt != null && pausedAt == null && !alerted && restLeft <= 0) {
       alerted = true;
@@ -120,6 +129,7 @@ class _SessionPageState extends State<SessionPage> {
       lastSetAt = DateTime.now();
       if (pausedAt != null) pausedAt = lastSetAt;
       alerted = false;
+      warned = false;
     });
     store.saveActive(s);
   }
@@ -143,6 +153,7 @@ class _SessionPageState extends State<SessionPage> {
     ticker; // start
     // Reopened after the rest ran out: it already signalled (or the app was away), not again.
     alerted = lastSetAt != null && restLeft <= 0;
+    warned = lastSetAt != null && restLeft <= 10;
     // A timed set running when the app was closed carries on.
     for (final log in s.exercises) {
       if (log.timed && log.startedAt != null) {
@@ -164,8 +175,11 @@ class _SessionPageState extends State<SessionPage> {
     super.dispose();
   }
 
-  Exercise? planOf(ExerciseLog log) =>
-      planEntryOf(store.workouts.where((w) => w.id == s.workoutId).firstOrNull, s.exercises, log);
+  Exercise? planOf(ExerciseLog log) => planEntryOf(
+    store.workouts.where((w) => w.id == s.workoutId).firstOrNull,
+    s.exercises,
+    log,
+  );
 
   /// Rest after a set of [log]: the plan's, else what came with a swapped-in or added exercise.
   int restAfter(ExerciseLog log, {required bool missed}) {
@@ -182,17 +196,28 @@ class _SessionPageState extends State<SessionPage> {
     s.exercises.replaceRange(i, i + 1, next);
     final same = next.where((l) => l.name == old.name).firstOrNull;
     if (touched == old) touched = same ?? next.firstOrNull;
-    if (cardKeys.remove(old) case final key? when same != null) cardKeys[same] = key;
-    if (hold case final h? when h.log == old) hold = same == null ? null : (log: same, set: h.set, start: h.start);
+    if (cardKeys.remove(old) case final key? when same != null) {
+      cardKeys[same] = key;
+    }
+    if (hold case final h? when h.log == old) {
+      hold = same == null ? null : (log: same, set: h.set, start: h.start);
+    }
   }
 
   /// An exercise picked in the editor, or null when cancelled or already in the training.
   Future<Exercise?> pickExercise() async {
     final e = await Navigator.push<Exercise>(
-        context, MaterialPageRoute(fullscreenDialog: true, builder: (_) => const ExerciseEditor(null)));
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const ExerciseEditor(null),
+      ),
+    );
     if (e == null || !mounted) return null;
     if (s.exercises.any((l) => l.name == e.name)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr.alreadyInTraining)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.alreadyInTraining)));
       return null;
     }
     return e;
@@ -200,8 +225,13 @@ class _SessionPageState extends State<SessionPage> {
 
   /// The exercise as it stands in this training, for the editor: the plan's settings, this training's sets.
   Exercise exerciseOf(ExerciseLog log) {
-    final plan = planOf(log)?.copy() ??
-        Exercise(name: log.name, increment: log.increment ?? 2.5, restSeconds: log.restSeconds ?? 120);
+    final plan =
+        planOf(log)?.copy() ??
+        Exercise(
+          name: log.name,
+          increment: log.increment ?? 2.5,
+          restSeconds: log.restSeconds ?? 120,
+        );
     return plan
       ..loadStep = log.loadStep ?? plan.loadStep
       ..barbellSetups = log.barbellSetups
@@ -214,7 +244,9 @@ class _SessionPageState extends State<SessionPage> {
       ..setReps = log.targets.toSet().length == 1 ? null : List.of(log.targets)
       ..maxReps = log.maxReps
       ..weight = log.weight
-      ..setWeights = log.weights.toSet().length == 1 ? null : List.of(log.weights);
+      ..setWeights = log.weights.toSet().length == 1
+          ? null
+          : List.of(log.weights);
   }
 
   /// "Bearbeiten": the exercise in the editor as it stands in the training. Another name swaps it (machine
@@ -225,19 +257,30 @@ class _SessionPageState extends State<SessionPage> {
       context,
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => ExerciseEditor(exerciseOf(log),
-            forTraining: true, taken: {for (final l in s.exercises) if (l != log) l.name}),
+        builder: (_) => ExerciseEditor(
+          exerciseOf(log),
+          forTraining: true,
+          taken: {
+            for (final l in s.exercises)
+              if (l != log) l.name,
+          },
+        ),
       ),
     );
     if (e == null || !mounted) return;
     if (e.name != log.name) return swapExercise(log, e);
     if (e.cardio != log.cardio || e.timed != log.timed) {
       if (log.setsDone > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(tr.kindStays)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr.kindStays)));
         return;
       }
-      final next = ExerciseLog.fromPlan(e, replaces: log.replaces, added: log.added);
+      final next = ExerciseLog.fromPlan(
+        e,
+        replaces: log.replaces,
+        added: log.added,
+      );
       setState(() {
         replaceLog(log, [next]);
         touched = next;
@@ -262,13 +305,20 @@ class _SessionPageState extends State<SessionPage> {
         ..setWeights = e.setWeights?.sublist(e.sets - left)
         ..setReps = e.setReps?.sublist(e.sets - left);
     }
-    final next = ExerciseLog.fromPlan(e, replaces: log.added ? null : log.replaces ?? log.name, added: log.added);
+    final next = ExerciseLog.fromPlan(
+      e,
+      replaces: log.added ? null : log.replaces ?? log.name,
+      added: log.added,
+    );
     setState(() {
       touched = next;
       if (log.setsDone == 0) {
         replaceLog(log, [next]);
       } else {
-        final done = [for (final (i, r) in log.reps.indexed) if (r != null) i];
+        final done = [
+          for (final (i, r) in log.reps.indexed)
+            if (r != null) i,
+        ];
         replaceLog(log, [
           log.withSets(
             reps: [for (final i in done) log.reps[i]],
@@ -313,23 +363,37 @@ class _SessionPageState extends State<SessionPage> {
   /// The card's menu: change the training, never the plan. Small, so it sits at the card's edge.
   Widget _exerciseMenu(ExerciseLog log) {
     final i = s.exercises.indexOf(log);
-    final running = hold?.log == log || log.startedAt != null; // a hold or stopwatch on it
-    PopupMenuItem<VoidCallback> item(String label, IconData icon, VoidCallback action) => PopupMenuItem(
-          value: action,
-          child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(icon), title: Text(label)),
-        );
+    final running =
+        hold?.log == log || log.startedAt != null; // a hold or stopwatch on it
+    PopupMenuItem<VoidCallback> item(
+      String label,
+      IconData icon,
+      VoidCallback action,
+    ) => PopupMenuItem(
+      value: action,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(label),
+      ),
+    );
     return PopupMenuButton<VoidCallback>(
       tooltip: tr.editExercise,
       enabled: !running,
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
-          minimumSize: const Size(32, 32), fixedSize: const Size(32, 32), padding: EdgeInsets.zero),
+        minimumSize: const Size(32, 32),
+        fixedSize: const Size(32, 32),
+        padding: EdgeInsets.zero,
+      ),
       icon: const Icon(Icons.more_vert, size: 22),
       onSelected: (action) => action(),
       itemBuilder: (_) => [
         item(tr.edit, Icons.edit_outlined, () => editExercise(log)),
-        if (i > 0) item(tr.moveUp, Icons.arrow_upward, () => moveExercise(log, -1)),
-        if (i < s.exercises.length - 1) item(tr.moveDown, Icons.arrow_downward, () => moveExercise(log, 1)),
+        if (i > 0)
+          item(tr.moveUp, Icons.arrow_upward, () => moveExercise(log, -1)),
+        if (i < s.exercises.length - 1)
+          item(tr.moveDown, Icons.arrow_downward, () => moveExercise(log, 1)),
         if (log.added && log.setsDone == 0) ...[
           const PopupMenuDivider(),
           item(tr.remove, Icons.delete_outline, () => removeExercise(log)),
@@ -340,13 +404,16 @@ class _SessionPageState extends State<SessionPage> {
 
   /// Keeps [log]'s card in view once the next frame is laid out, so a set logged near the bottom
   /// edge doesn't stay half hidden.
-  void reveal(ExerciseLog log) => WidgetsBinding.instance.addPostFrameCallback((_) {
+  void reveal(ExerciseLog log) =>
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         final card = cardKeys[log]?.currentContext;
         if (card == null || !card.mounted) return;
-        Scrollable.ensureVisible(card,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+        Scrollable.ensureVisible(
+          card,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
       });
 
   /// Ends the hold: the seconds held (up to the top of the range) are the set's result, then the rest
@@ -363,6 +430,7 @@ class _SessionPageState extends State<SessionPage> {
     lastSetAt = DateTime.now();
     pausedAt = null;
     alerted = false;
+    warned = false;
     restTarget = restAfter(h.log, missed: held < target);
   }
 
@@ -383,7 +451,8 @@ class _SessionPageState extends State<SessionPage> {
           log.startedAt = start;
           holdGo = leadIn == 0;
           holdLow = false;
-          lastSetAt = pausedAt = null; // the rest is over once the next hold starts
+          lastSetAt = pausedAt =
+              null; // the rest is over once the next hold starts
         }
       });
       store.saveActive(s);
@@ -398,7 +467,10 @@ class _SessionPageState extends State<SessionPage> {
           log.reps[0] = log.km = null;
           log.doneAt[0] = null;
         } else if (log.startedAt case final start?) {
-          log.reps[0] = max(1, (DateTime.now().difference(start).inSeconds / 60).round());
+          log.reps[0] = max(
+            1,
+            (DateTime.now().difference(start).inSeconds / 60).round(),
+          );
           log.doneAt[0] = DateTime.now();
           log.km ??= log.targetKm;
           log.startedAt = null;
@@ -422,12 +494,15 @@ class _SessionPageState extends State<SessionPage> {
         lastSetAt = DateTime.now();
         pausedAt = null;
         alerted = false;
+        warned = false;
         restTarget = restAfter(log, missed: done < target);
         if (r == null && askRir(log)) {
           rirAsk = log;
         }
       }
-      if (log.setsDone < log.reps.length) log.rir = null; // the last set undone takes the answer along
+      if (log.setsDone < log.reps.length) {
+        log.rir = null; // the last set undone takes the answer along
+      }
     });
     store.saveActive(s);
   }
@@ -450,7 +525,12 @@ class _SessionPageState extends State<SessionPage> {
       ticker.cancel();
       await store.finishSession(s);
       homeTab.value = 0; // "Fertig" on the recap lands on the workouts
-      if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => RecapPage(s)));
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => RecapPage(s)),
+        );
+      }
       return;
     }
     if (mounted) Navigator.pop(context);
@@ -459,13 +539,18 @@ class _SessionPageState extends State<SessionPage> {
   /// Sheet to enter the actual minutes and distance of a cardio exercise.
   Future<void> editCardio(ExerciseLog log) async {
     setState(() => touched = log);
-    final running = switch (log.startedAt) { final t? => (DateTime.now().difference(t).inSeconds / 60).round(), null => null };
+    final running = switch (log.startedAt) {
+      final t? => (DateTime.now().difference(t).inSeconds / 60).round(),
+      null => null,
+    };
     final result = await showCardioSheet(context, log, running: running);
     if (result == null) return;
     setState(() {
       applyCardio(log, result);
       if (log.reps[0] != null) log.startedAt = null;
-      log.doneAt[0] = log.reps[0] == null ? null : log.doneAt[0] ?? DateTime.now();
+      log.doneAt[0] = log.reps[0] == null
+          ? null
+          : log.doneAt[0] ?? DateTime.now();
     });
     store.saveActive(s);
   }
@@ -473,7 +558,12 @@ class _SessionPageState extends State<SessionPage> {
   /// Sheet to edit a set's weight, see [showWeightSheet].
   Future<void> pickWeight(ExerciseLog log, int i) async {
     setState(() => touched = log);
-    final result = await showWeightSheet(context, log, i, step: store.loadStepOf(exerciseOf(log)).$1);
+    final result = await showWeightSheet(
+      context,
+      log,
+      i,
+      step: store.loadStepOf(exerciseOf(log)).$1,
+    );
     if (result case (final w, final scope)) applyWeight(log, i, w, scope);
   }
 
@@ -485,13 +575,18 @@ class _SessionPageState extends State<SessionPage> {
     final done = s.exercises.fold(0, (n, e) => n + e.setsDone);
     final total = s.exercises.fold(0, (n, e) => n + e.reps.length);
     // Highlight the exercise last touched; before that, the first one with open sets.
-    final current = touched ?? s.exercises.where((e) => e.setsDone < e.reps.length).firstOrNull;
+    final current =
+        touched ??
+        s.exercises.where((e) => e.setsDone < e.reps.length).firstOrNull;
     final now = DateTime.now();
     final left = sessionLeft(s, pace, now);
     // What's left of the training and when it'll be done, null when nothing is left.
     final (leftText, endText) = left <= Duration.zero
         ? (null, null)
-        : (tr.leftAbout(aboutLabel(left)), tr.doneAround(timeOfDay(now.add(left))));
+        : (
+            tr.leftAbout(aboutLabel(left)),
+            tr.doneAround(timeOfDay(now.add(left))),
+          );
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 104,
@@ -505,7 +600,10 @@ class _SessionPageState extends State<SessionPage> {
           child: Text(tr.discard),
         ),
         centerTitle: true,
-        title: Text(s.workoutName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500)),
+        title: Text(
+          s.workoutName,
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -522,91 +620,157 @@ class _SessionPageState extends State<SessionPage> {
             maxScaleFactor: 1.15,
             child: Container(
               height: 104,
-              color: Color.alphaBlend(c.primaryContainer.withValues(alpha: .45), c.surface),
+              color: Color.alphaBlend(
+                c.primaryContainer.withValues(alpha: .45),
+                c.surface,
+              ),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-              child: Column(children: [
-                SizedBox(
-                  height: 18,
-                  child: Row(children: [
-                    const LiveDot(),
-                    const SizedBox(width: 8),
-                    Text(tr.running,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
-                    Text(' · ', style: TextStyle(color: c.onSurfaceVariant)),
-                    Elapsed(s.date, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
-                    const Spacer(),
-                    // While the line below is taken, what's left of the training moves up here.
-                    Text(
-                      [
-                        tr.setsDone(done, total),
-                        if (status != null && left > Duration.zero) aboutLabel(left),
-                      ].join(' · '),
-                      style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 18,
+                    child: Row(
+                      children: [
+                        const LiveDot(),
+                        const SizedBox(width: 8),
+                        Text(
+                          tr.running,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: c.primary,
+                          ),
+                        ),
+                        Text(
+                          ' · ',
+                          style: TextStyle(color: c.onSurfaceVariant),
+                        ),
+                        Elapsed(
+                          s.date,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: c.onSurfaceVariant,
+                          ),
+                        ),
+                        const Spacer(),
+                        // While the line below is taken, what's left of the training moves up here.
+                        Text(
+                          [
+                            tr.setsDone(done, total),
+                            if (status != null && left > Duration.zero)
+                              aboutLabel(left),
+                          ].join(' · '),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: c.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                  ]),
-                ),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(
-                  value: total == 0 ? 0 : done / total,
-                  minHeight: 3,
-                  borderRadius: BorderRadius.circular(2),
-                  color: c.onSurface.withValues(alpha: .55),
-                  backgroundColor: c.surfaceContainerHighest,
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  height: 44,
-                  child: status == null
-                      ? Row(children: [
-                          Text(leftText ?? '',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: c.onSurface)),
-                          const Spacer(),
-                          if (endText case final end?)
-                            Text(end, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-                        ])
-                      : Row(children: [
-                          Text(status.time,
-                              style: TextStyle(
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: total == 0 ? 0 : done / total,
+                    minHeight: 3,
+                    borderRadius: BorderRadius.circular(2),
+                    color: c.onSurface.withValues(alpha: .55),
+                    backgroundColor: c.surfaceContainerHighest,
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 44,
+                    child: status == null
+                        ? Row(
+                            children: [
+                              Text(
+                                leftText ?? '',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: c.onSurface,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (endText case final end?)
+                                Text(
+                                  end,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: c.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Text(
+                                status.time,
+                                style: TextStyle(
                                   fontSize: 36,
                                   height: 1,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -.36,
                                   color: status.color,
-                                  fontFeatures: const [FontFeature.tabularFigures()])),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  Icon(status.icon, size: 14, color: status.color),
-                                  const SizedBox(width: 4),
-                                  Flexible(
-                                    child: Text(status.word,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .66, color: status.color)),
-                                  ),
-                                ]),
-                                const SizedBox(height: 3),
-                                Text(status.detail,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          status.icon,
+                                          size: 14,
+                                          color: status.color,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            status.word,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: .66,
+                                              color: status.color,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      status.detail,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: c.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              for (final (i, button)
+                                  in status.buttons.indexed) ...[
+                                if (i > 0) const SizedBox(width: 8),
+                                button,
                               ],
-                            ),
+                            ],
                           ),
-                          for (final (i, button) in status.buttons.indexed) ...[
-                            if (i > 0) const SizedBox(width: 8),
-                            button,
-                          ],
-                        ]),
-                ),
-                const SizedBox(height: 6),
-                status?.bar ?? RestBar(color: c.onSurface, empty: true),
-              ]),
+                  ),
+                  const SizedBox(height: 6),
+                  status?.bar ?? RestBar(color: c.onSurface, empty: true),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -631,8 +795,16 @@ class _SessionPageState extends State<SessionPage> {
   /// What the big line of the live strip shows: a timed set (lead-in, then held) before a running
   /// rest; null when neither runs. The rest's zones: blue while resting, orange from 30 s before the end
   /// ("go" once it's over) to 30 s over, then red with a striped bar; paused in grey with a dashed bar.
-  ({String time, Color color, IconData icon, String word, String detail, List<Widget> buttons, Widget bar})? stripStatus(
-      ColorScheme c) {
+  ({
+    String time,
+    Color color,
+    IconData icon,
+    String word,
+    String detail,
+    List<Widget> buttons,
+    Widget bar,
+  })?
+  stripStatus(ColorScheme c) {
     if (hold case final h?) {
       final held = heldOf(h);
       final (low, top) = holdRange(h.log, h.set);
@@ -658,20 +830,32 @@ class _SessionPageState extends State<SessionPage> {
               word: tr.stripHold,
               detail: tr.holdGoal(top > low ? '$low–$top' : '$top'),
               buttons: [_roundButton(Icons.stop, tr.stop, stop, filled: true)],
-              bar: RestBar(color: c.primary, fraction: held / top, marker: top > low ? low / top : null),
+              bar: RestBar(
+                color: c.primary,
+                fraction: held / top,
+                marker: top > low ? low / top : null,
+              ),
             );
     }
     if (lastSetAt == null) return null;
     final left = restLeft;
-    final fraction = restTarget == 0 ? 0.0 : (left / restTarget).clamp(0.0, 1.0);
+    final fraction = restTarget == 0
+        ? 0.0
+        : (left / restTarget).clamp(0.0, 1.0);
     final time = left > 0 ? clock(left) : '+${clock(-left)}';
     final buttons = [
       pausedAt == null
           ? _roundButton(Icons.pause, tr.pause, toggleRestPause)
-          : _roundButton(Icons.play_arrow, tr.resumeRest, toggleRestPause, filled: true),
+          : _roundButton(
+              Icons.play_arrow,
+              tr.resumeRest,
+              toggleRestPause,
+              filled: true,
+            ),
       _roundButton(Icons.restart_alt, tr.restart, restartRest),
     ];
-    final of = tr.restOf(clock(restTarget)), goal = tr.restGoal(clock(restTarget));
+    final of = tr.restOf(clock(restTarget)),
+        goal = tr.restGoal(clock(restTarget));
     if (pausedAt != null) {
       return (
         time: time,
@@ -685,230 +869,359 @@ class _SessionPageState extends State<SessionPage> {
     }
     return switch (restZone(left, restTarget)) {
       RestZone.rest => (
-          time: time,
-          color: c.primary,
-          icon: Icons.timer_outlined,
-          word: tr.stripRest,
-          detail: of,
-          buttons: buttons,
-          bar: RestBar(color: c.primary, fraction: fraction),
-        ),
+        time: time,
+        color: c.primary,
+        icon: Icons.timer_outlined,
+        word: tr.stripRest,
+        detail: of,
+        buttons: buttons,
+        bar: RestBar(color: c.primary, fraction: fraction),
+      ),
       RestZone.soon when left > 0 => (
-          time: time,
-          color: c.tertiary,
-          icon: Icons.arrow_forward,
-          word: tr.stripSoon,
-          detail: of,
-          buttons: buttons,
-          bar: RestBar(color: c.tertiary, fraction: fraction),
-        ),
+        time: time,
+        color: c.tertiary,
+        icon: Icons.arrow_forward,
+        word: tr.stripSoon,
+        detail: of,
+        buttons: buttons,
+        bar: RestBar(color: c.tertiary, fraction: fraction),
+      ),
       RestZone.soon => (
-          time: time,
-          color: c.tertiary,
-          icon: Icons.notifications_none,
-          word: tr.stripGo,
-          detail: goal,
-          buttons: buttons,
-          bar: RestBar(color: c.tertiary.withValues(alpha: .35)),
-        ),
+        time: time,
+        color: c.tertiary,
+        icon: Icons.notifications_none,
+        word: tr.stripGo,
+        detail: goal,
+        buttons: buttons,
+        bar: RestBar(color: c.tertiary.withValues(alpha: .35)),
+      ),
       RestZone.late => (
-          time: time,
-          color: c.error,
-          icon: Icons.warning_amber_rounded,
-          word: tr.stripLate,
-          detail: goal,
-          buttons: buttons,
-          bar: RestBar(color: c.error, striped: true),
-        ),
+        time: time,
+        color: c.error,
+        icon: Icons.warning_amber_rounded,
+        word: tr.stripLate,
+        detail: goal,
+        buttons: buttons,
+        bar: RestBar(color: c.error, striped: true),
+      ),
     };
   }
 
   /// On the card of the exercise whose last set was just logged, under its sets: one tap answers, the
   /// next set tapped (or ignoring it) answers nothing.
   Widget _rirQuestion(ExerciseLog log, ColorScheme c) => Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Row(children: [
-          Text(tr.rirQuestion, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-          const SizedBox(width: 10),
-          for (final n in const [0, 1, 2, 3, 4]) ...[
-            if (n > 0) const SizedBox(width: 6),
-            Expanded(
-              child: Material(
-                color: c.surfaceContainerHigh,
+    padding: const EdgeInsets.only(top: 10),
+    child: Row(
+      children: [
+        Text(
+          tr.rirQuestion,
+          style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+        ),
+        const SizedBox(width: 10),
+        for (final n in const [0, 1, 2, 3, 4]) ...[
+          if (n > 0) const SizedBox(width: 6),
+          Expanded(
+            child: Material(
+              color: c.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => answerRir(log, n),
-                  child: SizedBox(
-                    height: 36,
-                    child: Center(
-                      child: Text(n == 4 ? '4+' : '$n',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.onSurface)),
+                onTap: () => answerRir(log, n),
+                child: SizedBox(
+                  height: 36,
+                  child: Center(
+                    child: Text(
+                      n == 4 ? '4+' : '$n',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: c.onSurface,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ]),
-      );
+          ),
+        ],
+      ],
+    ),
+  );
 
   /// A round 44 dp button for the live strip: tonal, or filled for the action that matters now.
-  Widget _roundButton(IconData icon, String tooltip, VoidCallback onPressed, {bool filled = false}) {
+  Widget _roundButton(
+    IconData icon,
+    String tooltip,
+    VoidCallback onPressed, {
+    bool filled = false,
+  }) {
     final style = IconButton.styleFrom(
-        fixedSize: const Size(44, 44), minimumSize: const Size(44, 44), padding: EdgeInsets.zero);
+      fixedSize: const Size(44, 44),
+      minimumSize: const Size(44, 44),
+      padding: EdgeInsets.zero,
+    );
     final child = Icon(icon, size: 22);
     return filled
-        ? IconButton.filled(style: style, tooltip: tooltip, onPressed: onPressed, icon: child)
-        : IconButton.filledTonal(style: style, tooltip: tooltip, onPressed: onPressed, icon: child);
+        ? IconButton.filled(
+            style: style,
+            tooltip: tooltip,
+            onPressed: onPressed,
+            icon: child,
+          )
+        : IconButton.filledTonal(
+            style: style,
+            tooltip: tooltip,
+            onPressed: onPressed,
+            icon: child,
+          );
   }
 
   /// One exercise as a card; the current one outlined and tinted like the running training on the overview.
-  Widget _exerciseCard(ExerciseLog log, bool current, ColorScheme c, TextStyle muted) => Card(
-        color: current ? Color.alphaBlend(c.primaryContainer.withValues(alpha: .45), c.surfaceContainerLow) : null,
-        shape: current
-            ? RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16), side: BorderSide(color: c.primary, width: 2))
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          child: Column(
+  Widget _exerciseCard(
+    ExerciseLog log,
+    bool current,
+    ColorScheme c,
+    TextStyle muted,
+  ) => Card(
+    color: current
+        ? Color.alphaBlend(
+            c.primaryContainer.withValues(alpha: .45),
+            c.surfaceContainerLow,
+          )
+        : null,
+    shape: current
+        ? RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: c.primary, width: 2),
+          )
+        : null,
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      log.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     Text(
                       log.cardio
-                          ? tr.cardioGoal(cardioLabel(log.targetReps, log.targetKm))
+                          ? tr.cardioGoal(
+                              cardioLabel(log.targetReps, log.targetKm),
+                            )
                           : [
-                              setsLabel(log.targets, log.maxReps, seconds: log.timed),
-                              if (planOf(log)?.restSeconds ?? log.restSeconds case final rest?) tr.restLine(clock(rest)),
-                              if (log.setsDone == log.reps.length ? measured(s, log) : null case final m?)
+                              setsLabel(
+                                log.targets,
+                                log.maxReps,
+                                seconds: log.timed,
+                              ),
+                              if (planOf(log)?.restSeconds ?? log.restSeconds
+                                  case final rest?)
+                                tr.restLine(clock(rest)),
+                              if (log.setsDone == log.reps.length
+                                      ? measured(s, log)
+                                      : null
+                                  case final m?)
                                 takenLabel(m.total)
                               else if (log.setsDone == 0)
-                                aboutLabel(pace.of(shapeOfLog(log, planOf(log)))),
+                                aboutLabel(
+                                  pace.of(shapeOfLog(log, planOf(log))),
+                                ),
                             ].join(' · '),
                       style: muted,
                     ),
-                    if (log.cardio ? null : rangeProgress(log, auto: planOf(log)?.auto ?? false) case final p?) Text(p, style: muted),
-                    if (log.replaces case final r?) Text(tr.insteadOf(r), style: muted),
-                    if ((log.cardio || log.maxReps != null ? null : planOf(log)?.state?.bridgeFrom) case final base? when log.targetReps > base)
-                      Text(tr.progBridgeTarget(log.targetReps, base), style: muted),
+                    if (log.cardio
+                            ? null
+                            : rangeProgress(
+                                log,
+                                auto: planOf(log)?.auto ?? false,
+                              )
+                        case final p?)
+                      Text(p, style: muted),
+                    if (log.replaces case final r?)
+                      Text(tr.insteadOf(r), style: muted),
+                    if ((log.cardio || log.maxReps != null
+                            ? null
+                            : planOf(log)?.state?.bridgeFrom)
+                        case final base? when log.targetReps > base)
+                      Text(
+                        tr.progBridgeTarget(log.targetReps, base),
+                        style: muted,
+                      ),
                     if (log.rir case final r?) Text(rirLabel(r), style: muted),
-                  ]),
+                  ],
                 ),
-                // On the title's line: the state, then the menu at the edge.
-                SizedBox(
-                  height: 26,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+              ),
+              // On the title's line: the state, then the menu at the edge.
+              SizedBox(
+                height: 26,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     if (log.setsDone == log.reps.length)
-                      Icon(Icons.check_circle, size: 22, color: log.succeeded ? c.primary : c.tertiary)
+                      Icon(
+                        Icons.check_circle,
+                        size: 22,
+                        color: log.succeeded ? c.primary : c.tertiary,
+                      )
                     else if (current)
-                      Text(tr.now,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.primary)),
-                    const SizedBox(width: 2),
-                    Transform.translate(offset: const Offset(6, 0), child: _exerciseMenu(log)),
-                  ]),
-                ),
-              ]),
-              const SizedBox(height: 10),
-              if (log.cardio)
-                _cardioTile(log, c)
-              else
-              Row(
-                children: [
-                  for (final (i, r) in log.reps.indexed) ...[
-                    if (i > 0) const SizedBox(width: 8),
-                    Flexible(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 84),
-                        child: SetTile(
-                          reps: r,
-                          target: log.targets[i],
-                          targetMax: log.maxReps,
-                          repsUnit: log.timed ? ' s' : '',
-                          // Held: the seconds so far; in the lead-in the seconds to go, negative.
-                          live: switch (hold) {
-                            final h? when h.log == log && h.set == i => '${heldOf(h)}',
-                            _ => null,
-                          },
-                          // No weight: reps only, the weight can still be added by tapping.
-                          weight: log.weights[i] == 0 ? '–' : weightNum(log.weights[i]),
-                          weightUnit: log.weights[i] == 0 ? '' : null,
-                          onTapReps: () => tapSet(log, i),
-                          onTapWeight: () => pickWeight(log, i),
+                      Text(
+                        tr.now,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                          color: c.primary,
                         ),
                       ),
+                    const SizedBox(width: 2),
+                    Transform.translate(
+                      offset: const Offset(6, 0),
+                      child: _exerciseMenu(log),
                     ),
                   ],
-                ],
+                ),
               ),
-              if (rirAsk == log) _rirQuestion(log, c),
             ],
           ),
-        ),
-      );
+          const SizedBox(height: 10),
+          if (log.cardio)
+            _cardioTile(log, c)
+          else
+            Row(
+              children: [
+                for (final (i, r) in log.reps.indexed) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 84),
+                      child: SetTile(
+                        reps: r,
+                        target: log.targets[i],
+                        targetMax: log.maxReps,
+                        repsUnit: log.timed ? ' s' : '',
+                        // Held: the seconds so far; in the lead-in the seconds to go, negative.
+                        live: switch (hold) {
+                          final h? when h.log == log && h.set == i =>
+                            '${heldOf(h)}',
+                          _ => null,
+                        },
+                        // No weight: reps only, the weight can still be added by tapping.
+                        weight: log.weights[i] == 0
+                            ? '–'
+                            : weightNum(log.weights[i]),
+                        weightUnit: log.weights[i] == 0 ? '' : null,
+                        onTapReps: () => tapSet(log, i),
+                        onTapWeight: () => pickWeight(log, i),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          if (rirAsk == log) _rirQuestion(log, c),
+        ],
+      ),
+    ),
+  );
 
   /// Cardio as one wide tile: a stopwatch on top (start / stop / undo), what was done below (tap to edit).
   Widget _cardioTile(ExerciseLog log, ColorScheme c) {
     final minutes = log.reps[0], start = log.startedAt;
     final (bg, fg) = minutes != null
-        ? (log.succeeded ? (c.primary, c.onPrimary) : (c.tertiaryContainer, c.onTertiaryContainer))
+        ? (log.succeeded
+              ? (c.primary, c.onPrimary)
+              : (c.tertiaryContainer, c.onTertiaryContainer))
         : start != null
-            ? (c.primaryContainer, c.onPrimaryContainer)
-            : (c.surfaceContainerHigh, c.onSurfaceVariant);
-    final big = TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: fg, fontFeatures: const [FontFeature.tabularFigures()]);
+        ? (c.primaryContainer, c.onPrimaryContainer)
+        : (c.surfaceContainerHigh, c.onSurfaceVariant);
+    final big = TextStyle(
+      fontSize: 24,
+      fontWeight: FontWeight.w700,
+      color: fg,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     final small = TextStyle(fontSize: 13, color: fg.withValues(alpha: .75));
     final goal = tr.restGoal(cardioLabel(log.targetReps, log.targetKm));
     final top = switch ((minutes, start)) {
-      (final m?, _) => Text.rich(TextSpan(children: [
-          TextSpan(text: tr.minutes(m), style: big),
-          TextSpan(text: '  ·  $goal', style: small),
-        ])),
-      (null, final t?) => Row(mainAxisSize: MainAxisSize.min, children: [
+      (final m?, _) => Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: tr.minutes(m), style: big),
+            TextSpan(text: '  ·  $goal', style: small),
+          ],
+        ),
+      ),
+      (null, final t?) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Text(clock(DateTime.now().difference(t).inSeconds), style: big),
           const SizedBox(width: 10),
           Icon(Icons.stop_circle_outlined, color: fg),
           Text(' ${tr.stop}', style: small),
-        ]),
-      _ => Row(mainAxisSize: MainAxisSize.min, children: [
+        ],
+      ),
+      _ => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Icon(Icons.play_arrow, color: fg),
           Text(' ${tr.start}', style: big.copyWith(fontSize: 20)),
           Text('  ·  $goal', style: small),
-        ]),
+        ],
+      ),
     };
     final km = log.km;
     final radius = BorderRadius.circular(14);
     return ClipRRect(
       borderRadius: radius,
-      child: Column(children: [
-        Material(
-          color: bg,
-          child: InkWell(onTap: () => tapSet(log, 0), child: SizedBox(height: 56, child: Center(child: top))),
-        ),
-        const SizedBox(height: 2),
-        Material(
-          color: c.surfaceContainer,
-          child: InkWell(
-            onTap: () => editCardio(log),
-            child: SizedBox(
-              height: 36,
-              child: Center(
-                child: Text(
-                  km == null ? tr.enterDistance : '${distanceNum(km)} $distanceLabel',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: km == null ? c.onSurfaceVariant : c.onSurface),
+      child: Column(
+        children: [
+          Material(
+            color: bg,
+            child: InkWell(
+              onTap: () => tapSet(log, 0),
+              child: SizedBox(height: 56, child: Center(child: top)),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Material(
+            color: c.surfaceContainer,
+            child: InkWell(
+              onTap: () => editCardio(log),
+              child: SizedBox(
+                height: 36,
+                child: Center(
+                  child: Text(
+                    km == null
+                        ? tr.enterDistance
+                        : '${distanceNum(km)} $distanceLabel',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: km == null ? c.onSurfaceVariant : c.onSurface,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
-  static String clock(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  static String clock(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
 
 /// The rest bar under the big line of the live strip, 6 dp: filled from the left to [fraction] (all
@@ -918,8 +1231,15 @@ class RestBar extends StatelessWidget {
   final Color color;
   final double? fraction, marker;
   final bool dashed, striped, empty;
-  const RestBar(
-      {required this.color, this.fraction, this.marker, this.dashed = false, this.striped = false, this.empty = false, super.key});
+  const RestBar({
+    required this.color,
+    this.fraction,
+    this.marker,
+    this.dashed = false,
+    this.striped = false,
+    this.empty = false,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -931,7 +1251,13 @@ class RestBar extends StatelessWidget {
         child: SizedBox(
           height: 6,
           width: double.infinity,
-          child: CustomPaint(painter: _RestBarPainter(this, c.surfaceContainerHighest, c.onSurface)),
+          child: CustomPaint(
+            painter: _RestBarPainter(
+              this,
+              c.surfaceContainerHighest,
+              c.onSurface,
+            ),
+          ),
         ),
       ),
     );
@@ -953,13 +1279,14 @@ class _RestBarPainter extends CustomPainter {
       // Diagonal stripes, 6 on and 5 off, leaning right.
       for (var x = -size.height; x < size.width; x += 11) {
         canvas.drawPath(
-            Path()
-              ..moveTo(x, size.height)
-              ..lineTo(x + 6, size.height)
-              ..lineTo(x + 6 + size.height, 0)
-              ..lineTo(x + size.height, 0)
-              ..close(),
-            fill);
+          Path()
+            ..moveTo(x, size.height)
+            ..lineTo(x + 6, size.height)
+            ..lineTo(x + 6 + size.height, 0)
+            ..lineTo(x + size.height, 0)
+            ..close(),
+          fill,
+        );
       }
     } else if (bar.dashed) {
       fill.color = bar.color.withValues(alpha: .7);
@@ -967,10 +1294,19 @@ class _RestBarPainter extends CustomPainter {
         canvas.drawRect(Rect.fromLTWH(x, 0, min(8, w - x), size.height), fill);
       }
     } else {
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, size.height), const Radius.circular(3)), fill);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, w, size.height),
+          const Radius.circular(3),
+        ),
+        fill,
+      );
     }
     if (bar.marker case final m?) {
-      canvas.drawRect(Rect.fromLTWH(size.width * m - 1, 0, 2, size.height), Paint()..color = markerColor);
+      canvas.drawRect(
+        Rect.fromLTWH(size.width * m - 1, 0, 2, size.height),
+        Paint()..color = markerColor,
+      );
     }
   }
 
@@ -990,11 +1326,19 @@ String? rangeProgress(ExerciseLog log, {bool auto = false}) {
   final top = log.maxReps;
   if (top == null) return null;
   final goal = '${log.reps.length}×$top${log.timed ? ' s' : ''}';
-  final missing = [for (final r in log.reps) if (r != null) max(0, top - r)].fold(0, (a, b) => a + b);
-  if (log.setsDone == log.reps.length && missing == 0) return auto ? tr.rangeGoalDone(goal) : tr.rangeDone(goal);
+  final missing = [
+    for (final r in log.reps)
+      if (r != null) max(0, top - r),
+  ].fold(0, (a, b) => a + b);
+  if (log.setsDone == log.reps.length && missing == 0) {
+    return auto ? tr.rangeGoalDone(goal) : tr.rangeDone(goal);
+  }
   if (log.setsDone == 0) return tr.rangeIncreaseAt(goal);
   if (missing == 0) return tr.rangeAllTop(goal);
-  return (log.timed ? tr.rangeMissingSeconds : tr.rangeMissingReps)(goal, missing);
+  return (log.timed ? tr.rangeMissingSeconds : tr.rangeMissingReps)(
+    goal,
+    missing,
+  );
 }
 
 /// Rest timer colors: resting, about to go or just over, too long.
@@ -1005,27 +1349,38 @@ enum RestZone { rest, soon, late }
 RestZone restZone(int left, int target) => left <= -30
     ? RestZone.late
     : left <= min(30, target ~/ 2)
-        ? RestZone.soon
-        : RestZone.rest;
+    ? RestZone.soon
+    : RestZone.rest;
 
 /// Whether [log] trains an exercise in auto mode in [s]'s plan: the reserve is then always asked.
 bool autoRir(Session s, ExerciseLog log) =>
-    planEntryOf(store.workouts.where((w) => w.id == s.workoutId).firstOrNull, s.exercises, log)?.auto ?? false;
+    planEntryOf(
+      store.workouts.where((w) => w.id == s.workoutId).firstOrNull,
+      s.exercises,
+      log,
+    )?.auto ??
+    false;
 
 /// Which sets a weight change in the sheet applies to.
 enum WeightScope { set, open, all }
 
 /// Sheet to edit the weight of set [i]: type it or step it by [step], choose which sets it applies
 /// to ([scope] preselected), then save. Null when closed without saving.
-Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog log, int i,
-    {required double step, WeightScope scope = WeightScope.open}) async {
-  final setup = log.barbellSetups[unit.value] ?? BarbellSetup.defaults(unit.value);
+Future<(double, WeightScope)?> showWeightSheet(
+  BuildContext context,
+  ExerciseLog log,
+  int i, {
+  required double step,
+  WeightScope scope = WeightScope.open,
+}) async {
+  final setup =
+      log.barbellSetups[unit.value] ?? BarbellSetup.defaults(unit.value);
   final field = TextEditingController(text: weightNum(log.weights[i]));
   double? exactWeight = log.weights[i];
   double? parse() => switch (exactWeight ?? parseWeight(field.text)) {
-        final kg? when kg >= minWeight && kg <= 1000 => kg,
-        _ => null,
-      };
+    final kg? when kg >= minWeight && kg <= 1000 => kg,
+    _ => null,
+  };
   final result = await showModalBottomSheet<(double, WeightScope)>(
     context: context,
     isScrollControlled: true, // lets the sheet move above the keyboard
@@ -1043,83 +1398,148 @@ Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog
         }
 
         Widget stepButton(IconData icon, int dir) => IconButton.filledTonal(
-              iconSize: 28,
-              style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
-              icon: Icon(icon),
-              tooltip: '${dir < 0 ? '−' : '+'}${weightNum(step)} $unitLabel',
-              onPressed: () => nudge(dir),
-            );
+          iconSize: 28,
+          style: IconButton.styleFrom(
+            fixedSize: const Size(56, 56),
+            backgroundColor: c.surfaceContainerHigh,
+          ),
+          icon: Icon(icon),
+          tooltip: '${dir < 0 ? '−' : '+'}${weightNum(step)} $unitLabel',
+          onPressed: () => nudge(dir),
+        );
         return Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(children: [
-                Expanded(
-                  child: Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                ),
-                Text(tr.setOf(i + 1, log.reps.length), style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
-              ]),
-              const SizedBox(height: 16),
-              Row(children: [
-                stepButton(Icons.remove, -1),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: field,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 40, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
-                    decoration: InputDecoration(
-                      suffixText: unitLabel,
-                      errorText: w == null ? tr.weightBetween(weightLabel(minWeight), weightLabel(1000)) : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      log.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    onChanged: (_) => setSheet(() => exactWeight = null),
-                    onTap: () => field.selection = TextSelection(baseOffset: 0, extentOffset: field.text.length),
                   ),
-                ),
-                const SizedBox(width: 12),
-                stepButton(Icons.add, 1),
-              ]),
-              if (w != null && w > 0 && !log.timed && isBarbell(log.name) &&
-                  (log.loadStep == null || log.barbellSetups.containsKey(unit.value))) ...[
+                  Text(
+                    tr.setOf(i + 1, log.reps.length),
+                    style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  stepButton(Icons.remove, -1),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: field,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                      decoration: InputDecoration(
+                        suffixText: unitLabel,
+                        errorText: w == null
+                            ? tr.weightBetween(
+                                weightLabel(minWeight),
+                                weightLabel(1000),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onChanged: (_) => setSheet(() => exactWeight = null),
+                      onTap: () => field.selection = TextSelection(
+                        baseOffset: 0,
+                        extentOffset: field.text.length,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  stepButton(Icons.add, 1),
+                ],
+              ),
+              if (w != null &&
+                  w > 0 &&
+                  !log.timed &&
+                  isBarbell(log.name) &&
+                  (log.loadStep == null ||
+                      log.barbellSetups.containsKey(unit.value))) ...[
                 const SizedBox(height: 8),
-                Text(perSideLabel(w, setup), textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
+                Text(
+                  perSideLabel(w, setup),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: c.onSurfaceVariant),
+                ),
               ],
               const SizedBox(height: 16),
-              Text(tr.applyTo, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+              Text(
+                tr.applyTo,
+                style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+              ),
               const SizedBox(height: 8),
               SegmentedButton<WeightScope>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: WeightScope.set, label: Text(tr.thisSet)),
-                  ButtonSegment(value: WeightScope.open, label: Text(tr.openSets)),
-                  ButtonSegment(value: WeightScope.all, label: Text(tr.allSets)),
+                  ButtonSegment(
+                    value: WeightScope.set,
+                    label: Text(tr.thisSet),
+                  ),
+                  ButtonSegment(
+                    value: WeightScope.open,
+                    label: Text(tr.openSets),
+                  ),
+                  ButtonSegment(
+                    value: WeightScope.all,
+                    label: Text(tr.allSets),
+                  ),
                 ],
                 selected: {scope},
                 onSelectionChanged: (v) => setSheet(() => scope = v.single),
               ),
               const SizedBox(height: 20),
-              Row(children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(tr.close),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(tr.close),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    onPressed: w == null ? null : () => Navigator.pop(context, (w, scope)),
-                    child: Text(tr.save),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: w == null
+                          ? null
+                          : () => Navigator.pop(context, (w, scope)),
+                      child: Text(tr.save),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
             ],
           ),
         );
@@ -1144,61 +1564,105 @@ void applyWeightScope(ExerciseLog log, int i, double w, WeightScope scope) {
 
 /// Sheet to enter the minutes and distance of a cardio exercise; null when closed without saving.
 /// [running]: minutes on the stopwatch, the suggestion when nothing is entered yet.
-Future<({int? minutes, double? km})?> showCardioSheet(BuildContext context, ExerciseLog log, {int? running}) async {
-  final minutes = TextEditingController(text: '${log.reps[0] ?? running ?? (log.targetReps > 0 ? log.targetReps : '')}');
-  final distance = TextEditingController(text: switch (log.km ?? log.targetKm) { final km? => distanceNum(km), null => '' });
+Future<({int? minutes, double? km})?> showCardioSheet(
+  BuildContext context,
+  ExerciseLog log, {
+  int? running,
+}) async {
+  final minutes = TextEditingController(
+    text:
+        '${log.reps[0] ?? running ?? (log.targetReps > 0 ? log.targetReps : '')}',
+  );
+  final distance = TextEditingController(
+    text: switch (log.km ?? log.targetKm) {
+      final km? => distanceNum(km),
+      null => '',
+    },
+  );
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (context) => Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(log.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: minutes,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: tr.durationGoal, suffixText: tr.minutesUnit, border: const OutlineInputBorder()),
-            ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            log.name,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: distance,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                  labelText: tr.distanceOptional, suffixText: distanceLabel, border: const OutlineInputBorder()),
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: minutes,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: tr.durationGoal,
+                    suffixText: tr.minutesUnit,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: distance,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: tr.distanceOptional,
+                    suffixText: distanceLabel,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ]),
-        const SizedBox(height: 20),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: () => Navigator.pop(context),
-              child: Text(tr.close),
-            ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(tr.close),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(tr.save),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(tr.save),
-            ),
-          ),
-        ]),
-      ]),
+        ],
+      ),
     ),
   );
   if (saved != true) return null;
   final m = int.tryParse(minutes.text.trim());
-  return (minutes: m != null && m > 0 ? m : null, km: parseDistance(distance.text));
+  return (
+    minutes: m != null && m > 0 ? m : null,
+    km: parseDistance(distance.text),
+  );
 }
 
 /// What the cardio sheet returned, into the log; no minutes means not done, and then no distance either.
@@ -1229,11 +1693,16 @@ Future<void> showWhenLocked(bool on) async {
 }
 
 /// Plays the notification sound and/or vibrates (Android, see MainActivity.kt).
-Future<void> restAlert() async {
-  final sound = prefs.getBool('rest.sound') ?? true, vibrate = prefs.getBool('rest.vibrate') ?? true;
+Future<void> restAlert({bool warning = false}) async {
+  final sound = prefs.getBool('rest.sound') ?? true,
+      vibrate = prefs.getBool('rest.vibrate') ?? true;
   if (!sound && !vibrate) return;
   try {
-    await _alert.invokeMethod('restOver', {'sound': sound, 'vibrate': vibrate});
+    await _alert.invokeMethod('restOver', {
+      'sound': sound,
+      'vibrate': vibrate,
+      'warning': warning,
+    });
   } on MissingPluginException {
     if (vibrate) HapticFeedback.heavyImpact(); // other platforms: best effort
   }
