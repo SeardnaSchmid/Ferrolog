@@ -98,32 +98,53 @@ class _RecapPageState extends State<RecapPage> {
     Widget? detail(String name) {
       final record = records.contains(name);
       final next = nextOf[name];
+      final log = s.exercises.where((l) => l.name == name).firstOrNull;
       final time = [
         ?timeTaken(s, name, perSet: true),
-        if (s.exercises.where((l) => l.name == name).firstOrNull?.rir case final r?) rirLabel(r),
+        if (log?.rir case final r?) rirLabel(r, timed: log!.timed),
       ].join(' · ');
       if (!record && next == null && time.isEmpty) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
       if (next case (final l, final e)) {
         final kg = e.weight;
-        final (icon, color) = kg > l.weight
-            ? (Icons.arrow_upward, c.primary)
-            : kg < l.weight
-                ? (Icons.arrow_downward, c.tertiary)
-                : (Icons.arrow_forward, c.onSurfaceVariant);
+        final before = s.planBefore?[name]?.weight;
+        final (icon, color) = before == null
+            ? (null, c.onSurfaceVariant)
+            : kg > before
+                ? (Icons.arrow_upward, c.primary)
+                : kg < before
+                    ? (Icons.arrow_downward, c.tertiary)
+                    : (Icons.arrow_forward, c.onSurfaceVariant);
+        final planned = s.planBefore?[name];
+        final lowered = planned == null ? <int>[] : [
+          for (final (i, reps) in l.reps.indexed)
+            if (reps != null && i < (planned.setWeights?.length ?? l.weights.length) &&
+                l.weights[i] < (planned.setWeights?[i] ?? planned.weight)) i,
+        ];
+        final lighterLabel = lowered.isNotEmpty && l.weights[lowered.first] < 0
+            ? tr.progMoreAssistance
+            : lowered.length == 1 && l.setsDone > 1
+                ? tr.progSetLighter
+                : tr.progLighter;
         parts.addAll([
+          TextSpan(text: '${tr.recapNextInline} '),
           // Arrow and weight as one piece, so a line break never splits them.
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon, size: 14, color: color),
+              if (icon != null) Icon(icon, size: 14, color: color),
               Text(' ${weightLabel(kg)}', style: small.copyWith(color: color, fontWeight: FontWeight.w600)),
             ]),
           ),
           // The auto mode says why.
           if ([
             if (l.backoff case final pct?) tr.recapBackoff(pct),
-            if (l.progression case final p?) progressionLabel(p, e),
+            if (l.progression case final p?)
+              p == Progression.lighter
+                  ? lighterLabel
+                  : p == Progression.deload && (before == null || kg >= before)
+                      ? tr.progDeloadNoChange(autoFails)
+                      : progressionLabel(p, e),
           ].join(', ')
               case final why when why.isNotEmpty)
             TextSpan(text: ' · $why'),
@@ -209,19 +230,6 @@ class _RecapPageState extends State<RecapPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
               child: Text(headline, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-            ),
-          if (nextOf.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-              child: Row(children: [
-                for (final (icon, color) in [
-                  (Icons.arrow_upward, c.primary),
-                  (Icons.arrow_forward, c.onSurfaceVariant),
-                  (Icons.arrow_downward, c.tertiary),
-                ])
-                  Icon(icon, size: 14, color: color),
-                Text(tr.recapNextWeight, style: small),
-              ]),
             ),
           // The same card as in the history, so a training always looks the same.
           OverviewCard(

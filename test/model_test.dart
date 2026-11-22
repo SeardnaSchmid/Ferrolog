@@ -377,6 +377,6 @@ void main() {
     expect(log.reshaped(Exercise(name: 'Bankdrücken', weight: 70, sets: 3, reps: 5)).rir, 2);
     expect(log.reshaped(Exercise(name: 'Bankdrücken', weight: 70, sets: 4, reps: 5)).rir, isNull, reason: 'a set more to do');
     expect(rirLabel(0), 'am Limit');
-    expect([1, 4].map(rirLabel), ['noch 1 übrig', 'noch 4+ übrig']);
+    expect([1, 4].map(rirLabel), ['1 Wdh. Reserve', '4+ Wdh. Reserve']);
   });
 }

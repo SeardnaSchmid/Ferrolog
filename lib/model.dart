@@ -1731,8 +1731,12 @@ List<String> searchExercises(String query, Iterable<String> names) {
 }
 
 /// Planned sets and reps: "3×5", "3×5–8", "10/8/6"; with [seconds] "3×30 s".
-/// The answer to "Wie viele gingen noch?": "am Limit", "noch 2 übrig", "noch 4+ übrig".
-String rirLabel(int rir) => rir == 0 ? tr.rirLimit : tr.rirLeft(rir >= 4 ? '4+' : '$rir');
+/// The answer after the last set; timed data uses a unit-neutral label.
+String rirLabel(int rir, {bool timed = false}) => rir == 0
+    ? tr.rirLimit
+    : timed
+        ? tr.rirTimedLeft(rir >= 4 ? '4+' : '$rir')
+        : tr.rirLeft(rir >= 4 ? '4+' : '$rir');
 
 String setsLabel(List<int> reps, int? maxReps, {bool seconds = false}) {
   final range = maxReps == null ? '' : '–$maxReps';

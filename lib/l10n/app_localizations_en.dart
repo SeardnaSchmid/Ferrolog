@@ -452,7 +452,7 @@ class L10nEn extends L10n {
   String get secondsUnit => 's';
 
   @override
-  String get progUp => 'done';
+  String get progUp => 'goal reached';
 
   @override
   String get progUp2 => 'lots in reserve, double step';
@@ -470,7 +470,7 @@ class L10nEn extends L10n {
   String get progRange => 'all reps first';
 
   @override
-  String get progMiss => 'missed';
+  String get progMiss => 'goal not reached in every set';
 
   @override
   String get progReset => '2× missed, reps back down';
@@ -484,11 +484,11 @@ class L10nEn extends L10n {
 
   @override
   String progDeload(Object fails) {
-    return '$fails× missed, about −10 %, smaller steps';
+    return 'Reduced after $fails workouts without reaching the goal';
   }
 
   @override
-  String get progLighter => 'done lighter';
+  String get progLighter => 'Lighter than planned today';
 
   @override
   String get progFewer => 'fewer sets';
@@ -563,7 +563,7 @@ class L10nEn extends L10n {
 
   @override
   String rirLeft(Object n) {
-    return '$n left';
+    return '$n reps in reserve';
   }
 
   @override
@@ -2577,4 +2577,23 @@ class L10nEn extends L10n {
   @override
   String get settingsRestWarningHint =>
       'Three short beeps 10 seconds before the rest ends';
+
+  @override
+  String get progSetLighter => 'Set weight reduced';
+
+  @override
+  String get progMoreAssistance => 'Assistance increased';
+
+  @override
+  String rirTimedLeft(Object n) {
+    return '$n in reserve';
+  }
+
+  @override
+  String get recapNextInline => 'Next time:';
+
+  @override
+  String progDeloadNoChange(Object fails) {
+    return 'Goal not reached in $fails consecutive workouts';
+  }
 }

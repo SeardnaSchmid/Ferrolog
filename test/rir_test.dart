@@ -53,7 +53,7 @@ void main() {
     await tester.pump();
     expect(bench.rir, 2);
     expect(question, findsNothing);
-    expect(find.text('noch 2 übrig'), findsOneWidget);
+    expect(find.text('2 Wdh. Reserve'), findsOneWidget);
     expect(store.active!.exercises.first.rir, 2, reason: 'saved with the running training');
 
     // The last set undone takes the answer along.

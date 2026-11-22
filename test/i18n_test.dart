@@ -51,7 +51,9 @@ void main() {
     expect(tagLabel('Krank'), 'Sick');
     expect(tagLabel('Eigener Tag'), 'Eigener Tag', reason: 'unknown tags stay as stored');
     expect(rirLabel(0), 'at the limit');
-    expect(progressionLabel(Progression.miss), 'missed');
+    expect(progressionLabel(Progression.miss), 'goal not reached in every set');
+    expect(rirLabel(2), '2 reps in reserve');
+    expect(rirLabel(2, timed: true), '2 in reserve');
     expect(tr.trainingsCount(1), '1 workout');
     expect(tr.trainingsCount(3), '3 workouts');
   });

@@ -1058,7 +1058,7 @@ class _SessionPageState extends State<SessionPage> {
                         tr.progBridgeTarget(log.targetReps, base),
                         style: muted,
                       ),
-                    if (log.rir case final r?) Text(rirLabel(r), style: muted),
+                    if (log.rir case final r?) Text(rirLabel(r, timed: log.timed), style: muted),
                   ],
                 ),
               ),

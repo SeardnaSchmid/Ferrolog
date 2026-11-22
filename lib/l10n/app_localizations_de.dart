@@ -454,7 +454,7 @@ class L10nDe extends L10n {
   String get secondsUnit => 's';
 
   @override
-  String get progUp => 'geschafft';
+  String get progUp => 'Ziel erreicht';
 
   @override
   String get progUp2 => 'viel Reserve, doppelter Schritt';
@@ -472,7 +472,7 @@ class L10nDe extends L10n {
   String get progRange => 'erst alle Wiederholungen';
 
   @override
-  String get progMiss => 'nicht geschafft';
+  String get progMiss => 'Ziel nicht in allen Sätzen erreicht';
 
   @override
   String get progReset => '2× nicht geschafft, Wiederholungen zurück';
@@ -486,11 +486,11 @@ class L10nDe extends L10n {
 
   @override
   String progDeload(Object fails) {
-    return '$fails× nicht geschafft, etwa −10 %, kleinere Schritte';
+    return 'Nach $fails Trainings ohne Zielerreichung reduziert';
   }
 
   @override
-  String get progLighter => 'leichter gemacht';
+  String get progLighter => 'Heute leichter als geplant';
 
   @override
   String get progFewer => 'weniger Sätze';
@@ -565,7 +565,7 @@ class L10nDe extends L10n {
 
   @override
   String rirLeft(Object n) {
-    return 'noch $n übrig';
+    return '$n Wdh. Reserve';
   }
 
   @override
@@ -2581,4 +2581,23 @@ class L10nDe extends L10n {
   @override
   String get settingsRestWarningHint =>
       'Drei kurze Töne 10 Sekunden vor Pausenende';
+
+  @override
+  String get progSetLighter => 'Satzgewicht reduziert';
+
+  @override
+  String get progMoreAssistance => 'Unterstützung erhöht';
+
+  @override
+  String rirTimedLeft(Object n) {
+    return '$n Reserve';
+  }
+
+  @override
+  String get recapNextInline => 'Nächstes Mal:';
+
+  @override
+  String progDeloadNoChange(Object fails) {
+    return '$fails Trainings in Folge Ziel nicht erreicht';
+  }
 }

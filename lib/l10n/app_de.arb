@@ -353,17 +353,17 @@
   "deleteTrainingMovesPlan": " Die Plan-Gewichte gehen auf den Stand davor zurück.",
   "yes": "Ja",
   "secondsUnit": "s",
-  "progUp": "geschafft",
+  "progUp": "Ziel erreicht",
   "progUp2": "viel Reserve, doppelter Schritt",
   "progHalf": "2× am Limit, halber Schritt",
   "progLimit": "Gewicht gehalten",
   "progBridge": "erst mehr Wiederholungen",
   "progRange": "erst alle Wiederholungen",
-  "progMiss": "nicht geschafft",
+  "progMiss": "Ziel nicht in allen Sätzen erreicht",
   "progReset": "2× nicht geschafft, Wiederholungen zurück",
   "progBadDay": "schlechter Tag, zählt nicht",
   "progPain": "Schmerzen: Gewicht bleibt. Kommt es wieder, lass die Übung prüfen.",
-  "progDeload": "{fails}× nicht geschafft, etwa −10 %, kleinere Schritte",
+  "progDeload": "Nach {fails} Trainings ohne Zielerreichung reduziert",
   "@progDeload": {
     "placeholders": {
       "fails": {
@@ -371,7 +371,7 @@
       }
     }
   },
-  "progLighter": "leichter gemacht",
+  "progLighter": "Heute leichter als geplant",
   "progFewer": "weniger Sätze",
   "tagSleptBadly": "Schlecht geschlafen",
   "tagWellRested": "Gut erholt",
@@ -411,7 +411,7 @@
     }
   },
   "rirLimit": "am Limit",
-  "rirLeft": "noch {n} übrig",
+  "rirLeft": "{n} Wdh. Reserve",
   "@rirLeft": {
     "placeholders": {
       "n": {
@@ -1453,7 +1453,13 @@
   "startStopwatch": " Start",
   "enterDistance": "Distanz eintragen",
   "rangeGoalDone": "{goal} geschafft",
-  "@rangeGoalDone": {"placeholders": {"goal": {"type": "String"}}},
+  "@rangeGoalDone": {
+    "placeholders": {
+      "goal": {
+        "type": "String"
+      }
+    }
+  },
   "rangeDone": "{goal} geschafft · nächstes Mal schwerer",
   "@rangeDone": {
     "placeholders": {
@@ -2273,5 +2279,24 @@
   "autoRuleTimed": "Bei erfülltem Zeitziel steigt das Gewicht um eine Stufe, wenn der Schritt höchstens 2,5 % beträgt.",
   "autoRuleMiss": "Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.",
   "settingsRestWarning": "Vorwarnung",
-  "settingsRestWarningHint": "Drei kurze Töne 10 Sekunden vor Pausenende"
+  "settingsRestWarningHint": "Drei kurze Töne 10 Sekunden vor Pausenende",
+  "progSetLighter": "Satzgewicht reduziert",
+  "progMoreAssistance": "Unterstützung erhöht",
+  "rirTimedLeft": "{n} Reserve",
+  "recapNextInline": "Nächstes Mal:",
+  "@rirTimedLeft": {
+    "placeholders": {
+      "n": {
+        "type": "Object"
+      }
+    }
+  },
+  "progDeloadNoChange": "{fails} Trainings in Folge Ziel nicht erreicht",
+  "@progDeloadNoChange": {
+    "placeholders": {
+      "fails": {
+        "type": "Object"
+      }
+    }
+  }
 }

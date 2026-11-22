@@ -802,7 +802,7 @@ abstract class L10n {
   /// No description provided for @progUp.
   ///
   /// In de, this message translates to:
-  /// **'geschafft'**
+  /// **'Ziel erreicht'**
   String get progUp;
 
   /// No description provided for @progUp2.
@@ -838,7 +838,7 @@ abstract class L10n {
   /// No description provided for @progMiss.
   ///
   /// In de, this message translates to:
-  /// **'nicht geschafft'**
+  /// **'Ziel nicht in allen Sätzen erreicht'**
   String get progMiss;
 
   /// No description provided for @progReset.
@@ -862,13 +862,13 @@ abstract class L10n {
   /// No description provided for @progDeload.
   ///
   /// In de, this message translates to:
-  /// **'{fails}× nicht geschafft, etwa −10 %, kleinere Schritte'**
+  /// **'Nach {fails} Trainings ohne Zielerreichung reduziert'**
   String progDeload(Object fails);
 
   /// No description provided for @progLighter.
   ///
   /// In de, this message translates to:
-  /// **'leichter gemacht'**
+  /// **'Heute leichter als geplant'**
   String get progLighter;
 
   /// No description provided for @progFewer.
@@ -1006,7 +1006,7 @@ abstract class L10n {
   /// No description provided for @rirLeft.
   ///
   /// In de, this message translates to:
-  /// **'noch {n} übrig'**
+  /// **'{n} Wdh. Reserve'**
   String rirLeft(Object n);
 
   /// No description provided for @platesNotLoadable.
@@ -4191,6 +4191,36 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Drei kurze Töne 10 Sekunden vor Pausenende'**
   String get settingsRestWarningHint;
+
+  /// No description provided for @progSetLighter.
+  ///
+  /// In de, this message translates to:
+  /// **'Satzgewicht reduziert'**
+  String get progSetLighter;
+
+  /// No description provided for @progMoreAssistance.
+  ///
+  /// In de, this message translates to:
+  /// **'Unterstützung erhöht'**
+  String get progMoreAssistance;
+
+  /// No description provided for @rirTimedLeft.
+  ///
+  /// In de, this message translates to:
+  /// **'{n} Reserve'**
+  String rirTimedLeft(Object n);
+
+  /// No description provided for @recapNextInline.
+  ///
+  /// In de, this message translates to:
+  /// **'Nächstes Mal:'**
+  String get recapNextInline;
+
+  /// No description provided for @progDeloadNoChange.
+  ///
+  /// In de, this message translates to:
+  /// **'{fails} Trainings in Folge Ziel nicht erreicht'**
+  String progDeloadNoChange(Object fails);
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

@@ -1384,7 +1384,8 @@ class _HistoryListState extends State<HistoryList> {
             // Time taken and the reserve answered after the last set.
             detail: (name) => switch ([
               ?timeTaken(s, name),
-              if (s.exercises.where((l) => l.name == name).firstOrNull?.rir case final r?) rirLabel(r),
+              if (s.exercises.where((l) => l.name == name).firstOrNull case final log? when log.rir != null)
+                rirLabel(log.rir!, timed: log.timed),
             ]) {
               [] => null,
               final parts => Text(parts.join(' · '), style: TextStyle(fontSize: 12, color: c.onSurfaceVariant)),
