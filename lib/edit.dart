@@ -188,6 +188,11 @@ class _EditWorkoutState extends State<EditWorkout> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: tr.editExercise,
+                          onPressed: () => editExercise(i),
+                        ),
+                        IconButton(
                           icon: const Icon(Icons.delete_outline),
                           tooltip: tr.removeExercise,
                           onPressed: () => setState(() {
@@ -357,7 +362,8 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..failsToDeload = x.failsToDeload
         // As set up in another workout; else a new exercise stays in auto mode, an opened one keeps its mode.
         ..auto = planned ? x.auto : widget.initial == null || e.auto
-        ..loadStep = planned ? x.loadStep : e.loadStep
+        ..loadStep = x.loadStep
+        ..barbellSetups = x.barbellSetups
         ..restSeconds = x.restSeconds;
       noWeight = x.noWeight;
       ws = List.of(noWeight ? List.filled(x.sets, 20.0) : x.weights);
@@ -369,8 +375,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     });
   }
 
-  /// Weight steps: 2,5 kg (5 lb), snapped to that grid; below 0 is assistance (e.g. −10 kg on a pull-up machine).
-  double get step => unit.value == WeightUnit.kg ? 2.5 : 5; // in the shown unit
+  double get step => store.loadStepOf(e).$1;
+
+  bool get invalidFixedStep => !widget.forTraining && !e.cardio && !noWeight && !e.auto && e.loadStep != null &&
+      ((e.up && !fitsLoadStep(e.increment, step)) || (e.down && !fitsLoadStep(e.decrement, step)));
 
   /// Distance goal ± 0,5 (km or mi), never below 0,5.
   double nudgedKm(int dir) {
@@ -378,8 +386,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     return max(.5, ((e.km ?? 5) / perUnit * 2).round() / 2 + dir * .5) * perUnit;
   }
 
-  double nudged(double kg, int dir) =>
-      toKg((((shown(kg) + dir * step) / step).round() * step).clamp(shown(minWeight), shown(1000)).toDouble());
+  double nudged(double kg, int dir) => nudgeWeight(kg, step, dir);
 
   Exercise result() {
     e.name = e.name.trim();
@@ -411,12 +418,59 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..up = false
         ..down = false;
     }
-    if (rs.join(',') != repsBefore.join(',')) {
-      e.state
-        ?..bridgeFrom = null
-        ..bridgeTo = null;
+    if (rs.join(',') != repsBefore.join(',') || maxReps != null) {
+      e.state?.bridgeFrom = null;
+    } else if (!e.auto || noWeight) {
+      e.endBridge();
     }
     return e;
+  }
+
+  Widget loadStepPicker(TextStyle muted) {
+    final presets = unit.value == WeightUnit.kg
+        ? const [0.25, 0.5, 1, 1.25, 2, 2.5, 5, 10]
+        : const [0.5, 1, 2.5, 5, 10];
+    final current = e.loadStep;
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(tr.loadStep),
+      subtitle: Text(current == null ? tr.loadStepSuggested(weightLabel(step)) : weightLabel(step)),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      childrenPadding: const EdgeInsets.only(bottom: 12),
+      children: [
+        Text(tr.loadStepHint, style: muted),
+        const SizedBox(height: 10),
+        chips(
+          key: 'step',
+          presets: presets,
+          current: current == null ? 0 : current * (unit.value == WeightUnit.lb ? lbPerKg : 1),
+          none: current == null,
+          lead: ChoiceChip(
+            showCheckmark: false,
+            label: Text(tr.loadStepSuggested(weightLabel(step))),
+            selected: current == null && editing != 'step',
+            onSelected: (_) => setState(() {
+              e.loadStep = null;
+              editing = null;
+            }),
+          ),
+          label: (v) => weightLabel(toKg(v)),
+          set: (v) => e.loadStep = toKg(v),
+          hint: tr.example(weightNum(step)),
+          unitText: unitLabel,
+          parse: parseStep,
+        ),
+      ],
+    );
+  }
+
+  double? parseStep(String input) {
+    final value = double.tryParse(input.trim().replaceAll(',', '.'));
+    if (value == null || validLoadStep(toKg(value)) == null) return null;
+    final rounded = (value * 100).roundToDouble() / 100;
+    return validLoadStep(toKg(rounded)) == null ? null : rounded;
   }
 
   /// Sheet for one set: reps and weight, for this set or all sets; or delete it.
@@ -607,7 +661,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
-              onPressed: e.name.trim().isEmpty || duplicate ? null : () => Navigator.pop(context, result()),
+              onPressed: e.name.trim().isEmpty || duplicate || invalidFixedStep ? null : () => Navigator.pop(context, result()),
               child: Text(isNew ? tr.add : widget.forTraining ? tr.takeOver : tr.save),
             ),
           ),
@@ -774,225 +828,217 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 onPressed: () => setState(() => maxReps = e.timed ? min(600, top + 5) : min(50, top + 1)),
               ),
             ]),
+          if (!noWeight) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: card,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr.adjustWeight, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+                loadStepPicker(muted),
+                if (!widget.forTraining) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(value: true, icon: const Icon(Icons.auto_awesome_outlined), label: Text(tr.automatic)),
+                        ButtonSegment(value: false, icon: const Icon(Icons.tune), label: Text(tr.fixed)),
+                      ],
+                      selected: {e.auto},
+                      onSelectionChanged: (v) => setState(() {
+                        e.auto = v.first;
+                        editing = null;
+                      }),
+                    ),
+                  ),
+                  if (e.auto) ...[
+                    const SizedBox(height: 4),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      leading: Icon(Icons.info_outline, size: 20, color: c.primary),
+                      title: Text(tr.autoHelp),
+                      subtitle: Text(e.timed ? tr.autoHintTimed : tr.autoHintReps, style: muted),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                      childrenPadding: const EdgeInsets.only(bottom: 4),
+                      children: [
+                        for (final (title, description) in autoRules)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('•', style: muted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                      Text(description, style: muted.copyWith(height: 1.4)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (e.state?.bridgeFrom case final base? when rs.first > base) ...[
+                      const SizedBox(height: 10),
+                      Text(tr.progBridgeTarget(rs.first, base), style: muted),
+                    ],
+                  ] else ...[
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.trending_up),
+                      title: Text(tr.increaseOnSuccess),
+                      subtitle: Text(e.up
+                          ? tr.increaseOn(weightLabel(e.increment))
+                          : tr.offWeightStays),
+                      value: e.up,
+                      onChanged: (on) => setState(() {
+                        e.up = on;
+                        if (editing == 'inc') editing = null;
+                      }),
+                    ),
+                    if (e.up) weightChips('inc', '+', e.increment, (kg) => e.increment = kg),
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.trending_down),
+                      title: Text(tr.decreaseOnMiss),
+                      subtitle: Text(e.down
+                          ? tr.decreaseOn(weightLabel(e.decrement), e.failsToDeload)
+                          : tr.offWeightStays),
+                      value: e.down,
+                      onChanged: (on) => setState(() {
+                        e.down = on;
+                        if (editing == 'dec') editing = null;
+                      }),
+                    ),
+                    if (e.down) ...[
+                      weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: Text(tr.decreaseAfter, style: TextStyle(color: c.onSurfaceVariant))),
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.remove, size: 20),
+                          onPressed: () => setState(() => e.failsToDeload = max(1, e.failsToDeload - 1)),
+                        ),
+                        SizedBox(
+                          width: 28,
+                          child: Text('${e.failsToDeload}',
+                              textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                        ),
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.add, size: 20),
+                          onPressed: () => setState(() => e.failsToDeload = min(5, e.failsToDeload + 1)),
+                        ),
+                      ]),
+                    ],
+                  ],
+                ],
+              ]),
+            ),
+          ],
+          if (!widget.forTraining) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: card,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(Icons.timer_outlined, size: 20, color: c.onSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(tr.rest, style: const TextStyle(fontWeight: FontWeight.w500))),
+                  Text(clock(e.restSeconds), style: TextStyle(fontWeight: FontWeight.w500, color: c.primary)),
+                ]),
+                const SizedBox(height: 12),
+                chips(
+                  key: 'pause',
+                  presets: const [30, 60, 90, 120, 180],
+                  current: e.restSeconds.toDouble(),
+                  label: (v) => clock(v.round()),
+                  set: (v) => e.restSeconds = v.round(),
+                  hint: tr.example('2:30'),
+                  unitText: tr.minSecOrSec,
+                  parse: parseDuration,
+                ),
+                const SizedBox(height: 14),
+                Text(tr.afterMissedSet, style: muted.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                chips(
+                  key: 'failpause',
+                  presets: const [0, 120, 180, 240, 300], // 0 = same as above
+                  current: (e.failRestSeconds ?? 0).toDouble(),
+                  label: (v) => v == 0 ? tr.sameAsAbove : clock(v.round()),
+                  set: (v) => e.failRestSeconds = v == 0 ? null : v.round(),
+                  hint: tr.example('4:00'),
+                  unitText: tr.minSecOrSec,
+                  parse: parseDuration,
+                ),
+              ]),
+            ),
+          ],
           const SizedBox(height: 18),
           musclePicker(card, muted),
-          if (!widget.forTraining) ...[
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: card,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(Icons.timer_outlined, size: 20, color: c.onSurfaceVariant),
-                const SizedBox(width: 10),
-                Expanded(child: Text(tr.rest, style: const TextStyle(fontWeight: FontWeight.w500))),
-                Text(clock(e.restSeconds), style: TextStyle(fontWeight: FontWeight.w500, color: c.primary)),
-              ]),
-              const SizedBox(height: 12),
-              chips(
-                key: 'pause',
-                presets: const [30, 60, 90, 120, 180],
-                current: e.restSeconds.toDouble(),
-                label: (v) => clock(v.round()),
-                set: (v) => e.restSeconds = v.round(),
-                hint: tr.example('2:30'),
-                unitText: tr.minSecOrSec,
-                parse: parseDuration,
-              ),
-              const SizedBox(height: 14),
-              Text(tr.afterMissedSet, style: muted.copyWith(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 8),
-              chips(
-                key: 'failpause',
-                presets: const [0, 120, 180, 240, 300], // 0 = same as above
-                current: (e.failRestSeconds ?? 0).toDouble(),
-                label: (v) => v == 0 ? tr.sameAsAbove : clock(v.round()),
-                set: (v) => e.failRestSeconds = v == 0 ? null : v.round(),
-                hint: tr.example('4:00'),
-                unitText: tr.minSecOrSec,
-                parse: parseDuration,
-              ),
-            ]),
-          ),
           ],
-          if (!noWeight && !widget.forTraining) ...[
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: card,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(tr.adjustWeight, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<bool>(
-                  segments: [
-                    ButtonSegment(value: true, icon: const Icon(Icons.auto_awesome_outlined), label: Text(tr.automatic)),
-                    ButtonSegment(value: false, icon: const Icon(Icons.tune), label: Text(tr.fixed)),
-                  ],
-                  selected: {e.auto},
-                  onSelectionChanged: (v) => setState(() {
-                    e.auto = v.first;
-                    editing = null;
-                  }),
-                ),
-              ),
-              if (e.auto) ...[
-                const SizedBox(height: 12),
-                Text(autoRules, style: TextStyle(color: c.onSurfaceVariant, height: 1.4)),
-                const SizedBox(height: 10),
-                Text(autoNow, style: TextStyle(color: c.onSurfaceVariant, fontWeight: FontWeight.w500, height: 1.4)),
-                const SizedBox(height: 12),
-                Text(tr.loadStep, style: TextStyle(color: c.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                // What this exercise can be loaded in, e.g. a leg press that only takes 5 kg plates.
-                chips(
-                  key: 'step',
-                  presets: unit.value == WeightUnit.kg ? const [1, 1.25, 2, 2.5, 5] : const [1, 2.5, 5, 10],
-                  current: shown(e.loadStep ?? 0),
-                  none: e.loadStep == null,
-                  lead: ChoiceChip(
-                    showCheckmark: false,
-                    avatar: const Icon(Icons.auto_awesome_outlined, size: 14),
-                    label: Text(tr.automatic),
-                    selected: e.loadStep == null && editing != 'step',
-                    onSelected: (_) => setState(() {
-                      e.loadStep = null;
-                      editing = null;
-                    }),
-                  ),
-                  label: (v) => '${weightNum(toKg(v))} $unitLabel',
-                  set: (v) => e.loadStep = toKg(v),
-                  hint: tr.example(unit.value == WeightUnit.kg ? decimal('7.5') : '15'),
-                  unitText: unitLabel,
-                  parse: (s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
-                    final v? when v > 0 => (v * 100).roundToDouble() / 100,
-                    _ => null,
-                  },
-                ),
-              ] else ...[
-                const SizedBox(height: 4),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.trending_up),
-                  title: Text(tr.increaseOnSuccess),
-                  subtitle: Text(e.up
-                      ? tr.increaseOn(weightLabel(e.increment))
-                      : tr.offWeightStays),
-                  value: e.up,
-                  onChanged: (on) => setState(() {
-                    e.up = on;
-                    if (editing == 'inc') editing = null;
-                  }),
-                ),
-                if (e.up) weightChips('inc', '+', e.increment, (kg) => e.increment = kg),
-                const Divider(height: 24),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.trending_down),
-                  title: Text(tr.decreaseOnMiss),
-                  subtitle: Text(e.down
-                      ? tr.decreaseOn(weightLabel(e.decrement), e.failsToDeload)
-                      : tr.offWeightStays),
-                  value: e.down,
-                  onChanged: (on) => setState(() {
-                    e.down = on;
-                    if (editing == 'dec') editing = null;
-                  }),
-                ),
-                if (e.down) ...[
-                  weightChips('dec', '−', e.decrement, (kg) => e.decrement = kg),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: Text(tr.decreaseAfter, style: TextStyle(color: c.onSurfaceVariant))),
-                    IconButton.filledTonal(
-                      icon: const Icon(Icons.remove, size: 20),
-                      onPressed: () => setState(() => e.failsToDeload = max(1, e.failsToDeload - 1)),
-                    ),
-                    SizedBox(
-                      width: 28,
-                      child: Text('${e.failsToDeload}',
-                          textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                    ),
-                    IconButton.filledTonal(
-                      icon: const Icon(Icons.add, size: 20),
-                      onPressed: () => setState(() => e.failsToDeload = min(5, e.failsToDeload + 1)),
-                    ),
-                  ]),
-                ],
-              ],
-            ]),
-          ),
-          ],
-          ],
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(summary, style: muted.copyWith(height: 1.45)),
-          ),
         ],
       ),
     );
   }
 
-  String get summary {
-    final name = e.name.trim().isEmpty ? tr.newExercise : e.name.trim();
-    if (e.cardio) {
-      final goal = byDistance ? '${distanceNum(e.km ?? 5)} $distanceLabel' : tr.minutes(e.reps);
-      return tr.summaryCardio(name, goal);
+  List<(String, String)> get autoRules => [
+        if (maxReps != null) (tr.autoRangeTitle, tr.autoRuleRange),
+        (tr.autoWeightTitle, e.timed ? tr.autoRuleTimed : tr.autoRuleDone),
+        if (!e.timed && maxReps == null) (tr.autoBridgeTitle, tr.autoRuleBridge),
+        (tr.autoDeloadTitle, tr.autoRuleMiss(autoFails)),
+      ];
+
+  /// Fixed changes are total weight changes, not the weight of a single plate.
+  Widget weightChips(String key, String sign, double kg, void Function(double kg) set) {
+    final List<double> presets = unit.value == WeightUnit.kg ? const [0.25, 0.5, 1, 2.5, 5] : const [0.5, 1, 2.5, 5, 10];
+    bool available(double v) => fitsLoadStep(toKg(v), step);
+    double? parseFixed(String input) {
+      final value = parseStep(input);
+      if (value == null) return null;
+      final kg = toKg(value);
+      final snapped = (kg / step).round() * step;
+      // A step converted to another unit may have more decimals than the input shows.
+      final precision = toKg(unit.value == WeightUnit.lb ? .05 : .005);
+      if (snapped > 0 && (snapped - kg).abs() <= precision + 1e-8) {
+        return snapped * (unit.value == WeightUnit.lb ? lbPerKg : 1);
+      }
+      return value;
     }
-    final plan = noWeight
-        ? tr.planNoWeight(setsLabel(rs, maxReps))
-        : ws.toSet().length == 1
-            ? tr.planWithWeight(setsLabel(rs, maxReps), weightLabel(ws.first))
-            : [for (final (i, w) in ws.indexed) '${rs[i]}×${weightLabel(w)}'].join(', ');
-    if (widget.forTraining) return tr.summaryTraining(name, plan);
-    if (noWeight) return tr.summaryPlain(name, plan);
-    if (e.auto) return tr.summaryAuto(name, plan);
-    return [
-      tr.summaryPlain(name, plan),
-      if (e.up) tr.summaryUp(weightLabel(e.increment)),
-      if (e.down) tr.summaryDown(e.failsToDeload, weightLabel(e.decrement)),
-      if (!e.up && !e.down) tr.summaryFixed,
-    ].join(' ');
-  }
-
-  /// The auto mode in a few sentences. Nothing to set: the step adapts itself.
-  String get autoRules => [
-        tr.autoRuleDone,
-        if (maxReps == null) tr.autoRuleBridge else tr.autoRuleRange,
-        tr.autoRuleMiss(autoFails),
-        tr.autoRuleBadDay,
-      ].join(' ');
-
-  /// The current share and what the weight can be loaded in.
-  String get autoNow {
-    final (grid, from) = store.loadStepOf(e);
-    final pct = decimal((e.state?.pct ?? AutoState.startPct).toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), ''));
-    return tr.autoNow(pct, weightLabel(grid), switch (from) {
-      LoadSource.plates => tr.sourcePlates,
-      LoadSource.learned => tr.sourceLearned,
-      LoadSource.guess => tr.sourceGuess,
-      LoadSource.set => tr.sourceSet,
-    });
-  }
-
-  /// Plate-sized steps for increment/decrement chips, in the shown unit.
-  Widget weightChips(String key, String sign, double kg, void Function(double kg) set) => chips(
+    final badCurrent = !fitsLoadStep(kg, step);
+    final explanation = tr.fixedStepUnavailable(weightLabel(step));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      chips(
         key: key,
-        presets: unit.value == WeightUnit.kg ? const [0.25, 0.5, 1, 2.5, 5] : const [0.5, 1, 2.5, 5, 10],
-        current: shown(kg),
-        label: (v) => '$sign${weightNum(toKg(v))} $unitLabel',
+        presets: presets,
+        current: kg * (unit.value == WeightUnit.lb ? lbPerKg : 1),
+        label: (v) => '$sign${weightLabel(toKg(v))}',
         set: (v) => set(toKg(v)),
-        hint: tr.example(decimal(unit.value == WeightUnit.kg ? '1.25' : '7.5')),
+        hint: tr.example(weightNum(step)),
         unitText: unitLabel,
         prefix: sign,
-        // Comma or point, at most 2 decimals, above 0.
-        parse: (s) => switch (double.tryParse(s.trim().replaceAll(',', '.'))) {
-          final v? when v > 0 => (v * 100).roundToDouble() / 100,
-          _ => null,
-        },
-      );
+        parse: parseFixed,
+        available: available,
+        error: explanation,
+      ),
+      if (badCurrent || presets.any((v) => !available(v))) ...[
+        const SizedBox(height: 6),
+        Text(badCurrent ? tr.fixedStepChoose(weightLabel(step)) : explanation,
+            style: TextStyle(color: badCurrent ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    ]);
+  }
 
   /// Preset chips plus "Eigene", which opens an input for any other value.
   Widget chips({
@@ -1007,14 +1053,21 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     String prefix = '',
     Widget? lead,
     bool none = false,
+    bool Function(double)? available,
+    String? error,
   }) {
     // [none]: no value picked (the [lead] chip stands for it), so neither a preset nor "Eigene" is on.
     final isPreset = none || presets.any((p) => p == current);
     final open = editing == key;
-    void ok() => setState(() {
-          if (parse(draft.text) case final v?) set(v);
-          editing = null;
-        });
+    final value = open ? parse(draft.text) : null;
+    final canSave = value != null && (available?.call(value) ?? true);
+    void ok() {
+      if (!canSave) return;
+      setState(() {
+        set(value);
+        editing = null;
+      });
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 6, runSpacing: 6, children: [
         ?lead,
@@ -1023,7 +1076,8 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
             showCheckmark: false,
             label: Text(label(p.toDouble())),
             selected: p == current && !open && !none,
-            onSelected: (_) => setState(() {
+            tooltip: available?.call(p.toDouble()) == false ? error : null,
+            onSelected: available?.call(p.toDouble()) == false ? null : (_) => setState(() {
               set(p.toDouble());
               editing = null;
             }),
@@ -1052,13 +1106,16 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                 prefixText: prefix.isEmpty ? null : '$prefix ',
                 suffixText: unitText,
                 hintText: hint,
+                errorText: draft.text.isNotEmpty && !canSave ? error : null,
+                errorMaxLines: 3,
                 border: const OutlineInputBorder(),
               ),
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) => ok(),
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton(onPressed: ok, child: Text(tr.ok)),
+          FilledButton(onPressed: canSave ? ok : null, child: Text(tr.ok)),
         ]),
       ],
     ]);

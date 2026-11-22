@@ -10,7 +10,7 @@ import 'model.dart';
 const _maxGap = Duration(minutes: 15), _maxFirst = Duration(minutes: 25);
 
 /// How long [log] took in [s], from the timestamps of its sets: from the set logged before its first
-/// one (any exercise, or the start of the training) to its last set. So setup, warm-ups and walking
+/// one (any exercise, or the start of the training) to its last set. So setup and walking
 /// to the station count to the exercise, the rest after its last set to the next one. [first] is that
 /// first stretch, [gaps] the time between its sets (rest plus one set). Null without timestamps.
 ({Duration total, Duration first, List<Duration> gaps})? measured(Session s, ExerciseLog log) {
@@ -40,13 +40,8 @@ double _perRep(String name) {
   return isBarbell(name) ? 4.5 : 3;
 }
 
-/// Setup before the first set: barbell lifts ramp up from the empty bar in steps of about half again
-/// (100 kg: 20, 30, 45, 70 → 4 warm-up sets), a minute each with loading the plates; else a minute
-/// to get the station or dumbbells ready, half that with no weight.
-int _setupSeconds(String name, double kg) {
-  if (isBarbell(name)) return 60 + (kg > 20 ? (log(kg / 20) / log(1.5)).ceil() : 0) * 60;
-  return kg > 0 ? 60 : 30;
-}
+/// Time to set up the station before the first set.
+int _setupSeconds(double kg) => kg > 0 ? 60 : 30;
 
 /// The plan's shape of an exercise, as far as the estimate needs it.
 typedef Shape = ({String name, int sets, int reps, double kg, int rest, bool cardio, int minutes, double? km, bool timed});
@@ -125,7 +120,7 @@ class Pace {
 
   /// Typical values only: setup + sets × work + the rests between them.
   static Duration _typical(Shape e) => Duration(
-      seconds: (_setupSeconds(e.name, e.kg) + e.sets * _work(e) + max(0, e.sets - 1) * e.rest).round());
+      seconds: (_setupSeconds(e.kg) + e.sets * _work(e) + max(0, e.sets - 1) * e.rest).round());
 
   /// Before the first set (setup plus the set) and from set to set (rest plus the set).
   (Duration, Duration) _parts(Shape e) {
@@ -133,7 +128,7 @@ class Pace {
     return (
       first != null && first.length >= 3
           ? _medianOf(first)
-          : Duration(seconds: ((_setupSeconds(e.name, e.kg) + _work(e)) * factor).round()),
+          : Duration(seconds: ((_setupSeconds(e.kg) + _work(e)) * factor).round()),
       gaps != null && gaps.length >= 4
           ? _medianOf(gaps)
           : Duration(seconds: ((e.rest + _work(e)) * factor).round()),

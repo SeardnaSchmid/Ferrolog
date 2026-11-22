@@ -133,28 +133,6 @@ class L10nEn extends L10n {
       'Always stored in kg, converted only for display.';
 
   @override
-  String get settingsBarbell => 'Barbell';
-
-  @override
-  String get settingsWarmup => 'Show warm-up sets';
-
-  @override
-  String get settingsWarmupHint =>
-      'Before the first set of a barbell exercise: empty bar, then 50, 70 and 85 %';
-
-  @override
-  String get settingsBarPlatesHint =>
-      'Bar and plates for “per side” in the weight sheet and for the warm-up sets';
-
-  @override
-  String settingsBar(Object weight) {
-    return 'Bar $weight';
-  }
-
-  @override
-  String get settingsPlates => 'Plates';
-
-  @override
   String get settingsData => 'Data';
 
   @override
@@ -483,12 +461,7 @@ class L10nEn extends L10n {
   String get progHalf => '2× at the limit, half a step';
 
   @override
-  String get progLimit => 'at the limit, weight stays';
-
-  @override
-  String progBridgeTo(Object reps, Object to) {
-    return 'next time $reps reps, more weight at $to';
-  }
+  String get progLimit => 'weight held';
 
   @override
   String get progBridge => 'more reps first';
@@ -1605,16 +1578,34 @@ class L10nEn extends L10n {
   String get sameAsAbove => 'Same as above';
 
   @override
-  String get adjustWeight => 'Adjust weight';
+  String get adjustWeight => 'Weight and progression';
+
+  @override
+  String get autoRangeTitle => 'Rep or time range';
+
+  @override
+  String get autoWeightTitle => 'Increase the weight';
+
+  @override
+  String get autoBridgeTitle => 'Add reps at the same weight';
+
+  @override
+  String get autoDeloadTitle => 'Reduce the weight';
+
+  @override
+  String get autoHelp => 'How Auto works';
+
+  @override
+  String get autoHintReps => 'Auto uses your reps in reserve.';
+
+  @override
+  String get autoHintTimed => 'Auto increases the weight in small steps.';
 
   @override
   String get automatic => 'Automatic';
 
   @override
   String get fixed => 'Fixed';
-
-  @override
-  String get loadStep => 'Load step';
 
   @override
   String get increaseOnSuccess => 'Increase on success';
@@ -1682,41 +1673,8 @@ class L10nEn extends L10n {
   String get summaryFixed => 'The weight isn\'t adjusted automatically.';
 
   @override
-  String get autoRuleDone =>
-      'Done: about 2.5 % more, double with 3 or more reps in reserve, at the limit it stays (the second time in a row half a step).';
-
-  @override
-  String get autoRuleBridge =>
-      'If the step is too small to load, it goes via reps first.';
-
-  @override
-  String get autoRuleRange => 'Only once all sets are at the top of the range.';
-
-  @override
-  String autoRuleMiss(Object n) {
-    return 'Missed: weight stays, after $n× in a row about −10 % and smaller steps afterwards, which grow again with reserve.';
-  }
-
-  @override
-  String get autoRuleBadDay =>
-      'Sick, slept badly, stress or ate little don\'t count (at most 2× in a row), after a 2-week break you start lighter. The reserve is asked after every exercise.';
-
-  @override
-  String autoNow(Object pct, Object step, Object source) {
-    return 'Currently +$pct % per workout · load step $step ($source)';
-  }
-
-  @override
-  String get sourcePlates => 'your plates';
-
-  @override
-  String get sourceLearned => 'from your weights';
-
-  @override
-  String get sourceGuess => 'starting value, learns along';
-
-  @override
-  String get sourceSet => 'set';
+  String get autoRuleRange =>
+      'Auto checks for an increase once every set reaches the top of the range.';
 
   @override
   String get own => 'Own';
@@ -1818,15 +1776,15 @@ class L10nEn extends L10n {
   String get now => 'NOW';
 
   @override
-  String warmup(Object sets) {
-    return 'Warm-up: $sets';
-  }
-
-  @override
   String get startStopwatch => ' Start';
 
   @override
   String get enterDistance => 'Enter distance';
+
+  @override
+  String rangeGoalDone(String goal) {
+    return '$goal done';
+  }
 
   @override
   String rangeDone(Object goal) {
@@ -2479,5 +2437,55 @@ class L10nEn extends L10n {
   @override
   String cardioTotal(Object minutes, Object trainings) {
     return 'Total: $minutes in $trainings';
+  }
+
+  @override
+  String get loadStep => 'Smallest weight step';
+
+  @override
+  String get loadStepHint =>
+      'What is the smallest change to the total weight for this exercise? With 1.25 kg per side, enter 2.5 kg.';
+
+  @override
+  String loadStepSuggested(String step) {
+    return 'Suggested: $step';
+  }
+
+  @override
+  String fixedStepUnavailable(String step) {
+    return 'Disabled options are unavailable with a weight step of $step.';
+  }
+
+  @override
+  String fixedStepChoose(String step) {
+    return 'Choose $step or a whole multiple of it.';
+  }
+
+  @override
+  String progBridgeTarget(int reps, int base) {
+    return 'Rep bridge: goal $reps, original goal $base reps';
+  }
+
+  @override
+  String get progReserveNeeded => 'Weight held · reps in reserve not recorded';
+
+  @override
+  String get progStepTooLarge => 'Weight held · next step too large';
+
+  @override
+  String get autoRuleDone =>
+      'Once you complete every set, Auto uses your reps in reserve from the last set to check whether the next weight fits your original goal. Without an answer, the weight stays the same.';
+
+  @override
+  String get autoRuleBridge =>
+      'If the next step is too large and you had at least two reps left, Auto adds one rep per set, up to three above your original goal. Your original goal returns when the weight goes up.';
+
+  @override
+  String get autoRuleTimed =>
+      'After meeting the time goal, the load increases one step if that step is no more than 2.5%.';
+
+  @override
+  String autoRuleMiss(Object n) {
+    return 'After $n missed workouts in a row, weight drops by about 10% in available steps.';
   }
 }

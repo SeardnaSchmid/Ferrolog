@@ -52,7 +52,7 @@ FerroLog closes the loop:
 - **Live logging**: one tap per set, tap again to lower the reps, weight adjustable per set
 - **Rest timer** that survives leaving the page and restarting the app
 - **Remaining time and finish time** of the workout, estimated as you go
-- **Warm-up sets** and a **plate calculator** (plates per side for barbell lifts)
+- **Smallest weight step per exercise** and a **plate calculator** for barbell lifts
 - **Swap, add or skip exercises** during a workout without bending the plan
 - **Reps in reserve (RIR)** after the last set, optional
 - Android: workout shown **over the lock screen**, display stays on

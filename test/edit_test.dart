@@ -35,10 +35,31 @@ void main() {
     await tester.tap(find.text('Bankdrücken'));
     await tester.pump();
     expect(find.text('Standardwerte für Bankdrücken übernommen'), findsOneWidget);
-    expect(find.textContaining('pro Training · Ladestufe'), findsOneWidget, reason: 'new ones start in auto mode');
+    expect(find.text('So funktioniert Auto'), findsOneWidget, reason: 'new ones start in auto mode');
+    expect(find.textContaining('Reserve im letzten Satz'), findsNothing);
+    await tester.tap(find.text('So funktioniert Auto'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Reserve im letzten Satz'), findsOneWidget);
+    expect(find.text('Mehr Wiederholungen bei gleichem Gewicht'), findsOneWidget);
+    expect(find.text('Gewicht senken'), findsOneWidget);
+    await tester.tap(find.text('So funktioniert Auto'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Sätze')).dy, lessThan(tester.getTopLeft(find.text('Gewicht und Steigerung')).dy));
+    expect(find.textContaining('Gewicht passt sich automatisch an.'), findsNothing);
+
+    await tester.tap(find.text('Kleinster Gewichtsschritt'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, '2,5 kg'));
+    await tester.pump();
+    await tester.tap(find.text('Kleinster Gewichtsschritt'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Fest'));
     await tester.pump();
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '+0,5 kg')).onSelected, isNull);
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '+5 kg')).onSelected, isNotNull);
+    expect(find.textContaining('Ausgegraute Schritte'), findsOneWidget);
     await tester.tap(find.text('Senkung bei Misserfolg'));
     await tester.pump();
     // First set tile → sheet: one plate step lighter, this set only.
@@ -57,6 +78,7 @@ void main() {
     expect(result?.name, 'Bankdrücken');
     expect((result?.sets, result?.reps, result?.setReps), (4, 5, null));
     expect(result?.decrement, 2.5);
+    expect(result?.loadStep, 2.5);
     expect(result?.auto, isFalse);
     expect(result?.setWeights, [47.5, 50, 50, 50], reason: 'catalogue weight 50 kg, first set −2,5, one set added');
     expect(result?.weight, 50);

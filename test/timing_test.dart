@@ -37,15 +37,15 @@ void main() {
         reason: 'older data has no timestamps');
   });
 
-  test('typical values: warm-ups for heavy barbell lifts, seconds for holds', () {
+  test('typical values: setup and execution for barbell lifts and holds', () {
     final pace = Pace([]);
-    // 60 s + 5 warm-ups (20 → 120 kg in steps of half again) + 5 × 4.5 s.
-    expect(pace.of(shape('Kreuzheben', 1, 5, 120, 240)).inSeconds, 383);
+    // 60 s setup + 5 × 4.5 s.
+    expect(pace.of(shape('Kreuzheben', 1, 5, 120, 240)).inSeconds, 83);
     // 30 s setup + 3 × 30 s hold + 2 × 60 s rest.
     expect(pace.of(shape('Plank', 3, 30, 0, 60)), const Duration(minutes: 4));
     // 60 s setup + 3 × 10 × 3 s + 2 × 90 s.
     expect(pace.of(shape('Kurzhantelrudern', 3, 10, 20, 90)).inSeconds, 330);
-    expect(aboutLabel(const Duration(seconds: 383)), '≈ 6 Min');
+    expect(aboutLabel(const Duration(seconds: 83)), '≈ 1 Min');
     expect(aboutLabel(const Duration(minutes: 65)), '≈ 1:05 h');
   });
 

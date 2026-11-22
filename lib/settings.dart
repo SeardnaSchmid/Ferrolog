@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'language.dart';
-import 'loading.dart';
 import 'main.dart';
 import 'model.dart';
 import 'plan_import_page.dart';
@@ -273,50 +272,6 @@ class _SyncSettingsState extends State<SyncSettings> {
           const SizedBox(height: 4),
           Text(tr.settingsUnitHint,
               style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const Divider(height: 32),
-          Text(tr.settingsBarbell, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          const SizedBox(height: 4),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.local_fire_department_outlined),
-            title: Text(tr.settingsWarmup),
-            subtitle: Text(tr.settingsWarmupHint),
-            value: showWarmup,
-            onChanged: (v) async {
-              await prefs.setBool('session.warmup', v);
-              setState(() {});
-            },
-          ),
-          Text(tr.settingsBarPlatesHint, style: text.bodyMedium),
-          const SizedBox(height: 8),
-          // Kept per unit: a 20 kg bar isn't a 45 lb one.
-          SegmentedButton<double>(
-            showSelectedIcon: false,
-            segments: [
-              for (final b in barChoices[unit.value]!) ButtonSegment(value: b, label: Text(tr.settingsBar('${plateNum(b)} $unitLabel'))),
-            ],
-            selected: {barWeight},
-            onSelectionChanged: (v) async {
-              await prefs.setDouble('barbell.bar.${unit.value.name}', v.single);
-              setState(() {});
-            },
-          ),
-          const SizedBox(height: 12),
-          Text(tr.settingsPlates, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final p in plateChoices[unit.value]!)
-              FilterChip(
-                label: Text(plateNum(p)),
-                selected: availablePlates.contains(p),
-                onSelected: (on) async {
-                  final plates = {...availablePlates};
-                  on ? plates.add(p) : plates.remove(p);
-                  await prefs.setStringList('barbell.plates.${unit.value.name}', [for (final x in plates) '$x']);
-                  setState(() {});
-                },
-              ),
-          ]),
           const Divider(height: 32),
           Text(tr.settingsData, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
           ListTile(

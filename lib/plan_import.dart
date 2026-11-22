@@ -27,25 +27,21 @@ final capabilities = {
         'reps (if up), -decrement kg after failsToDeload missed trainings in a row (if down). It always moves the '
         'weight, never reps or seconds: for bodyweight and held exercises without added weight set up false, '
         'unless weight should be added.',
-    'Or the auto mode per exercise (auto true, see "format"): a share of the weight that adapts itself, steered by '
-        'the reps in reserve, rep bridges where a step is too small to load, bad days excused, a break of two weeks '
-        'or more starts lighter. increment, up, down, decrement and failsToDeload are then ignored. loadStep (kg) = '
-        'what the weight can be loaded in when the user set it (e.g. a machine taking only 5 kg plates), else '
-        'learned. Leave autoState out: the app keeps it.',
+    'loadStep (kg) is the smallest available total weight change for an exercise. Fixed increments and '
+        'decrements must be multiples of a configured step.',
+    'Auto mode (auto true) uses logged reps and the last set’s reserve to decide whether to move to the next '
+        'weight or temporarily add repetitions. Leave autoState out: the app keeps it.',
     'Rest per exercise in seconds (restSeconds), optionally a different rest after a missed set (failRestSeconds).',
     'Own exercises with their muscles (muscles: primary, secondary), for names the app doesn\'t know.',
     'During a training the user can swap an exercise (machine taken), add one, add or take off sets and change '
         'the order; that changes only that training, not the plan (see replaces, added in the sessions).',
-    'If the user switched it on, the app asks after an exercise\'s last set how many reps were left '
-        '(sessions[].exercises[].rir, 0 = at the limit, 4 = four or more): a plateau with reps left is not the '
-        'weight\'s fault, twice at the limit calls for a deload. It is recorded, not planned.',
-    'Barbell lifts show the plates per side for the user\'s bar and plates, and, if the user switched it on, a '
-        'warm-up before the first set (empty bar × 8, then 50/70/85 % of the first set); nothing to plan for either.',
+    'Auto mode asks after the last set how many reps were left (rir, 0 = at the limit, 4 = four or more). '
+        'For other strength exercises the question is optional. The answer is recorded in the training.',
+    'Barbell lifts can show plates per side when a matching bar and plate setup is known.',
   ],
   'cannot': [
     'Supersets, circuits or giant sets: exercises are done one after the other; the rest timer runs per exercise.',
     'Planned RPE / RIR targets, percentages of the 1RM, tempo, notes per exercise.',
-    'Own warm-up sets, or warm-ups for dumbbell and machine exercises; warm-up sets are never logged.',
     'Periodisation over weeks (waves, deload weeks, blocks): only the automatic steps above; a planned change '
         'has to be made by hand when it is due.',
     'A schedule (which workout on which day) or optional exercises: an exercise in the plan is planned every time.',
@@ -63,8 +59,8 @@ final planImport = {
       '(all its exercises, in the new order); without id it is a new workout; delete true (with id) removes one; '
       'workouts not listed stay as they are. Exercises use the fields of the plan format (see "format" and '
       '"capabilities"): name, weight, sets, reps, increment, up, decrement, down, failsToDeload, auto, restSeconds, and '
-      'where needed failRestSeconds, setWeights, setReps, maxReps, type, km. For an exercise the app already has, '
-      'progression and rest left out (increment, up, decrement, down, failsToDeload, auto, restSeconds, failRestSeconds) '
+      'where needed loadStep, failRestSeconds, setWeights, setReps, maxReps, type, km. For an exercise the app already has, '
+      'progression and rest left out (increment, up, decrement, down, failsToDeload, auto, loadStep, restSeconds, failRestSeconds) '
       'stay as they are; setWeights, setReps, maxReps, type and km left out are gone. Leave out fails: the app '
       'keeps the count. Keep an exercise\'s name exactly to keep its history; a new name starts '
       'a new one. muscles (optional, only for an exercise the app doesn\'t know): primary and secondary as muscle '
@@ -229,7 +225,7 @@ PlanImport parsePlanImport(String text) {
 }
 
 /// Settings an exercise keeps when the AI leaves them out.
-const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 'autoState', 'loadStep', 'restSeconds', 'failRestSeconds'];
+const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 'autoState', 'loadStep', 'restSeconds', 'failRestSeconds', 'barbellSetups'];
 
 /// One exercise from the AI: what it left out from the plan's exercise of that name ([_kept]) or the app's
 /// defaults, and [Exercise.fails] kept. Its why and muscles go into [why] and [muscles].
@@ -258,6 +254,14 @@ Exercise _exercise(Object? raw, String where, Workout? old, Map<String, String> 
     });
   } catch (x) {
     throw FormatException('$label: $x');
+  }
+  if (raw['loadStep'] != null && e.loadStep == null) {
+    throw FormatException('$label · ${tr.loadStep}');
+  }
+  if (e.loadStep case final step? when !e.auto && !e.cardio && !e.noWeight) {
+    if ((e.up && !fitsLoadStep(e.increment, step)) || (e.down && !fitsLoadStep(e.decrement, step))) {
+      throw FormatException('$label · ${tr.fixedStepChoose(weightLabel(step))}');
+    }
   }
   if (e.sets < 1 || e.reps < 0) throw FormatException(tr.piBadSets(label));
   if (e.setWeights case final w? when w.length != e.sets) throw FormatException(tr.piSetWeights(label, e.sets));
@@ -321,6 +325,7 @@ List<(String, String Function(Exercise))> get _aspects => [
   (tr.aspectKind, _kind),
   (tr.sets, _scheme),
   (tr.aspectWeight, _load),
+  (tr.loadStep, (e) => e.loadStep == null ? '' : weightLabel(e.loadStep!)),
   (tr.aspectIncrease, (e) => e.cardio ? '' : e.auto ? tr.auto : e.up ? '+${weightLabel(e.increment)}' : tr.off),
   (tr.aspectDeload, (e) => e.cardio || e.auto ? '' : e.down ? tr.deloadAfter(weightLabel(e.decrement), e.failsToDeload) : tr.off),
   (tr.rest, (e) => [if (e.restSeconds > 0) '${e.restSeconds} s', if (e.failRestSeconds case final f?) tr.restAfterMiss(f)].join(', ')),

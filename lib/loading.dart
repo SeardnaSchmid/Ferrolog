@@ -1,9 +1,7 @@
 import 'language.dart';
-import 'main.dart';
 import 'units.dart';
 
-/// Loading a barbell: the warm-up ramp before the work sets and the plates per side. The functions work
-/// in the shown unit (kg or lb), as do the bar and the plates, which are set per unit in the settings.
+/// Plates per side for a barbell. The calculator works in the shown unit.
 
 /// Bars to choose from, the first is the default: a men's, a women's and a technique bar.
 const barChoices = {WeightUnit.kg: [20.0, 15.0, 10.0], WeightUnit.lb: [45.0, 35.0, 15.0]};
@@ -14,55 +12,57 @@ const plateChoices = {
   WeightUnit.lb: [45.0, 35.0, 25.0, 10.0, 5.0, 2.5],
 };
 
-/// Warm-up sets on the training page: off unless switched on in the settings.
-bool get showWarmup => prefs.getBool('session.warmup') ?? false;
+class BarbellSetup {
+  final double bar;
+  final List<double> plates;
 
-/// The user's bar in the shown unit.
-double get barWeight => prefs.getDouble('barbell.bar.${unit.value.name}') ?? barChoices[unit.value]!.first;
+  BarbellSetup(this.bar, Iterable<double> plates)
+      : plates = List.unmodifiable(plates.where((p) => p.isFinite && p > 0).toSet());
 
-/// The user's plates in the shown unit, heaviest first.
-List<double> get availablePlates => switch (prefs.getStringList('barbell.plates.${unit.value.name}')) {
-      final list? => [for (final p in list) double.parse(p)]..sort((a, b) => b.compareTo(a)),
-      null => plateChoices[unit.value]!,
+  factory BarbellSetup.defaults(WeightUnit unit) => BarbellSetup(barChoices[unit]!.first, plateChoices[unit]!);
+
+  Map<String, dynamic> toJson() => {'bar': bar, 'plates': plates};
+
+  factory BarbellSetup.fromJson(Map<String, dynamic> j) {
+    final bar = (j['bar'] as num).toDouble();
+    if (!bar.isFinite || bar <= 0) throw const FormatException('Invalid bar weight');
+    return BarbellSetup(bar, (j['plates'] as List).map((p) => (p as num).toDouble()));
+  }
+}
+
+Map<WeightUnit, BarbellSetup> barbellSetupsFromJson(Map<String, dynamic>? j) => {
+      for (final u in WeightUnit.values)
+        if (j?[u.name] case final Map<String, dynamic> setup) u: BarbellSetup.fromJson(setup),
     };
 
-/// Warm-up before a work set of [work]: the empty bar × 8, then 50 % × 5, 70 % × 3 and 85 % × 1, rounded
-/// to [step] (2,5 kg or 5 lb). A step is left out when it isn't above the one before or is within [near]
-/// of the work weight, where it would just be another work set. Nothing when the work set is the bar.
-List<(double, int)> warmupSets(double work, {double bar = 20, double step = 2.5, double near = 5}) {
-  if (work <= bar) return const [];
-  final sets = [(bar, 8)];
-  for (final (share, reps) in const [(.5, 5), (.7, 3), (.85, 1)]) {
-    final w = (work * share / step).round() * step;
-    if (w > sets.last.$1 && work - w >= near) sets.add((w, reps));
-  }
-  return sets;
-}
+Map<String, dynamic> barbellSetupsToJson(Map<WeightUnit, BarbellSetup> setups) =>
+    setups.map((u, setup) => MapEntry(u.name, setup.toJson()));
 
 /// The plates on each side for [total] on a bar of [bar], heaviest first, as many of each as needed;
 /// empty for the bare bar. Null when [plates] can't make it (below the bar, or a remainder left).
 List<double>? platesPerSide(double total, {double bar = 20, required List<double> plates}) {
-  var left = (total - bar) / 2;
-  if (left < -1e-6) return null;
-  final side = <double>[];
-  for (final p in [...plates]..sort((a, b) => b.compareTo(a))) {
-    while (left >= p - 1e-6) {
-      side.add(p);
-      left -= p;
+  final sizes = [...plates.where((p) => p.isFinite && p > 1e-6)]..sort((a, b) => b.compareTo(a));
+  final failed = <(int, int)>{};
+  List<double>? load(int i, double left) {
+    if (left.abs() < 1e-6) return [];
+    if (left < 0 || i == sizes.length) return null;
+    if (!failed.add((i, (left * 1e6).round()))) return null;
+    final p = sizes[i];
+    for (var count = ((left + 1e-6) / p).floor(); count >= 0; count--) {
+      if (load(i + 1, left - count * p) case final rest?) {
+        return [...List.filled(count, p), ...rest];
+      }
     }
+    return null;
   }
-  return left > 1e-6 ? null : side;
+  return load(0, (total - bar) / 2);
 }
 
 /// A shown weight as typed: "82,5", "2,5", "45".
 String plateNum(double v) => decimal(v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v');
 
-/// The warm-up for a work set of [kg] with the user's bar, in the shown unit.
-List<(double, int)> warmupFor(double kg) => warmupSets(shown(kg),
-    bar: barWeight, step: unit.value == WeightUnit.lb ? 5 : 2.5, near: unit.value == WeightUnit.lb ? 10 : 5);
-
-/// "Pro Seite: 25 + 10 + 2,5" for [kg] with the user's bar and plates.
-String perSideLabel(double kg) => switch (platesPerSide(shown(kg), bar: barWeight, plates: availablePlates)) {
+/// "Pro Seite: 25 + 10 + 2,5" for [kg] with this exercise's bar and plates.
+String perSideLabel(double kg, BarbellSetup setup) => switch (platesPerSide(shown(kg), bar: setup.bar, plates: setup.plates)) {
       null => tr.platesNotLoadable,
       [] => tr.platesBarOnly,
       final side => tr.platesPerSide(side.map(plateNum).join(' + ')),

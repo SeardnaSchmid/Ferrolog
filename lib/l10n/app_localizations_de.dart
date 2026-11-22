@@ -134,28 +134,6 @@ class L10nDe extends L10n {
       'Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.';
 
   @override
-  String get settingsBarbell => 'Hantel';
-
-  @override
-  String get settingsWarmup => 'Aufwärmsätze zeigen';
-
-  @override
-  String get settingsWarmupHint =>
-      'Vor dem ersten Satz einer Langhantel-Übung: leere Stange, dann 50, 70 und 85 %';
-
-  @override
-  String get settingsBarPlatesHint =>
-      'Stange und Scheiben für „Pro Seite“ beim Gewicht und für die Aufwärmsätze';
-
-  @override
-  String settingsBar(Object weight) {
-    return 'Stange $weight';
-  }
-
-  @override
-  String get settingsPlates => 'Scheiben';
-
-  @override
   String get settingsData => 'Daten';
 
   @override
@@ -485,12 +463,7 @@ class L10nDe extends L10n {
   String get progHalf => '2× am Limit, halber Schritt';
 
   @override
-  String get progLimit => 'am Limit, Gewicht bleibt';
-
-  @override
-  String progBridgeTo(Object reps, Object to) {
-    return 'nächstes Mal $reps Wdh., bei $to mehr Gewicht';
-  }
+  String get progLimit => 'Gewicht gehalten';
 
   @override
   String get progBridge => 'erst mehr Wiederholungen';
@@ -1608,16 +1581,34 @@ class L10nDe extends L10n {
   String get sameAsAbove => 'Wie oben';
 
   @override
-  String get adjustWeight => 'Gewicht anpassen';
+  String get adjustWeight => 'Gewicht und Steigerung';
+
+  @override
+  String get autoRangeTitle => 'Wiederholungs- oder Zeitspanne';
+
+  @override
+  String get autoWeightTitle => 'Gewicht steigern';
+
+  @override
+  String get autoBridgeTitle => 'Mehr Wiederholungen bei gleichem Gewicht';
+
+  @override
+  String get autoDeloadTitle => 'Gewicht senken';
+
+  @override
+  String get autoHelp => 'So funktioniert Auto';
+
+  @override
+  String get autoHintReps => 'Auto nutzt deine Wiederholungsreserve.';
+
+  @override
+  String get autoHintTimed => 'Auto steigert das Gewicht in kleinen Schritten.';
 
   @override
   String get automatic => 'Automatisch';
 
   @override
   String get fixed => 'Fest';
-
-  @override
-  String get loadStep => 'Ladestufe';
 
   @override
   String get increaseOnSuccess => 'Steigerung bei Erfolg';
@@ -1685,41 +1676,8 @@ class L10nDe extends L10n {
   String get summaryFixed => 'Gewicht wird nicht automatisch angepasst.';
 
   @override
-  String get autoRuleDone =>
-      'Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es (beim zweiten Mal in Folge ein halber Schritt).';
-
-  @override
-  String get autoRuleBridge =>
-      'Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.';
-
-  @override
-  String get autoRuleRange => 'Erst wenn alle Sätze oben in der Spanne sind.';
-
-  @override
-  String autoRuleMiss(Object n) {
-    return 'Nicht geschafft: Gewicht bleibt, nach $n× in Folge etwa −10 % und danach kleinere Schritte, die mit Reserve wieder wachsen.';
-  }
-
-  @override
-  String get autoRuleBadDay =>
-      'Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.';
-
-  @override
-  String autoNow(Object pct, Object step, Object source) {
-    return 'Gerade +$pct % pro Training · Ladestufe $step ($source)';
-  }
-
-  @override
-  String get sourcePlates => 'deine Scheiben';
-
-  @override
-  String get sourceLearned => 'aus deinen Gewichten';
-
-  @override
-  String get sourceGuess => 'Startwert, lernt mit';
-
-  @override
-  String get sourceSet => 'eingestellt';
+  String get autoRuleRange =>
+      'Auto prüft eine Steigerung erst, wenn alle Sätze das obere Ziel der Spanne erreichen.';
 
   @override
   String get own => 'Eigene';
@@ -1821,15 +1779,15 @@ class L10nDe extends L10n {
   String get now => 'JETZT';
 
   @override
-  String warmup(Object sets) {
-    return 'Aufwärmen: $sets';
-  }
-
-  @override
   String get startStopwatch => ' Start';
 
   @override
   String get enterDistance => 'Distanz eintragen';
+
+  @override
+  String rangeGoalDone(String goal) {
+    return '$goal geschafft';
+  }
 
   @override
   String rangeDone(Object goal) {
@@ -2482,5 +2440,56 @@ class L10nDe extends L10n {
   @override
   String cardioTotal(Object minutes, Object trainings) {
     return 'Gesamt: $minutes in $trainings';
+  }
+
+  @override
+  String get loadStep => 'Kleinster Gewichtsschritt';
+
+  @override
+  String get loadStepHint =>
+      'Um wie viel kannst du das Gesamtgewicht dieser Übung mindestens verändern? Bei 1,25 kg pro Seite sind das 2,5 kg.';
+
+  @override
+  String loadStepSuggested(String step) {
+    return 'Vorschlag: $step';
+  }
+
+  @override
+  String fixedStepUnavailable(String step) {
+    return 'Ausgegraute Schritte sind bei $step pro Gewichtsstufe nicht verfügbar.';
+  }
+
+  @override
+  String fixedStepChoose(String step) {
+    return 'Wähle $step oder ein ganzzahliges Vielfaches.';
+  }
+
+  @override
+  String progBridgeTarget(int reps, int base) {
+    return 'Wiederholungsbrücke: Ziel $reps, ursprünglich $base Wdh.';
+  }
+
+  @override
+  String get progReserveNeeded =>
+      'Gewicht gehalten · Wiederholungsreserve fehlt';
+
+  @override
+  String get progStepTooLarge => 'Gewicht gehalten · nächste Stufe zu groß';
+
+  @override
+  String get autoRuleDone =>
+      'Sind alle Sätze geschafft, prüft Auto mit deiner Reserve im letzten Satz, ob die nächste Gewichtsstufe zum Grundziel passt. Ohne Angabe bleibt das Gewicht gleich.';
+
+  @override
+  String get autoRuleBridge =>
+      'Ist die nächste Stufe zu schwer und du hast mindestens zwei Wiederholungen Reserve, kommt eine Wiederholung pro Satz dazu. Auto geht bis höchstens drei über dem Grundziel. Beim Wechsel zur nächsten Stufe gilt wieder das Grundziel.';
+
+  @override
+  String get autoRuleTimed =>
+      'Bei erfülltem Zeitziel steigt das Gewicht um eine Stufe, wenn der Schritt höchstens 2,5 % beträgt.';
+
+  @override
+  String autoRuleMiss(Object n) {
+    return 'Nach $n verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.';
   }
 }

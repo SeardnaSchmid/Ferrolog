@@ -24,16 +24,12 @@ class _EditSessionPageState extends State<EditSessionPage> {
 
   bool get changed => jsonEncode(draft.toJson()) != original;
 
-  /// The step of the weight sheet: the plan's, else what the log brought along.
-  double incrementOf(ExerciseLog log) =>
-      store.workouts
-          .where((w) => w.id == draft.workoutId)
-          .expand((w) => w.exercises)
-          .where((e) => e.name == log.name)
-          .firstOrNull
-          ?.increment ??
-      log.increment ??
-      2.5;
+  double stepOf(ExerciseLog log) {
+    final workout = store.workouts.where((w) => w.id == draft.workoutId).firstOrNull;
+    final plan = planEntryOf(workout, draft.exercises, log);
+    return validLoadStep(log.loadStep) ??
+        store.loadStepOf(plan ?? Exercise(name: log.name, barbellSetups: log.barbellSetups)).$1;
+  }
 
   Future<void> editReps(ExerciseLog log, int i) async {
     final result = await showRepsSheet(context, log, i);
@@ -45,7 +41,7 @@ class _EditSessionPageState extends State<EditSessionPage> {
   }
 
   Future<void> editWeight(ExerciseLog log, int i) async {
-    final result = await showWeightSheet(context, log, i, increment: incrementOf(log), scope: WeightScope.set);
+    final result = await showWeightSheet(context, log, i, step: stepOf(log), scope: WeightScope.set);
     if (result case (final w, final scope)) setState(() => applyWeightScope(log, i, w, scope));
   }
 

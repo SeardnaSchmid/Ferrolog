@@ -116,10 +116,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
     await tester.pump();
 
-    // Bench: 60 s + 3 warm-ups + 3 × 5 × 4.5 s + 2 × 120 s ≈ 9 Min; plank 30 s + 90 s + 120 s = 4 Min.
-    expect(find.textContaining('≈ 9 Min'), findsOneWidget);
+    // Bench: 60 s + 3 × 5 × 4.5 s + 2 × 120 s ≈ 6 Min; plank 30 s + 90 s + 120 s = 4 Min.
+    expect(find.textContaining('≈ 6 Min'), findsOneWidget);
     expect(find.textContaining('≈ 4 Min'), findsOneWidget);
-    expect(find.text('noch ≈ 13 Min'), findsOneWidget);
+    expect(find.text('noch ≈ 10 Min'), findsOneWidget);
     expect(find.textContaining('fertig gegen'), findsOneWidget);
 
     await tester.tap(find.text('–/5', findRichText: true).first);
@@ -299,8 +299,8 @@ void main() {
 
     // Machine taken before the first set: swapped in place, with its own rest.
     await menu(0, 'Bearbeiten');
-    expect(find.text('Automatische Anpassung · optional'), findsNothing, reason: 'plan only');
-    expect(find.textContaining('Nur für dieses Training'), findsOneWidget);
+    expect(find.text('Automatisch'), findsNothing, reason: 'progression belongs to the plan');
+    expect(find.text('Dieses Training · antippen zum Ändern'), findsOneWidget);
     await rename('Kabelrudern');
     expect(names(), ['Kabelrudern 3', 'Klimmzüge 3']);
     expect(find.text('statt Rudern'), findsOneWidget);

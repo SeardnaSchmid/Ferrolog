@@ -57,10 +57,6 @@ class _SessionPageState extends State<SessionPage> {
     store.saveActive(s);
   }
 
-  /// Warm-up lines opened, and the warm-up sets ticked off: only on this page, they're never logged.
-  final warmupOpen = <ExerciseLog>{};
-  final warmupDone = <ExerciseLog, Set<int>>{};
-
   /// Estimates from the trainings before this one; they don't change while training.
   final pace = currentPace();
 
@@ -207,6 +203,8 @@ class _SessionPageState extends State<SessionPage> {
     final plan = planOf(log)?.copy() ??
         Exercise(name: log.name, increment: log.increment ?? 2.5, restSeconds: log.restSeconds ?? 120);
     return plan
+      ..loadStep = log.loadStep ?? plan.loadStep
+      ..barbellSetups = log.barbellSetups
       ..failRestSeconds = plan.failRestSeconds ?? log.failRestSeconds
       ..cardio = log.cardio
       ..timed = log.timed
@@ -475,7 +473,7 @@ class _SessionPageState extends State<SessionPage> {
   /// Sheet to edit a set's weight, see [showWeightSheet].
   Future<void> pickWeight(ExerciseLog log, int i) async {
     setState(() => touched = log);
-    final result = await showWeightSheet(context, log, i, increment: planOf(log)?.increment ?? log.increment ?? 0);
+    final result = await showWeightSheet(context, log, i, step: store.loadStepOf(exerciseOf(log)).$1);
     if (result case (final w, final scope)) applyWeight(log, i, w, scope);
   }
 
@@ -794,8 +792,10 @@ class _SessionPageState extends State<SessionPage> {
                             ].join(' · '),
                       style: muted,
                     ),
-                    if (log.cardio ? null : rangeProgress(log) case final p?) Text(p, style: muted),
+                    if (log.cardio ? null : rangeProgress(log, auto: planOf(log)?.auto ?? false) case final p?) Text(p, style: muted),
                     if (log.replaces case final r?) Text(tr.insteadOf(r), style: muted),
+                    if ((log.cardio || log.maxReps != null ? null : planOf(log)?.state?.bridgeFrom) case final base? when log.targetReps > base)
+                      Text(tr.progBridgeTarget(log.targetReps, base), style: muted),
                     if (log.rir case final r?) Text(rirLabel(r), style: muted),
                   ]),
                 ),
@@ -813,7 +813,6 @@ class _SessionPageState extends State<SessionPage> {
                   ]),
                 ),
               ]),
-              ?_warmup(log, c, muted),
               const SizedBox(height: 10),
               if (log.cardio)
                 _cardioTile(log, c)
@@ -851,55 +850,6 @@ class _SessionPageState extends State<SessionPage> {
           ),
         ),
       );
-
-  /// If switched on in the settings, before the first set of a barbell lift: the warm-up ramp to its first
-  /// set, one line that opens into sets to tick off, each with the plates per side. Not logged, no volume,
-  /// no rest.
-  Widget? _warmup(ExerciseLog log, ColorScheme c, TextStyle muted) {
-    if (!showWarmup || log.cardio || log.timed || log.setsDone > 0 || !isBarbell(log.name) || log.weights.isEmpty) {
-      return null;
-    }
-    final sets = warmupFor(log.weights.first);
-    if (sets.isEmpty) return null;
-    final open = warmupOpen.contains(log);
-    final done = warmupDone[log] ?? const {};
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => setState(() => open ? warmupOpen.remove(log) : warmupOpen.add(log)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(children: [
-            Icon(Icons.local_fire_department_outlined, size: 16, color: c.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                tr.warmup([for (final (w, r) in sets) '${plateNum(w)}×$r'].join(' · ')) +
-                    (done.isEmpty ? '' : '  ✓ ${done.length}/${sets.length}'),
-                style: muted.copyWith(fontSize: 13),
-              ),
-            ),
-            Icon(open ? Icons.expand_less : Icons.expand_more, size: 18, color: c.onSurfaceVariant),
-          ]),
-        ),
-      ),
-      if (open)
-        for (final (i, (w, r)) in sets.indexed)
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            visualDensity: VisualDensity.compact,
-            value: done.contains(i),
-            title: Text('${plateNum(w)} $unitLabel × $r'),
-            subtitle: Text(perSideLabel(toKg(w))),
-            onChanged: (v) => setState(() {
-              final ticks = warmupDone.putIfAbsent(log, () => {});
-              v == true ? ticks.add(i) : ticks.remove(i);
-            }),
-          ),
-    ]);
-  }
 
   /// Cardio as one wide tile: a stopwatch on top (start / stop / undo), what was done below (tap to edit).
   Widget _cardioTile(ExerciseLog log, ColorScheme c) {
@@ -1036,12 +986,12 @@ class _RestBarPainter extends CustomPainter {
 
 /// How far a rep range is from its increase: before the first set what it takes (3×8), then what the
 /// done sets still miss of the top, until every set made it. Null without a range.
-String? rangeProgress(ExerciseLog log) {
+String? rangeProgress(ExerciseLog log, {bool auto = false}) {
   final top = log.maxReps;
   if (top == null) return null;
   final goal = '${log.reps.length}×$top${log.timed ? ' s' : ''}';
   final missing = [for (final r in log.reps) if (r != null) max(0, top - r)].fold(0, (a, b) => a + b);
-  if (log.setsDone == log.reps.length && missing == 0) return tr.rangeDone(goal);
+  if (log.setsDone == log.reps.length && missing == 0) return auto ? tr.rangeGoalDone(goal) : tr.rangeDone(goal);
   if (log.setsDone == 0) return tr.rangeIncreaseAt(goal);
   if (missing == 0) return tr.rangeAllTop(goal);
   return (log.timed ? tr.rangeMissingSeconds : tr.rangeMissingReps)(goal, missing);
@@ -1058,21 +1008,21 @@ RestZone restZone(int left, int target) => left <= -30
         ? RestZone.soon
         : RestZone.rest;
 
-/// Which sets a weight change in the sheet applies to.
 /// Whether [log] trains an exercise in auto mode in [s]'s plan: the reserve is then always asked.
 bool autoRir(Session s, ExerciseLog log) =>
     planEntryOf(store.workouts.where((w) => w.id == s.workoutId).firstOrNull, s.exercises, log)?.auto ?? false;
 
+/// Which sets a weight change in the sheet applies to.
 enum WeightScope { set, open, all }
 
-/// Sheet to edit the weight of set [i]: type it or step it by [increment], choose which sets it applies
+/// Sheet to edit the weight of set [i]: type it or step it by [step], choose which sets it applies
 /// to ([scope] preselected), then save. Null when closed without saving.
 Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog log, int i,
-    {required double increment, WeightScope scope = WeightScope.open}) async {
-  // The sheet works in the shown unit (kg or lb) and converts to kg on save.
-  final step = stepShown(increment);
+    {required double step, WeightScope scope = WeightScope.open}) async {
+  final setup = log.barbellSetups[unit.value] ?? BarbellSetup.defaults(unit.value);
   final field = TextEditingController(text: weightNum(log.weights[i]));
-  double? parse() => switch (parseWeight(field.text)) {
+  double? exactWeight = log.weights[i];
+  double? parse() => switch (exactWeight ?? parseWeight(field.text)) {
         final kg? when kg >= minWeight && kg <= 1000 => kg,
         _ => null,
       };
@@ -1085,15 +1035,18 @@ Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog
         final c = Theme.of(context).colorScheme;
         final w = parse();
         void nudge(int dir) {
-          final next = (shown(w ?? log.weights[i]) + dir * step).clamp(shown(minWeight), shown(1000)).toDouble();
-          setSheet(() => field.text = weightNum(toKg(next)));
+          final next = nudgeWeight(w ?? log.weights[i], step, dir);
+          setSheet(() {
+            exactWeight = next;
+            field.text = weightNum(next);
+          });
         }
 
         Widget stepButton(IconData icon, int dir) => IconButton.filledTonal(
               iconSize: 28,
               style: IconButton.styleFrom(fixedSize: const Size(56, 56), backgroundColor: c.surfaceContainerHigh),
               icon: Icon(icon),
-              tooltip: '${dir < 0 ? '−' : '+'}${weightNum(toKg(step))} $unitLabel',
+              tooltip: '${dir < 0 ? '−' : '+'}${weightNum(step)} $unitLabel',
               onPressed: () => nudge(dir),
             );
         return Padding(
@@ -1124,16 +1077,17 @@ Future<(double, WeightScope)?> showWeightSheet(BuildContext context, ExerciseLog
                       errorText: w == null ? tr.weightBetween(weightLabel(minWeight), weightLabel(1000)) : null,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    onChanged: (_) => setSheet(() {}),
+                    onChanged: (_) => setSheet(() => exactWeight = null),
                     onTap: () => field.selection = TextSelection(baseOffset: 0, extentOffset: field.text.length),
                   ),
                 ),
                 const SizedBox(width: 12),
                 stepButton(Icons.add, 1),
               ]),
-              if (w != null && w > 0 && !log.timed && isBarbell(log.name)) ...[
+              if (w != null && w > 0 && !log.timed && isBarbell(log.name) &&
+                  (log.loadStep == null || log.barbellSetups.containsKey(unit.value))) ...[
                 const SizedBox(height: 8),
-                Text(perSideLabel(w), textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
+                Text(perSideLabel(w, setup), textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: c.onSurfaceVariant)),
               ],
               const SizedBox(height: 16),
               Text(tr.applyTo, style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),

@@ -71,19 +71,6 @@
     }
   },
   "settingsUnitHint": "Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.",
-  "settingsBarbell": "Hantel",
-  "settingsWarmup": "Aufwärmsätze zeigen",
-  "settingsWarmupHint": "Vor dem ersten Satz einer Langhantel-Übung: leere Stange, dann 50, 70 und 85 %",
-  "settingsBarPlatesHint": "Stange und Scheiben für „Pro Seite“ beim Gewicht und für die Aufwärmsätze",
-  "settingsBar": "Stange {weight}",
-  "@settingsBar": {
-    "placeholders": {
-      "weight": {
-        "type": "Object"
-      }
-    }
-  },
-  "settingsPlates": "Scheiben",
   "settingsData": "Daten",
   "settingsExport": "An KI senden / exportieren",
   "settingsExportHint": "Alle Daten als JSON, der Analyse-Prompt kommt in die Zwischenablage",
@@ -369,18 +356,7 @@
   "progUp": "geschafft",
   "progUp2": "viel Reserve, doppelter Schritt",
   "progHalf": "2× am Limit, halber Schritt",
-  "progLimit": "am Limit, Gewicht bleibt",
-  "progBridgeTo": "nächstes Mal {reps} Wdh., bei {to} mehr Gewicht",
-  "@progBridgeTo": {
-    "placeholders": {
-      "reps": {
-        "type": "Object"
-      },
-      "to": {
-        "type": "Object"
-      }
-    }
-  },
+  "progLimit": "Gewicht gehalten",
   "progBridge": "erst mehr Wiederholungen",
   "progRange": "erst alle Wiederholungen",
   "progMiss": "nicht geschafft",
@@ -1279,10 +1255,16 @@
   "minSecOrSec": "min:s oder s",
   "afterMissedSet": "Nach nicht geschafftem Satz",
   "sameAsAbove": "Wie oben",
-  "adjustWeight": "Gewicht anpassen",
+  "adjustWeight": "Gewicht und Steigerung",
+  "autoRangeTitle": "Wiederholungs- oder Zeitspanne",
+  "autoWeightTitle": "Gewicht steigern",
+  "autoBridgeTitle": "Mehr Wiederholungen bei gleichem Gewicht",
+  "autoDeloadTitle": "Gewicht senken",
+  "autoHelp": "So funktioniert Auto",
+  "autoHintReps": "Auto nutzt deine Wiederholungsreserve.",
+  "autoHintTimed": "Auto steigert das Gewicht in kleinen Schritten.",
   "automatic": "Automatisch",
   "fixed": "Fest",
-  "loadStep": "Ladestufe",
   "increaseOnSuccess": "Steigerung bei Erfolg",
   "increaseOn": "+{weight}, wenn alle Sätze geschafft",
   "@increaseOn": {
@@ -1389,10 +1371,7 @@
     }
   },
   "summaryFixed": "Gewicht wird nicht automatisch angepasst.",
-  "autoRuleDone": "Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es (beim zweiten Mal in Folge ein halber Schritt).",
-  "autoRuleBridge": "Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.",
-  "autoRuleRange": "Erst wenn alle Sätze oben in der Spanne sind.",
-  "autoRuleMiss": "Nicht geschafft: Gewicht bleibt, nach {n}× in Folge etwa −10 % und danach kleinere Schritte, die mit Reserve wieder wachsen.",
+  "autoRuleRange": "Auto prüft eine Steigerung erst, wenn alle Sätze das obere Ziel der Spanne erreichen.",
   "@autoRuleMiss": {
     "placeholders": {
       "n": {
@@ -1400,25 +1379,6 @@
       }
     }
   },
-  "autoRuleBadDay": "Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.",
-  "autoNow": "Gerade +{pct} % pro Training · Ladestufe {step} ({source})",
-  "@autoNow": {
-    "placeholders": {
-      "pct": {
-        "type": "Object"
-      },
-      "step": {
-        "type": "Object"
-      },
-      "source": {
-        "type": "Object"
-      }
-    }
-  },
-  "sourcePlates": "deine Scheiben",
-  "sourceLearned": "aus deinen Gewichten",
-  "sourceGuess": "Startwert, lernt mit",
-  "sourceSet": "eingestellt",
   "own": "Eigene",
   "leftAbout": "noch {about}",
   "@leftAbout": {
@@ -1490,16 +1450,10 @@
     }
   },
   "now": "JETZT",
-  "warmup": "Aufwärmen: {sets}",
-  "@warmup": {
-    "placeholders": {
-      "sets": {
-        "type": "Object"
-      }
-    }
-  },
   "startStopwatch": " Start",
   "enterDistance": "Distanz eintragen",
+  "rangeGoalDone": "{goal} geschafft",
+  "@rangeGoalDone": {"placeholders": {"goal": {"type": "String"}}},
   "rangeDone": "{goal} geschafft · nächstes Mal schwerer",
   "@rangeDone": {
     "placeholders": {
@@ -2204,5 +2158,48 @@
         "type": "Object"
       }
     }
-  }
+  },
+  "loadStep": "Kleinster Gewichtsschritt",
+  "loadStepHint": "Um wie viel kannst du das Gesamtgewicht dieser Übung mindestens verändern? Bei 1,25 kg pro Seite sind das 2,5 kg.",
+  "loadStepSuggested": "Vorschlag: {step}",
+  "@loadStepSuggested": {
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "fixedStepUnavailable": "Ausgegraute Schritte sind bei {step} pro Gewichtsstufe nicht verfügbar.",
+  "@fixedStepUnavailable": {
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "fixedStepChoose": "Wähle {step} oder ein ganzzahliges Vielfaches.",
+  "@fixedStepChoose": {
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "progBridgeTarget": "Wiederholungsbrücke: Ziel {reps}, ursprünglich {base} Wdh.",
+  "@progBridgeTarget": {
+    "placeholders": {
+      "reps": {
+        "type": "int"
+      },
+      "base": {
+        "type": "int"
+      }
+    }
+  },
+  "progReserveNeeded": "Gewicht gehalten · Wiederholungsreserve fehlt",
+  "progStepTooLarge": "Gewicht gehalten · nächste Stufe zu groß",
+  "autoRuleDone": "Sind alle Sätze geschafft, prüft Auto mit deiner Reserve im letzten Satz, ob die nächste Gewichtsstufe zum Grundziel passt. Ohne Angabe bleibt das Gewicht gleich.",
+  "autoRuleBridge": "Ist die nächste Stufe zu schwer und du hast mindestens zwei Wiederholungen Reserve, kommt eine Wiederholung pro Satz dazu. Auto geht bis höchstens drei über dem Grundziel. Beim Wechsel zur nächsten Stufe gilt wieder das Grundziel.",
+  "autoRuleTimed": "Bei erfülltem Zeitziel steigt das Gewicht um eine Stufe, wenn der Schritt höchstens 2,5 % beträgt.",
+  "autoRuleMiss": "Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt."
 }

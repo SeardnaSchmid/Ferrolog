@@ -295,42 +295,6 @@ abstract class L10n {
   /// **'Gespeichert wird immer in kg, Umrechnung nur für die Anzeige.'**
   String get settingsUnitHint;
 
-  /// No description provided for @settingsBarbell.
-  ///
-  /// In de, this message translates to:
-  /// **'Hantel'**
-  String get settingsBarbell;
-
-  /// No description provided for @settingsWarmup.
-  ///
-  /// In de, this message translates to:
-  /// **'Aufwärmsätze zeigen'**
-  String get settingsWarmup;
-
-  /// No description provided for @settingsWarmupHint.
-  ///
-  /// In de, this message translates to:
-  /// **'Vor dem ersten Satz einer Langhantel-Übung: leere Stange, dann 50, 70 und 85 %'**
-  String get settingsWarmupHint;
-
-  /// No description provided for @settingsBarPlatesHint.
-  ///
-  /// In de, this message translates to:
-  /// **'Stange und Scheiben für „Pro Seite“ beim Gewicht und für die Aufwärmsätze'**
-  String get settingsBarPlatesHint;
-
-  /// No description provided for @settingsBar.
-  ///
-  /// In de, this message translates to:
-  /// **'Stange {weight}'**
-  String settingsBar(Object weight);
-
-  /// No description provided for @settingsPlates.
-  ///
-  /// In de, this message translates to:
-  /// **'Scheiben'**
-  String get settingsPlates;
-
   /// No description provided for @settingsData.
   ///
   /// In de, this message translates to:
@@ -856,14 +820,8 @@ abstract class L10n {
   /// No description provided for @progLimit.
   ///
   /// In de, this message translates to:
-  /// **'am Limit, Gewicht bleibt'**
+  /// **'Gewicht gehalten'**
   String get progLimit;
-
-  /// No description provided for @progBridgeTo.
-  ///
-  /// In de, this message translates to:
-  /// **'nächstes Mal {reps} Wdh., bei {to} mehr Gewicht'**
-  String progBridgeTo(Object reps, Object to);
 
   /// No description provided for @progBridge.
   ///
@@ -2734,8 +2692,50 @@ abstract class L10n {
   /// No description provided for @adjustWeight.
   ///
   /// In de, this message translates to:
-  /// **'Gewicht anpassen'**
+  /// **'Gewicht und Steigerung'**
   String get adjustWeight;
+
+  /// No description provided for @autoRangeTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Wiederholungs- oder Zeitspanne'**
+  String get autoRangeTitle;
+
+  /// No description provided for @autoWeightTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Gewicht steigern'**
+  String get autoWeightTitle;
+
+  /// No description provided for @autoBridgeTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Mehr Wiederholungen bei gleichem Gewicht'**
+  String get autoBridgeTitle;
+
+  /// No description provided for @autoDeloadTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Gewicht senken'**
+  String get autoDeloadTitle;
+
+  /// No description provided for @autoHelp.
+  ///
+  /// In de, this message translates to:
+  /// **'So funktioniert Auto'**
+  String get autoHelp;
+
+  /// No description provided for @autoHintReps.
+  ///
+  /// In de, this message translates to:
+  /// **'Auto nutzt deine Wiederholungsreserve.'**
+  String get autoHintReps;
+
+  /// No description provided for @autoHintTimed.
+  ///
+  /// In de, this message translates to:
+  /// **'Auto steigert das Gewicht in kleinen Schritten.'**
+  String get autoHintTimed;
 
   /// No description provided for @automatic.
   ///
@@ -2748,12 +2748,6 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Fest'**
   String get fixed;
-
-  /// No description provided for @loadStep.
-  ///
-  /// In de, this message translates to:
-  /// **'Ladestufe'**
-  String get loadStep;
 
   /// No description provided for @increaseOnSuccess.
   ///
@@ -2845,65 +2839,11 @@ abstract class L10n {
   /// **'Gewicht wird nicht automatisch angepasst.'**
   String get summaryFixed;
 
-  /// No description provided for @autoRuleDone.
-  ///
-  /// In de, this message translates to:
-  /// **'Geschafft: etwa 2,5 % mehr, mit 3 oder mehr Wiederholungen Reserve doppelt, am Limit bleibt es (beim zweiten Mal in Folge ein halber Schritt).'**
-  String get autoRuleDone;
-
-  /// No description provided for @autoRuleBridge.
-  ///
-  /// In de, this message translates to:
-  /// **'Ist der Schritt zu klein zum Laden, geht es erst über Wiederholungen.'**
-  String get autoRuleBridge;
-
   /// No description provided for @autoRuleRange.
   ///
   /// In de, this message translates to:
-  /// **'Erst wenn alle Sätze oben in der Spanne sind.'**
+  /// **'Auto prüft eine Steigerung erst, wenn alle Sätze das obere Ziel der Spanne erreichen.'**
   String get autoRuleRange;
-
-  /// No description provided for @autoRuleMiss.
-  ///
-  /// In de, this message translates to:
-  /// **'Nicht geschafft: Gewicht bleibt, nach {n}× in Folge etwa −10 % und danach kleinere Schritte, die mit Reserve wieder wachsen.'**
-  String autoRuleMiss(Object n);
-
-  /// No description provided for @autoRuleBadDay.
-  ///
-  /// In de, this message translates to:
-  /// **'Krank, schlecht geschlafen, Stress oder wenig gegessen zählen nicht (höchstens 2× in Folge), nach 2 Wochen Pause geht es leichter los. Die Reserve wird nach jeder Übung abgefragt.'**
-  String get autoRuleBadDay;
-
-  /// No description provided for @autoNow.
-  ///
-  /// In de, this message translates to:
-  /// **'Gerade +{pct} % pro Training · Ladestufe {step} ({source})'**
-  String autoNow(Object pct, Object step, Object source);
-
-  /// No description provided for @sourcePlates.
-  ///
-  /// In de, this message translates to:
-  /// **'deine Scheiben'**
-  String get sourcePlates;
-
-  /// No description provided for @sourceLearned.
-  ///
-  /// In de, this message translates to:
-  /// **'aus deinen Gewichten'**
-  String get sourceLearned;
-
-  /// No description provided for @sourceGuess.
-  ///
-  /// In de, this message translates to:
-  /// **'Startwert, lernt mit'**
-  String get sourceGuess;
-
-  /// No description provided for @sourceSet.
-  ///
-  /// In de, this message translates to:
-  /// **'eingestellt'**
-  String get sourceSet;
 
   /// No description provided for @own.
   ///
@@ -3079,12 +3019,6 @@ abstract class L10n {
   /// **'JETZT'**
   String get now;
 
-  /// No description provided for @warmup.
-  ///
-  /// In de, this message translates to:
-  /// **'Aufwärmen: {sets}'**
-  String warmup(Object sets);
-
   /// No description provided for @startStopwatch.
   ///
   /// In de, this message translates to:
@@ -3096,6 +3030,12 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Distanz eintragen'**
   String get enterDistance;
+
+  /// No description provided for @rangeGoalDone.
+  ///
+  /// In de, this message translates to:
+  /// **'{goal} geschafft'**
+  String rangeGoalDone(String goal);
 
   /// No description provided for @rangeDone.
   ///
@@ -4035,6 +3975,78 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Gesamt: {minutes} in {trainings}'**
   String cardioTotal(Object minutes, Object trainings);
+
+  /// No description provided for @loadStep.
+  ///
+  /// In de, this message translates to:
+  /// **'Kleinster Gewichtsschritt'**
+  String get loadStep;
+
+  /// No description provided for @loadStepHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Um wie viel kannst du das Gesamtgewicht dieser Übung mindestens verändern? Bei 1,25 kg pro Seite sind das 2,5 kg.'**
+  String get loadStepHint;
+
+  /// No description provided for @loadStepSuggested.
+  ///
+  /// In de, this message translates to:
+  /// **'Vorschlag: {step}'**
+  String loadStepSuggested(String step);
+
+  /// No description provided for @fixedStepUnavailable.
+  ///
+  /// In de, this message translates to:
+  /// **'Ausgegraute Schritte sind bei {step} pro Gewichtsstufe nicht verfügbar.'**
+  String fixedStepUnavailable(String step);
+
+  /// No description provided for @fixedStepChoose.
+  ///
+  /// In de, this message translates to:
+  /// **'Wähle {step} oder ein ganzzahliges Vielfaches.'**
+  String fixedStepChoose(String step);
+
+  /// No description provided for @progBridgeTarget.
+  ///
+  /// In de, this message translates to:
+  /// **'Wiederholungsbrücke: Ziel {reps}, ursprünglich {base} Wdh.'**
+  String progBridgeTarget(int reps, int base);
+
+  /// No description provided for @progReserveNeeded.
+  ///
+  /// In de, this message translates to:
+  /// **'Gewicht gehalten · Wiederholungsreserve fehlt'**
+  String get progReserveNeeded;
+
+  /// No description provided for @progStepTooLarge.
+  ///
+  /// In de, this message translates to:
+  /// **'Gewicht gehalten · nächste Stufe zu groß'**
+  String get progStepTooLarge;
+
+  /// No description provided for @autoRuleDone.
+  ///
+  /// In de, this message translates to:
+  /// **'Sind alle Sätze geschafft, prüft Auto mit deiner Reserve im letzten Satz, ob die nächste Gewichtsstufe zum Grundziel passt. Ohne Angabe bleibt das Gewicht gleich.'**
+  String get autoRuleDone;
+
+  /// No description provided for @autoRuleBridge.
+  ///
+  /// In de, this message translates to:
+  /// **'Ist die nächste Stufe zu schwer und du hast mindestens zwei Wiederholungen Reserve, kommt eine Wiederholung pro Satz dazu. Auto geht bis höchstens drei über dem Grundziel. Beim Wechsel zur nächsten Stufe gilt wieder das Grundziel.'**
+  String get autoRuleBridge;
+
+  /// No description provided for @autoRuleTimed.
+  ///
+  /// In de, this message translates to:
+  /// **'Bei erfülltem Zeitziel steigt das Gewicht um eine Stufe, wenn der Schritt höchstens 2,5 % beträgt.'**
+  String get autoRuleTimed;
+
+  /// No description provided for @autoRuleMiss.
+  ///
+  /// In de, this message translates to:
+  /// **'Nach {n} verfehlten Trainings in Folge sinkt das Gewicht um ungefähr 10 %, soweit der Gewichtsschritt das erlaubt.'**
+  String autoRuleMiss(Object n);
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

@@ -26,7 +26,7 @@ const derivedFormat = 'derived = statistics FerroLog computed from workouts and 
     'piece of training advice at a time; positive = a success of the last training). type weekGoal, skipped (left out '
     'entirely at least twice in 4 weeks), balance, plateau, record, gain, milestone or month; title and evidence as shown (in the unit the user picked, the only place not in kg), '
     'why and advice as in the sheet that actions open, fix = the one-tap change offered (moveUp, dropSet; it never adds '
-    'work), source = where the statistics show it (view balance with pair, exercise with the dates marked, weeks, history). minutesTypical / secondsSetToSet: median time an exercise took (setup and warm-ups '
+    'work), source = where the statistics show it (view balance with pair, exercise with the dates marked, weeks, history). minutesTypical / secondsSetToSet: median time an exercise took (setup '
     'included, from the set logged before it to its last set) and from one of its sets to the next (rest plus the set), '
     'from per-set timestamps (sessions[].exercises[].doneAt), latest 10 trainings. workoutMinutesEstimated: the app estimate '
     'per workout. weeks: trainings per calendar week (Monday) against goalPerWeek. rirLast / rirLastDate: the latest '
