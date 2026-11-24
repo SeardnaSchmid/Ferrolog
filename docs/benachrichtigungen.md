@@ -28,3 +28,9 @@ Stand der Umsetzung (WP8d der Improvement-Spec, plus Erinnerungen). Wird bei jed
 - Zehn Sekunden vorher drei kurze Töne, am Ende ein längeres Signal. Ton, Vibration und Vorwarnung lassen sich getrennt einstellen. Beim Anhalten werden die geplanten Signale entfernt und beim Fortsetzen neu geplant.
 - Android: Der Trainingsdienst spielt die Signale auch außerhalb der Trainingsseite; dafür fordert er kurz `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` an und gibt den Fokus danach zurück. Wie stark abgesenkt wird und ob eine andere App stattdessen pausiert, bestimmt das System bzw. die andere App. Bei gesperrtem Gerät können Energiesparregeln den Dienst verzögern.
 - iOS: Bei geöffneter App aktiviert eine kurze Audio-Session `duckOthers` und gibt sie nach dem Ton wieder frei. Im Hintergrund sind lokale Mitteilungen mit eigenen Tönen geplant; deren Wiedergabe und Vibration steuert iOS, eine aktive Audio-Session und Ducking lassen sich dafür nicht zusichern. Benachrichtigungserlaubnis ist erforderlich. Ein iOS-Build und Gerätetest stehen noch aus.
+
+## Countdown statt Vorwarnung (2026-11-24)
+
+- Die Vorwarnung bei 10 s ist durch den Countdown ersetzt (30 und 15 s Doppelton, 3, 2, 1, langer Ton bei 0), Details in [pause.md](pause.md) Q5.
+- Android: Der Trainingsdienst plant alle Marken (30, 15, 3, 2, 1, 0) und spielt sie, auch bei offener App; Dart schickt seine Pausentöne mit `restLeft`, MainActivity verwirft sie, wenn der Dienst dieselbe Pause führt. Haltesatz-Töne kommen immer aus Dart.
+- iOS: In der App alle drei Töne (`rest_warning.wav` jetzt der Doppelton, neu `rest_last.wav`). Im Hintergrund nur zwei Mitteilungen, 30 s vorher („Noch 30 Sekunden Pause“) und am Ende; eine pro Sekunde wäre zu viel. Noch nicht auf einem Gerät geprüft.

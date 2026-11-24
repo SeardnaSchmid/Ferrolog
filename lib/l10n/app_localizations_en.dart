@@ -45,13 +45,15 @@ class L10nEn extends L10n {
   String get settingsSound => 'Sound';
 
   @override
-  String get settingsSoundHint => 'Beep when the rest reaches 0';
+  String get settingsSoundHint =>
+      'Countdown and a long beep when the rest reaches 0';
 
   @override
   String get settingsVibrate => 'Vibration';
 
   @override
-  String get settingsVibrateHint => 'Vibrate briefly when the rest reaches 0';
+  String get settingsVibrateHint =>
+      'Vibrate with every beep, also without sound';
 
   @override
   String get settingsAutoFinish => 'Finish automatically';
@@ -2459,6 +2461,9 @@ class L10nEn extends L10n {
   String get notifyRestOver => 'Rest over';
 
   @override
+  String get notifyRestSoon => '30 seconds of rest left';
+
+  @override
   String get notifyChannelTraining => 'Running workout';
 
   @override
@@ -2572,11 +2577,11 @@ class L10nEn extends L10n {
   }
 
   @override
-  String get settingsRestWarning => 'Advance warning';
+  String get settingsRestWarning => 'Countdown';
 
   @override
   String get settingsRestWarningHint =>
-      'Three short beeps 10 seconds before the rest ends';
+      'Double beep at 30 and 15 s, then 3, 2, 1; at 10 s in a timed set\'s lead-in';
 
   @override
   String get progSetLighter => 'Set weight reduced';

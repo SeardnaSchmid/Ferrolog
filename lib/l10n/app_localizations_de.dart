@@ -45,14 +45,14 @@ class L10nDe extends L10n {
   String get settingsSound => 'Ton';
 
   @override
-  String get settingsSoundHint => 'Signalton, wenn die Pause bei 0 ankommt';
+  String get settingsSoundHint =>
+      'Countdown und langer Ton, wenn die Pause bei 0 ankommt';
 
   @override
   String get settingsVibrate => 'Vibration';
 
   @override
-  String get settingsVibrateHint =>
-      'Kurz vibrieren, wenn die Pause bei 0 ankommt';
+  String get settingsVibrateHint => 'Bei jedem Ton mitvibrieren, auch ohne Ton';
 
   @override
   String get settingsAutoFinish => 'Automatisch beenden';
@@ -2462,6 +2462,9 @@ class L10nDe extends L10n {
   String get notifyRestOver => 'Pause vorbei';
 
   @override
+  String get notifyRestSoon => 'Noch 30 Sekunden Pause';
+
+  @override
   String get notifyChannelTraining => 'Laufendes Training';
 
   @override
@@ -2576,11 +2579,11 @@ class L10nDe extends L10n {
   }
 
   @override
-  String get settingsRestWarning => 'Vorwarnung';
+  String get settingsRestWarning => 'Countdown';
 
   @override
   String get settingsRestWarningHint =>
-      'Drei kurze Töne 10 Sekunden vor Pausenende';
+      'Doppelton bei 30 und 15 s, dann 3, 2, 1; im Vorlauf von Haltesätzen bei 10 s';
 
   @override
   String get progSetLighter => 'Satzgewicht reduziert';

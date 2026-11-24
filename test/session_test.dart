@@ -29,6 +29,22 @@ void main() {
     expect((rangeTop(6), rangeTop(12), rangeTop(30, seconds: true), rangeTop(10, seconds: true)), (9, 15, 45, 15));
   });
 
+  test('rest countdown beeps: 30, 15 double, 3, 2, 1 higher, 0 long; each mark once', () {
+    final beeps = {for (var left = 40; left > -3; left--) left: restBeep(left + 1, left)?.name}..removeWhere((_, b) => b == null);
+    expect(beeps, {
+      30: 'twice', 15: 'twice', 3: 'last', 2: 'last', 1: 'last', 0: 'end',
+    });
+    expect(restBeep(17, 12), Beep.twice, reason: 'a late tick still gives the 15 passed');
+    expect(restBeep(5, -4), Beep.end, reason: 'past 0 at once: the long one, not the 3');
+    expect((restBeep(12, 12), restBeep(14, 4), restBeep(0, -1)), (null, null, null));
+  });
+
+  test('lead-in beeps: double at 10, higher at 3, 2, 1, long at go; each mark once', () {
+    final beeps = {for (var left = 15; left > -3; left--) left: leadInBeep(left + 1, left)?.name}..removeWhere((_, b) => b == null);
+    expect(beeps, {10: 'twice', 3: 'last', 2: 'last', 1: 'last', 0: 'end'});
+    expect((leadInBeep(11, 8), leadInBeep(5, -1), leadInBeep(9, 4)), (Beep.twice, Beep.end, null));
+  });
+
   testWidgets('weight sheet applies to this set, open sets or all sets', (tester) async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance(); // settings: screen on, rest signal
@@ -175,6 +191,33 @@ void main() {
     await prefs.remove('timed.leadIn');
   });
 
+  testWidgets('timed set: the lead-in counts down with beeps from the tap, long at go and at the end', (tester) async {
+    final calls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), (call) async {
+      if (call.method == 'restOver') calls.add('${call.arguments['beep']}${call.arguments['vibrate'] ? '+vib' : ''}');
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), null));
+    await prefs.setInt('timed.leadIn', 3);
+    final w = Workout(name: 'Carry', exercises: [Exercise(name: 'Farmers Walk', weight: 24, sets: 2, reps: 1, timed: true)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.tap(find.text('–/1 s', findRichText: true).first);
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 1000)));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(calls, ['last+vib', 'last+vib', 'last+vib', 'end+vib', 'end+vib'], reason: '3 at the tap, 2, 1, go, held 1 s');
+    await prefs.remove('timed.leadIn');
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('the page shows over the lock screen while open, unless switched off', (tester) async {
     final calls = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), (call) async {
@@ -199,6 +242,68 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     expect(calls, ['false'], reason: 'switching off is harmless and covers a setting changed mid-training');
     await prefs.remove('session.showWhenLocked');
+  });
+
+  testWidgets('the rest counts down with beeps, each vibrating too; reopening late stays quiet', (tester) async {
+    final calls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), (call) async {
+      if (call.method == 'restOver') calls.add('${call.arguments['beep']}${call.arguments['vibrate'] ? '+vib' : ''}');
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('ferrolog/alert'), null));
+    final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5, restSeconds: 35)]);
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.tap(find.text('–/5', findRichText: true).first);
+    await tester.pump();
+    for (var left = 34; left >= -3; left--) {
+      s.restStartedAt = DateTime.now().subtract(Duration(seconds: 35 - left, milliseconds: 500));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(calls, ['twice+vib', 'twice+vib', 'last+vib', 'last+vib', 'last+vib', 'end+vib']);
+
+    // Vibration off: the beeps stay, without it.
+    await prefs.setBool('rest.vibrate', false);
+    calls.clear();
+    await tester.tap(find.byTooltip('Neu starten'));
+    s.restStartedAt = DateTime.now().subtract(const Duration(seconds: 33, milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+    expect(calls, ['last']);
+    await prefs.remove('rest.vibrate');
+
+    // Countdown off: only the long one at 0.
+    await prefs.setBool('rest.warning', false);
+    calls.clear();
+    await tester.tap(find.byTooltip('Neu starten'));
+    for (var left = 34; left >= -1; left--) {
+      s.restStartedAt = DateTime.now().subtract(Duration(seconds: 35 - left, milliseconds: 500));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(calls, ['end+vib']);
+    await prefs.remove('rest.warning');
+
+    // Paused: no beeps.
+    calls.clear();
+    await tester.tap(find.byTooltip('Neu starten'));
+    await tester.tap(find.byTooltip('Anhalten'));
+    await tester.pump();
+    s.restStartedAt = DateTime.now().subtract(const Duration(seconds: 40));
+    await tester.pump(const Duration(seconds: 1));
+    expect(calls, isEmpty);
+
+    // Reopened after the rest ran out: nothing for what passed meanwhile.
+    s.restPausedAt = null;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(calls, isEmpty);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('the rest survives leaving the page and the app being killed, paused too', (tester) async {

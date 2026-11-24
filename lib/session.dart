@@ -67,6 +67,9 @@ class _SessionPageState extends State<SessionPage> {
   ({ExerciseLog log, int set, DateTime start})? hold;
   bool holdGo = false, holdLow = false;
 
+  /// Seconds held at the last tick, to count the lead-in down like the rest.
+  int? beepHeld;
+
   static int get leadIn => prefs.getInt('timed.leadIn') ?? 10;
 
   /// Seconds held so far; negative during the lead-in.
@@ -79,7 +82,8 @@ class _SessionPageState extends State<SessionPage> {
 
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
-  bool alerted = false, warned = false;
+  /// Seconds of rest left at the last tick, to beep at each countdown mark once.
+  int? beepLeft;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
     // Ended elsewhere (finished automatically after a long break, see Store.autoFinish): close.
     if (store.active != s) {
@@ -87,13 +91,18 @@ class _SessionPageState extends State<SessionPage> {
       if (mounted) Navigator.pop(context);
       return;
     }
-    // Timed set: signal at go and at the bottom of a range; at the top it's done, with a signal too.
+    // Timed set: the lead-in counts down (double at 10, 3, 2, 1, long at go), a signal at the bottom
+    // of a range; at the top it's done, with a signal too.
     if (hold case final h?) {
       final held = heldOf(h);
       final (low, top) = holdRange(h.log, h.set);
+      final before = beepHeld ?? held;
+      beepHeld = held;
       if (!holdGo && held >= 0) {
         holdGo = true;
         restAlert();
+      } else if (held < 0) {
+        if (leadInBeep(-before, -held) case final beep?) restAlert(beep);
       }
       if (top > low && !holdLow && held >= low) {
         holdLow = true;
@@ -105,18 +114,11 @@ class _SessionPageState extends State<SessionPage> {
         restAlert();
       }
     }
-    if (lastSetAt != null &&
-        pausedAt == null &&
-        !warned &&
-        restLeft > 0 &&
-        restLeft <= 10) {
-      warned = true;
-      if (prefs.getBool('rest.warning') ?? true) restAlert(warning: true);
-    }
-    // Rest over: sound and/or vibration once, as configured in the settings.
-    if (lastSetAt != null && pausedAt == null && !alerted && restLeft <= 0) {
-      alerted = true;
-      restAlert();
+    // Rest countdown: double beep at 30 and 15 s, higher at 3, 2, 1, long at 0, each vibrating, as configured.
+    if (lastSetAt != null && pausedAt == null) {
+      final left = restLeft;
+      if (restBeep(beepLeft ?? left, left) case final beep?) restAlert(beep, left);
+      beepLeft = left;
     }
     setState(() {}); // rest timer and elapsed minutes
   });
@@ -128,8 +130,7 @@ class _SessionPageState extends State<SessionPage> {
     setState(() {
       lastSetAt = DateTime.now();
       if (pausedAt != null) pausedAt = lastSetAt;
-      alerted = false;
-      warned = false;
+      beepLeft = restTarget;
     });
     store.saveActive(s);
   }
@@ -151,15 +152,15 @@ class _SessionPageState extends State<SessionPage> {
   void initState() {
     super.initState();
     ticker; // start
-    // Reopened after the rest ran out: it already signalled (or the app was away), not again.
-    alerted = lastSetAt != null && restLeft <= 0;
-    warned = lastSetAt != null && restLeft <= 10;
+    // Reopened: count on from here, no beep for marks passed while the app was away.
+    beepLeft = lastSetAt == null ? null : restLeft;
     // A timed set running when the app was closed carries on.
     for (final log in s.exercises) {
       if (log.timed && log.startedAt != null) {
         final i = log.reps.indexWhere((r) => r == null);
         hold = (log: log, set: i < 0 ? 0 : i, start: log.startedAt!);
         holdGo = heldOf(hold!) >= 0;
+        beepHeld = heldOf(hold!);
         holdLow = heldOf(hold!) >= holdRange(log, hold!.set).$1;
       }
     }
@@ -429,9 +430,8 @@ class _SessionPageState extends State<SessionPage> {
     if (held < 1) return;
     lastSetAt = DateTime.now();
     pausedAt = null;
-    alerted = false;
-    warned = false;
     restTarget = restAfter(h.log, missed: held < target);
+    beepLeft = restTarget;
   }
 
   void tapSet(ExerciseLog log, int i) {
@@ -451,6 +451,11 @@ class _SessionPageState extends State<SessionPage> {
           log.startedAt = start;
           holdGo = leadIn == 0;
           holdLow = false;
+          beepHeld = -leadIn;
+          // The tap itself is a mark too when it lands on one (a 10 s lead-in starts with the double beep).
+          if (leadIn > 0) {
+            if (leadInBeep(leadIn + 1, leadIn) case final beep?) restAlert(beep);
+          }
           lastSetAt = pausedAt =
               null; // the rest is over once the next hold starts
         }
@@ -493,9 +498,8 @@ class _SessionPageState extends State<SessionPage> {
       if (log.reps[i] case final done?) {
         lastSetAt = DateTime.now();
         pausedAt = null;
-        alerted = false;
-        warned = false;
         restTarget = restAfter(log, missed: done < target);
+        beepLeft = restTarget;
         if (r == null && askRir(log)) {
           rirAsk = log;
         }
@@ -1692,8 +1696,39 @@ Future<void> showWhenLocked(bool on) async {
   }
 }
 
-/// Plays the notification sound and/or vibrates (Android, see MainActivity.kt).
-Future<void> restAlert({bool warning = false}) async {
+/// The countdown signals: a short double beep (rest: 30 and 15 s, lead-in: 10 s), a higher one
+/// (3, 2, 1) and a long one (0, go). Each vibrates too, as configured, in the same rhythm.
+enum Beep { twice, last, end }
+
+/// The beep for the rest going from [before] to [now] seconds left between two ticks: the lowest
+/// mark passed (a tick can come late, or the app was away), null when none.
+Beep? restBeep(int before, int now) {
+  if (now >= before || before <= 0) return null;
+  if (now <= 0) return Beep.end;
+  for (var m = now; m < before; m++) {
+    if (m <= 3) return Beep.last;
+    if (m == 15 || m == 30) return Beep.twice;
+  }
+  return null;
+}
+
+/// The beep for a timed set's lead-in going from [before] to [now] seconds to go: double at 10,
+/// higher at 3, 2, 1, long at go; null when no mark was passed.
+Beep? leadInBeep(int before, int now) {
+  if (now >= before || before <= 0) return null;
+  if (now <= 0) return Beep.end;
+  for (var m = now; m < before; m++) {
+    if (m <= 3) return Beep.last;
+    if (m == 10) return Beep.twice;
+  }
+  return null;
+}
+
+/// Plays [beep] and vibrates with it, each as configured (Android, see MainActivity.kt). The
+/// countdown marks before the end follow the switch "Countdown" (`rest.warning`). [restLeft] marks
+/// a rest beep: Android's training service plays those itself and the app's one is dropped there.
+Future<void> restAlert([Beep beep = Beep.end, int? restLeft]) async {
+  if (beep != Beep.end && !(prefs.getBool('rest.warning') ?? true)) return;
   final sound = prefs.getBool('rest.sound') ?? true,
       vibrate = prefs.getBool('rest.vibrate') ?? true;
   if (!sound && !vibrate) return;
@@ -1701,7 +1736,8 @@ Future<void> restAlert({bool warning = false}) async {
     await _alert.invokeMethod('restOver', {
       'sound': sound,
       'vibrate': vibrate,
-      'warning': warning,
+      'beep': beep.name,
+      'restLeft': ?restLeft,
     });
   } on MissingPluginException {
     if (vibrate) HapticFeedback.heavyImpact(); // other platforms: best effort

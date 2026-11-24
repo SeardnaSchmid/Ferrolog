@@ -140,7 +140,7 @@ Map<String, Object?> trainingNotice(Session s, DateTime now) {
         : null,
     'overText': tr.notifyRestOver,
     'alertTitle': tr.notifyRestOver,
-    'warningTitle': tr.settingsRestWarning,
+    'warningTitle': tr.notifyRestSoon,
     'alertText': next == null ? tr.notifyFinishHint : '$title · $text',
     'sound': prefs.getBool('rest.sound') ?? true,
     'vibrate': prefs.getBool('rest.vibrate') ?? true,

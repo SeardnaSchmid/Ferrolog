@@ -17,6 +17,7 @@ Die Pause lebte nur in der Trainingsseite. Zurück zum Startbildschirm und wiede
 | Q2 | Signal nach dem Wiederöffnen? | Nein, wenn die Pause schon abgelaufen ist (`alerted` startet dann wahr). |
 | Q3 | Startbildschirm | Die Karte „Training läuft“ zeigt „· Pause 2:49“ bzw. „· Pause angehalten“, nichts nach Ablauf. |
 | Q4 | Signal außerhalb der App (Teil B: exakter Alarm, `RestAlarmReceiver`) | Nicht gebaut: WP8d (Vordergrunddienst mit Benachrichtigung) ersetzt ihn laut Spec. |
+| Q5 | Countdown (2026-11-24) | Ersetzt die Vorwarnung (drei Töne bei 10 s). Pause: kurzer Doppelton bei 30 s und 15 s, höherer bei 3, 2, 1, langer bei 0 (`restBeep`). Haltesätze, Vorlauf: Doppelton bei 10 s (auch direkt beim Antippen), höher bei 3, 2, 1, lang bei „los“ (`leadInBeep`); Bereichsgrenze und Ende lang. Sinustöne in RestSound.kt (mit Ducking) statt ToneGenerator. Jeder Ton vibriert mit, im selben Rhythmus. Der Schalter „Countdown“ (vorher „Vorwarnung“, `rest.warning`) schaltet alle Marken vor dem Ende ab, der lange Ton bleibt. Jede Marke einmal; angehalten still; nach dem Wiederöffnen nichts für verpasste Marken. |
 
 ## Phasen
 

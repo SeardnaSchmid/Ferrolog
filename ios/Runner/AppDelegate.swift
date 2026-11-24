@@ -19,8 +19,11 @@ import UserNotifications
         guard call.method == "restOver", let args = call.arguments as? [String: Any] else {
           result(FlutterMethodNotImplemented); return
         }
-        if args["vibrate"] as? Bool == true { UIImpactFeedbackGenerator(style: .heavy).impactOccurred() }
-        if args["sound"] as? Bool == true { self?.play(warning: args["warning"] as? Bool == true) }
+        let beep = args["beep"] as? String ?? "end"
+        if args["vibrate"] as? Bool == true {
+          UIImpactFeedbackGenerator(style: beep == "end" ? .heavy : .light).impactOccurred()
+        }
+        if args["sound"] as? Bool == true { self?.play(beep) }
         result(nil)
       }
     FlutterMethodChannel(name: "ferrolog/notify", binaryMessenger: controller.binaryMessenger)
@@ -43,8 +46,10 @@ import UserNotifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  private func play(warning: Bool) {
-    guard let url = Bundle.main.url(forResource: warning ? "rest_warning" : "rest_end", withExtension: "wav") else { return }
+  /// The countdown's beeps: "twice" (rest 30 and 15 s, lead-in 10 s), "last" (3, 2, 1), "end" (0, go).
+  private func play(_ beep: String) {
+    let file = ["twice": "rest_warning", "last": "rest_last"][beep] ?? "rest_end"
+    guard let url = Bundle.main.url(forResource: file, withExtension: "wav") else { return }
     do {
       let session = AVAudioSession.sharedInstance()
       try session.setCategory(.playback, options: [.duckOthers])
@@ -67,7 +72,8 @@ import UserNotifications
     let seconds = end.doubleValue / 1000 - Date().timeIntervalSince1970
     let sound = args["sound"] as? Bool ?? true
     if !sound && !(args["vibrate"] as? Bool ?? true) { return }
-    for (id, delay, file) in [("rest.warning", seconds - 10, "rest_warning.wav"), ("rest.end", seconds, "rest_end.wav")] {
+    // In the background only 30 s before and the end; a notification per second would be too much.
+    for (id, delay, file) in [("rest.warning", seconds - 30, "rest_warning.wav"), ("rest.end", seconds, "rest_end.wav")] {
       if delay <= 0 || (id == "rest.warning" && !(args["warning"] as? Bool ?? true)) { continue }
       let content = UNMutableNotificationContent()
       content.title = args[id == "rest.warning" ? "warningTitle" : "alertTitle"] as? String ?? ""

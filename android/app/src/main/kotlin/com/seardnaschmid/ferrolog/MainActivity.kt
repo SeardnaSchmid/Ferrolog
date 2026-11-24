@@ -19,10 +19,15 @@ class MainActivity : FlutterActivity() {
         /// In the foreground: the Dart timer signals the end of the rest, no notification needed.
         @Volatile var visible = false
 
-        fun vibrate(c: Context) {
+        /// Vibrates in the rhythm of the beep [kind] (see RestSound).
+        fun vibrate(c: Context, kind: String = "end") {
             @Suppress("DEPRECATION")
             val vibrator = c.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            val pattern = longArrayOf(0, 250, 150, 250)
+            val pattern = when (kind) {
+                "twice" -> longArrayOf(0, 60, 100, 60)
+                "last" -> longArrayOf(0, 120)
+                else -> longArrayOf(0, 250, 150, 250)
+            }
             if (Build.VERSION.SDK_INT >= 26) {
                 vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
             } else {
@@ -117,16 +122,17 @@ class MainActivity : FlutterActivity() {
                 result.success(null)
                 return@setMethodCallHandler
             }
-            val warning = call.argument<Boolean>("warning") == true
-            // The service owns rest alerts while active; timed-set alerts still use this channel.
-            val eventAt = TrainingService.restEnd - if (warning) 10000 else 0
-            if (TrainingService.running && eventAt > 0 &&
-                Math.abs(System.currentTimeMillis() - eventAt) < 3000
+            val kind = call.argument<String>("beep") ?: "end"
+            // The service plays the rest's countdown itself while it runs the same rest; timed-set
+            // beeps (no "restLeft") always come from here.
+            val left = call.argument<Int>("restLeft")
+            if (left != null && TrainingService.running && TrainingService.restEnd > 0 &&
+                Math.abs(TrainingService.restEnd - System.currentTimeMillis() - left * 1000L) < 3000
             ) {
                 result.success(null)
                 return@setMethodCallHandler
             }
-            RestSound.play(this, warning, call.argument<Boolean>("sound") == true,
+            RestSound.play(this, kind, call.argument<Boolean>("sound") == true,
                 call.argument<Boolean>("vibrate") == true)
             result.success(null)
         }

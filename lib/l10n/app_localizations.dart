@@ -148,7 +148,7 @@ abstract class L10n {
   /// No description provided for @settingsSoundHint.
   ///
   /// In de, this message translates to:
-  /// **'Signalton, wenn die Pause bei 0 ankommt'**
+  /// **'Countdown und langer Ton, wenn die Pause bei 0 ankommt'**
   String get settingsSoundHint;
 
   /// No description provided for @settingsVibrate.
@@ -160,7 +160,7 @@ abstract class L10n {
   /// No description provided for @settingsVibrateHint.
   ///
   /// In de, this message translates to:
-  /// **'Kurz vibrieren, wenn die Pause bei 0 ankommt'**
+  /// **'Bei jedem Ton mitvibrieren, auch ohne Ton'**
   String get settingsVibrateHint;
 
   /// No description provided for @settingsAutoFinish.
@@ -4006,6 +4006,12 @@ abstract class L10n {
   /// **'Pause vorbei'**
   String get notifyRestOver;
 
+  /// No description provided for @notifyRestSoon.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch 30 Sekunden Pause'**
+  String get notifyRestSoon;
+
   /// No description provided for @notifyChannelTraining.
   ///
   /// In de, this message translates to:
@@ -4183,13 +4189,13 @@ abstract class L10n {
   /// No description provided for @settingsRestWarning.
   ///
   /// In de, this message translates to:
-  /// **'Vorwarnung'**
+  /// **'Countdown'**
   String get settingsRestWarning;
 
   /// No description provided for @settingsRestWarningHint.
   ///
   /// In de, this message translates to:
-  /// **'Drei kurze Töne 10 Sekunden vor Pausenende'**
+  /// **'Doppelton bei 30 und 15 s, dann 3, 2, 1; im Vorlauf von Haltesätzen bei 10 s'**
   String get settingsRestWarningHint;
 
   /// No description provided for @progSetLighter.

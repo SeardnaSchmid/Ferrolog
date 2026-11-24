@@ -13,8 +13,9 @@ import android.os.Looper
 import android.os.SystemClock
 
 /// Runs from the first logged set until the training ends. Shows the next set and the rest as a
-/// system countdown (no updates per second), and at the end of the rest posts a separate alert with
-/// sound and vibration while the app is away; in the foreground the Dart timer signals as before.
+/// system countdown (no updates per second). It plays the rest's countdown beeps (30, 15, 3, 2, 1, 0
+/// s; in the app too, which then drops its own) and at the end of the rest posts a separate alert
+/// while the app is away.
 /// Keeping the process alive this way is what makes the alert on time with the screen off.
 class TrainingService : Service() {
     companion object {
@@ -37,8 +38,12 @@ class TrainingService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var args = Bundle()
     private val restOver = Runnable { restOver() }
-    private val restWarning = Runnable { signal(true) }
-    private var warnedEnd = 0L
+    /// The countdown before the end: seconds left and the beep (see RestSound).
+    private val marks = listOf(30 to "twice", 15 to "twice", 3 to "last", 2 to "last", 1 to "last")
+    private val countdown = marks.map { (s, kind) -> Runnable { signal(kind, s) } }
+    /// The rest and the lowest mark already played, so an update with the same rest doesn't repeat it.
+    private var beepedEnd = 0L
+    private var beepedMark = Int.MAX_VALUE
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,13 +61,17 @@ class TrainingService : Service() {
             startForeground(Notify.TRAINING_ID, n)
         }
         handler.removeCallbacks(restOver)
-        handler.removeCallbacks(restWarning)
+        countdown.forEach(handler::removeCallbacks)
         val end = args.getLong("restEnd", 0)
         restEnd = end
         if (end > 0) {
             val left = end - System.currentTimeMillis()
-            if (left > 10000 && args.getBoolean("warning", true) && warnedEnd != end) {
-                handler.postAtTime(restWarning, SystemClock.uptimeMillis() + left - 10000)
+            if (args.getBoolean("warning", true)) {
+                marks.forEachIndexed { i, (s, _) ->
+                    if (left > s * 1000L && (beepedEnd != end || s < beepedMark)) {
+                        handler.postAtTime(countdown[i], SystemClock.uptimeMillis() + left - s * 1000L)
+                    }
+                }
             }
             if (left > 0) handler.postAtTime(restOver, SystemClock.uptimeMillis() + left) else restOver()
         }
@@ -72,7 +81,7 @@ class TrainingService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(restOver)
-        handler.removeCallbacks(restWarning)
+        countdown.forEach(handler::removeCallbacks)
         running = false
         restEnd = 0
         super.onDestroy()
@@ -109,16 +118,17 @@ class TrainingService : Service() {
         return b.build()
     }
 
-    private fun signal(warning: Boolean) {
+    private fun signal(kind: String, mark: Int) {
         if (!running) return
-        if (warning) warnedEnd = restEnd
-        RestSound.play(this, warning, args.getBoolean("sound", true), args.getBoolean("vibrate", true))
+        beepedEnd = restEnd
+        beepedMark = mark
+        RestSound.play(this, kind, args.getBoolean("sound", true), args.getBoolean("vibrate", true))
     }
 
     private fun restOver() {
         if (!running) return
         Notify.manager(this).notify(Notify.TRAINING_ID, notification(rest = false))
-        signal(false)
+        signal("end", 0)
         if (MainActivity.visible) return
         val sound = args.getBoolean("sound", true)
         val vibrate = args.getBoolean("vibrate", true)
