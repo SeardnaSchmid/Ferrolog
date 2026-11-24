@@ -326,6 +326,15 @@ void main() {
     expect(tester.widget<Card>(find.ancestor(of: find.text('Balance'), matching: find.byType(Card)).first).shape, isNull,
         reason: 'only for a moment');
 
+    final chart = find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Balanceverlauf');
+    expect(chart, findsOneWidget, reason: 'the focused pair opens with its chart');
+    await tester.ensureVisible(chart);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Oberer Rücken / Brust 75 %'), findsOneWidget);
+    await tester.tapAt(tester.getTopLeft(chart) + const Offset(7, 45));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Oberer Rücken / Brust 100 %'), findsOneWidget);
+
     // The weekly goal opens the course of trainings per week below the tiles.
     statsFocus.value = statsAt(StatsView.weeks);
     await tester.pumpWidget(const SizedBox());
@@ -353,4 +362,52 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Ausgelassen am ${skipped[1].day}.${skipped[1].month}., ${skipped[0].day}.'), findsOneWidget);
   });
+  testWidgets('muscle volume explains the reference and stores optional personal goals', (tester) async {
+    store.sessions
+      ..clear()
+      ..add(Session(
+        workoutId: 'push',
+        workoutName: 'Push',
+        date: DateTime.now().subtract(const Duration(days: 3)),
+        exercises: [ExerciseLog(name: 'Bankdrücken', weight: 80, targetReps: 5, reps: [5, 5, 5])],
+      ));
+    const goalKey = 'stats.muscleGoal.chest';
+    addTearDown(() => prefs.remove(goalKey));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: StatsPage())));
+
+    final title = find.text('Sätze je Muskel');
+    await tester.scrollUntilVisible(title, 250);
+    await tester.pumpAndSettle();
+    final card = find.ancestor(of: title, matching: find.byType(Card));
+    final info = find.descendant(of: card, matching: find.byType(IconButton));
+    await tester.tap(info);
+    await tester.pumpAndSettle();
+    expect(find.text('Warum 10–20 Sätze?'), findsOneWidget);
+    expect(find.textContaining('neun Sätzen pro Woche'), findsOneWidget);
+    await tester.tap(find.text('Schließen'));
+    await tester.pumpAndSettle();
+
+    final chest = find.descendant(of: card, matching: find.text('Brust'));
+    await tester.scrollUntilVisible(chest, 150);
+    await tester.pumpAndSettle();
+    await tester.tap(chest);
+    await tester.pumpAndSettle();
+    expect(find.text('✓ Wochenziel erreicht'), findsNothing);
+    await tester.tap(find.text('Persönliches Wochenziel'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '1');
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    expect(prefs.getInt(goalKey), 1);
+    expect(find.text('✓ Wochenziel erreicht'), findsOneWidget);
+
+    await tester.tap(find.text('Wochenziel · 1 Satz'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '');
+    await tester.tap(find.text('Speichern'));
+    await tester.pumpAndSettle();
+    expect(prefs.getInt(goalKey), isNull);
+    expect(find.text('✓ Wochenziel erreicht'), findsNothing);
+  });
+
 }

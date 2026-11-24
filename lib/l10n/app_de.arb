@@ -1541,7 +1541,12 @@
     }
   },
   "allPairsBalanced": "Alle Muskelpaare ausgewogen",
-  "balanceScaleHint": "Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.",
+  "balanceScaleHint": "Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.",
+  "balanceHistory": "Balanceverlauf",
+  "balanceHistoryGuide": "Zielbereich · {range}",
+  "balanceHistoryHint": "Jeder Wochenpunkt umfasst die letzten {days} Tage. Tippe auf einen Punkt für das Verhältnis.",
+  "balanceHistoryNoSets": "Keine Sätze in diesem Zeitraum",
+  "balanceImbalance": "Ungleichgewicht · {group} kommt zu kurz",
   "strengthTrend": "Kraft im Verlauf",
   "trendUp": "↗ steigt",
   "trendDown": "↘ sinkt",
@@ -1577,28 +1582,6 @@
     }
   },
   "balanced": "✓ Ausgewogen",
-  "verdictSlightly": "{strong} etwas mehr trainiert als {weak}",
-  "@verdictSlightly": {
-    "placeholders": {
-      "strong": {
-        "type": "Object"
-      },
-      "weak": {
-        "type": "Object"
-      }
-    }
-  },
-  "verdictClearly": "{strong} deutlich mehr trainiert als {weak}",
-  "@verdictClearly": {
-    "placeholders": {
-      "strong": {
-        "type": "Object"
-      },
-      "weak": {
-        "type": "Object"
-      }
-    }
-  },
   "balanceInfoTitle": "Balance: was dahintersteckt",
   "infoProven": "Was belegt ist",
   "infoProven1": "Mehr Sätze pro Muskel und Woche bringen mehr Muskelwachstum, abgestuft nach unter 5, 5–9 und 10+ Sätzen [1].",
@@ -1613,13 +1596,14 @@
   "infoGuides3": "Freizeitsportler drücken in Tests 1,5- bis 2,7-mal so viel, wie sie ziehen [6].",
   "infoGuides4": "Bei der Schulter liegt die Außenrotation in Kraftmessungen bei 86–99 % der Innenrotation [7]. Für Sätze gibt es keinen Studienwert, der Richtwert ist bewusst niedrig angesetzt.",
   "infoGuides5": "Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.",
+  "infoGuideRanges": "FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.",
   "infoMath": "Wie FerroLog rechnet",
   "infoMath1": "Jede Übung zählt voll für ihre Hauptgruppe und halb für Hilfsmuskeln.",
   "infoMath2": "Sätze pro Woche, gemittelt über die letzten 28 Tage, je Paar als Verhältnis.",
   "infoMath3": "Kraftverhältnisse (geschätztes 1RM) nur als Verlauf, nicht gegen Literaturwerte.",
   "infoMath4": "Alle Richtwerte kannst du anpassen.",
   "infoScale": "So liest du die Waage",
-  "infoScale1": "Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.",
+  "infoScale1": "Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.",
   "infoScale2": "Der Richtwert stammt aus der Trainingspraxis und ist keine medizinische Grenze. Hilfsmuskeln zählen halb.",
   "adjustGuides": "Richtwerte anpassen",
   "sources": "QUELLEN",
@@ -1997,7 +1981,17 @@
   "tapMuscle": "Tippe auf einen Muskel für seine Übungen",
   "under5": "unter 5",
   "over20": "über 20",
-  "muscleBarsHint": "Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.",
+  "musclesBelowReference": "Unter 10 Sätzen pro Woche · {names}",
+  "muscleBarsHint": "Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.",
+  "muscleVolumeInfoTitle": "Warum 10–20 Sätze?",
+  "muscleVolumeInfoEvidence": "Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.",
+  "muscleVolumeInfoRange": "10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.",
+  "muscleGoal": "Persönliches Wochenziel",
+  "muscleGoalInput": "Sätze pro Woche",
+  "muscleGoalHelp": "Leer lassen, um das Ziel zu entfernen.",
+  "muscleGoalInvalid": "Gib eine ganze Zahl größer als null ein.",
+  "muscleGoalValue": "Wochenziel · {n, plural, =1{1 Satz} other{{n} Sätze}}",
+  "muscleGoalReached": "✓ Wochenziel erreicht",
   "musclesNote": "Kraftprogramme wie 5×5 lassen bewusst Muskeln aus. Hilfsmuskeln zählen halb.",
   "setsPerWeek": "{n} Sätze pro Woche",
   "@setsPerWeek": {

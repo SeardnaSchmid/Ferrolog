@@ -1,4 +1,7 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'findings.dart';
@@ -6,6 +9,7 @@ import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'stats_colors.dart';
 import 'training_card.dart';
 
 /// "7,3" / "7.3": sets with one decimal below 10.
@@ -13,32 +17,41 @@ String _sets(double v) => decimal(v.toStringAsFixed(v < 10 ? 1 : 0));
 
 String _upper(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
-/// Half the width of the balanced field around the middle of the scale, in percent of the scale.
-const _field = 15.0;
+/// Positions along the guide, from the first muscle group (0) to the second (1).
+class _BalanceAxis {
+  final Balance balance;
+  const _BalanceAxis(this.balance);
 
-/// Where the dot sits on the scale, -50 (all side a) to 50 (all side b): inside the field while
-/// balanced, outside up to the ends the further off it is (half the guide off reaches the end).
-/// Above an open guide the dot stays at the field's edge: more of side b is never off.
-double _position(Balance b) {
-  final r = b.ratio, lo = b.low, hi = b.high.isFinite ? b.high : b.low * 1.5;
-  if (r < lo) return -_field - ((lo - r) / lo / .5).clamp(0, 1) * (50 - _field);
-  if (r > hi) {
-    if (!b.high.isFinite) return _field;
-    return _field + (r.isFinite ? ((r - hi) / hi / .5).clamp(0, 1) : 1) * (50 - _field);
+  bool get singleLimit => balance.low == balance.high;
+  double get start => singleLimit ? .5 : .35;
+  double get end => singleLimit ? .5 : .65;
+
+  static double _share(double ratio) => 1 - 1 / (1 + ratio);
+
+  // Stretch each section independently to center the guide while keeping extreme ratios visible.
+  double position(double ratio) {
+    final value = _share(ratio);
+    final low = _share(balance.low), high = _share(balance.high);
+    if (value < low) return start * value / low;
+    if (value > high) return end + (1 - end) * (value - high) / (1 - high);
+    if (low == high) return start;
+    return start + (end - start) * (value - low) / (high - low);
   }
-  return hi <= lo ? 0 : -_field + (r - lo) / (hi - lo) * 2 * _field;
 }
 
 /// The rows of the balance card: every pair as a scale, warnings first; tap one for the verdict, the
-/// advice (the same as on the home card) and the numbers. Below, the strength ratios as a course.
+/// advice (the same as on the home card), the numbers and its history. Below, the strength ratios.
 class BalanceBody extends StatefulWidget {
   final List<Balance> pairs;
   final List<Session> recent;
   final List<(String, double, double)> trends;
+  final List<Session> sessions;
+  final DateTime from, now;
 
   /// The pair a finding points to: tinted and open.
   final Pair? focus;
-  const BalanceBody(this.pairs, this.recent, this.trends, {this.focus, super.key});
+  const BalanceBody(this.pairs, this.recent, this.trends,
+      {required this.sessions, required this.from, required this.now, this.focus, super.key});
 
   @override
   State<BalanceBody> createState() => _BalanceBodyState();
@@ -75,7 +88,7 @@ class _BalanceBodyState extends State<BalanceBody> {
               if (warn.isNotEmpty) ...[
                 TextSpan(
                   text: tr.hintsCount(warn.length),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.tertiary),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.referenceAmber),
                 ),
                 TextSpan(text: tr.pairsBalanced(ok.length, widget.pairs.length)),
               ] else
@@ -157,13 +170,11 @@ class _BalanceBodyState extends State<BalanceBody> {
   Widget _row(Balance b, ColorScheme c, TextStyle small) {
     final lagging = b.lagging;
     final isOpen = open.contains(b.pair);
-    final pos = _position(b);
-    final aStrong = pos < 0;
-    final strongA = lagging != null && aStrong, strongB = lagging != null && !aStrong;
+    final strongA = b.laggingSide == 1, strongB = b.laggingSide == 0;
     TextStyle name(bool strong) => TextStyle(
       fontSize: 13,
       fontWeight: strong ? FontWeight.w600 : FontWeight.w400,
-      color: strong ? c.tertiary : c.onSurface.withValues(alpha: .8),
+      color: strong ? c.referenceAmber : c.onSurface.withValues(alpha: .8),
     );
     final ratio = b.ratio.isFinite ? '${(b.ratio * 100).floor()} %' : '–';
     final note = b.pair.note == null ? '' : ' (${b.pair.note})';
@@ -185,7 +196,7 @@ class _BalanceBodyState extends State<BalanceBody> {
               bottom: 0,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: c.tertiaryContainer.withValues(alpha: .35),
+                  color: c.referenceAmber.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -209,19 +220,28 @@ class _BalanceBodyState extends State<BalanceBody> {
                   ],
                 ),
                 const SizedBox(height: 5),
-                Padding(padding: const EdgeInsets.only(right: 28), child: _Scale(pos, lagging != null)),
+                Padding(padding: const EdgeInsets.only(right: 28), child: _Scale(b)),
                 if (isOpen) ...[
                   const SizedBox(height: 10),
                   if (lagging != null)
                     Text(
-                      _verdict(b, aStrong),
-                      style: TextStyle(fontSize: 14, height: 1.35, fontWeight: FontWeight.w600, color: c.tertiary),
+                      tr.balanceImbalance(lagging),
+                      style: TextStyle(fontSize: 14, height: 1.35, fontWeight: FontWeight.w600, color: c.referenceAmber),
                     )
                   else
                     Text(
                       tr.balanced,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: c.primary),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: c.referenceGreen),
                     ),
+                  const SizedBox(height: 8),
+                  Text(detail, style: small),
+                  const SizedBox(height: 12),
+                  _BalanceHistory(
+                    key: ValueKey(b.pair),
+                    balance: b,
+                    history: balanceHistory(b.pair, widget.sessions, widget.from, widget.now),
+                    small: small,
+                  ),
                   if (balanceAdvice(b, widget.recent, store.workouts) case final a?) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -245,8 +265,6 @@ class _BalanceBodyState extends State<BalanceBody> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  Text(detail, style: small),
                 ],
               ],
             ),
@@ -255,42 +273,252 @@ class _BalanceBodyState extends State<BalanceBody> {
       ),
     );
   }
+}
 
-  /// "Schultern deutlich mehr trainiert als Latissimus": the side with more sets first.
-  String _verdict(Balance b, bool aStrong) {
-    final r = b.ratio;
-    final off = !r.isFinite
-        ? 1.0
-        : r < b.low
-        ? (b.low - r) / b.low
-        : (r - b.high) / b.high;
-    // Mid-sentence: German keeps its nouns capitalised, only the adjectives go small.
-    final weak = appLocale.languageCode == 'de'
-        ? (aStrong ? b.bGroup : b.aGroup)
-            .replaceFirstMapped(RegExp('^(Oberer|Unterer|Hintere|Vordere)'), (m) => m[0]!.toLowerCase())
-        : (aStrong ? b.bGroup : b.aGroup).toLowerCase();
-    return (off < .15 ? tr.verdictSlightly : tr.verdictClearly)(aStrong ? b.aGroup : b.bGroup, weak);
+class _BalanceHistory extends StatefulWidget {
+  final Balance balance;
+  final List<(DateTime, Balance?)> history;
+  final TextStyle small;
+
+  const _BalanceHistory({
+    required this.balance,
+    required this.history,
+    required this.small,
+    super.key,
+  });
+
+  @override
+  State<_BalanceHistory> createState() => _BalanceHistoryState();
+}
+
+class _BalanceHistoryState extends State<_BalanceHistory> {
+  int samplesBack = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final b = widget.balance;
+    final history = widget.history;
+    final selected = (history.length - 1 - samplesBack).clamp(0, history.length - 1);
+    String summaryAt(int index) {
+      final (date, sample) = history[index];
+      final status = switch (sample) {
+        null => tr.balanceHistoryNoSets,
+        Balance(:final lagging?) => tr.balanceImbalance(lagging),
+        _ => tr.balanced,
+      };
+      if (sample == null) return '${dateLabel(date)} · $status';
+      final ratio = sample.ratio.isFinite ? '${(sample.ratio * 100).floor()} %' : '∞';
+      return '${dateLabel(date)} · $status · ${b.bGroup} / ${b.aGroup} $ratio';
+    }
+    final summary = summaryAt(selected);
+    final guide = tr.balanceHistoryGuide(guideRange(b.low, b.high));
+    final hasEarlier = selected > 0, hasLater = selected < history.length - 1;
+    final day = history.first.$1.year == history.last.$1.year ? DateFormat.Md(appLocale.languageCode) : null;
+    String axisDate(DateTime date) => day?.format(date) ?? dateLabel(date);
+    void select(int index) => setState(() => samplesBack = history.length - 1 - index);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          children: [
+            Text(tr.balanceHistory, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            Text(guide, style: widget.small),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(b.aGroup, style: widget.small),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final labelWidth = MediaQuery.textScalerOf(context).scale(day == null ? 76 : 52);
+            final start = history.first.$1, end = history.last.$1;
+            final span = end.difference(start);
+            final steps = (width ~/ labelWidth - 1).clamp(1, span.inDays.clamp(1, 4));
+            final dates = DateUtils.isSameDay(start, end)
+                ? [end]
+                : [
+                    for (var i = 0; i <= steps; i++)
+                      start.add(Duration(microseconds: (span.inMicroseconds * i / steps).round())),
+                  ];
+            final plot = _BalanceHistoryPlot(b, history, dates, selected, c);
+            void pick(double x) => select(plot.nearest(x, width));
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  label: tr.balanceHistory,
+                  value: summary,
+                  decreasedValue: hasEarlier ? summaryAt(selected - 1) : null,
+                  increasedValue: hasLater ? summaryAt(selected + 1) : null,
+                  onDecrease: hasEarlier ? () => select(selected - 1) : null,
+                  onIncrease: hasLater ? () => select(selected + 1) : null,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    excludeFromSemantics: true,
+                    onTapUp: (event) => pick(event.localPosition.dx),
+                    onHorizontalDragStart: (event) => pick(event.localPosition.dx),
+                    onHorizontalDragUpdate: (event) => pick(event.localPosition.dx),
+                    child: SizedBox(height: 118, child: CustomPaint(painter: plot)),
+                  ),
+                ),
+                Text(b.bGroup, style: widget.small),
+                if (dates.length == 1)
+                  Text(axisDate(dates.single), style: widget.small, textAlign: TextAlign.center)
+                else
+                  Stack(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(child: Text(axisDate(dates.first), style: widget.small)),
+                          Flexible(child: Text(axisDate(dates.last), style: widget.small, textAlign: TextAlign.end)),
+                        ],
+                      ),
+                      for (final date in dates.skip(1).take(dates.length - 2))
+                        Positioned(
+                          left: plot.x(date, width) - labelWidth / 2,
+                          width: labelWidth,
+                          child: Text(axisDate(date), style: widget.small, textAlign: TextAlign.center),
+                        ),
+                    ],
+                  ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 4),
+        Text(
+          summary,
+          style: widget.small.copyWith(fontWeight: FontWeight.w600),
+        ),
+        Text(tr.balanceHistoryHint(balanceDays), style: widget.small),
+      ],
+    );
   }
 }
 
-/// A pair's scale: a track with the balanced field in the middle, a tick at the centre and the dot;
-/// when off, the stretch from the field's edge to the dot in orange.
+class _BalanceHistoryPlot extends CustomPainter {
+  static const _inset = 6.0;
+  final Balance balance;
+  final List<(DateTime, Balance?)> history;
+  final List<DateTime> dates;
+  final int selected;
+  final ColorScheme colors;
+
+  _BalanceHistoryPlot(this.balance, this.history, this.dates, this.selected, this.colors);
+
+  double x(DateTime date, double width) {
+    final start = history.first.$1;
+    final span = history.last.$1.difference(start).inMilliseconds;
+    return span == 0
+        ? width / 2
+        : _inset + (width - 2 * _inset) * date.difference(start).inMilliseconds / span;
+  }
+
+  int nearest(double pointerX, double width) {
+    var closest = 0;
+    for (var i = 1; i < history.length; i++) {
+      if ((x(history[i].$1, width) - pointerX).abs() <= (x(history[closest].$1, width) - pointerX).abs()) {
+        closest = i;
+      }
+    }
+    return closest;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final plot = (Offset.zero & size).deflate(_inset);
+    final axis = _BalanceAxis(balance);
+    double y(double position) => plot.top + plot.height * position;
+
+    final guide = Paint()..color = colors.referenceGreen.withValues(alpha: .7);
+    final band = colors.balanceBand;
+    canvas.drawRect(plot, Paint()..color = colors.surfaceContainerHighest.withValues(alpha: .35));
+    final region = Rect.fromLTRB(plot.left, y(axis.start), plot.right, y(axis.end));
+    if (!axis.singleLimit) {
+      canvas.drawRect(region, Paint()..color = band);
+      canvas.drawLine(region.bottomLeft, region.bottomRight, guide);
+    }
+    canvas.drawLine(region.topLeft, region.topRight, guide);
+
+    final grid = Paint()..color = colors.outlineVariant;
+    if (dates.length > 1) {
+      for (final date in dates) {
+        final tick = x(date, size.width);
+        canvas.drawLine(Offset(tick, plot.top), Offset(tick, plot.bottom), grid);
+      }
+    }
+    final cursor = x(history[selected].$1, size.width);
+    canvas.drawLine(
+      Offset(cursor, plot.top),
+      Offset(cursor, plot.bottom),
+      Paint()..color = colors.outline,
+    );
+    final points = [
+      for (final (date, sample) in history)
+        sample == null
+            ? null
+            : Offset(
+                x(date, size.width),
+                y(axis.position(sample.ratio)),
+              ),
+    ];
+    final line = Paint()
+      ..color = colors.onSurfaceVariant
+      ..strokeWidth = 1.5;
+    for (var i = 1; i < points.length; i++) {
+      if ((points[i - 1], points[i]) case (final a?, final b?)) {
+        canvas.drawLine(a, b, line);
+      }
+    }
+    for (final (i, point) in points.indexed) {
+      if (point == null) continue;
+      final fill = Paint()
+        ..color = history[i].$2!.laggingSide == null
+            ? colors.referenceGreen
+            : colors.referenceAmber;
+      if (i == selected) {
+        canvas.drawCircle(point, 5.5, Paint()..color = colors.surface);
+      }
+      canvas.drawCircle(point, i == selected ? 4 : 2.5, fill);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BalanceHistoryPlot old) =>
+      old.balance != balance ||
+      old.history != history ||
+      old.dates != dates ||
+      old.selected != selected ||
+      old.colors != colors;
+}
+
+/// The same guide as the history chart, laid out horizontally.
 class _Scale extends StatelessWidget {
-  final double pos;
-  final bool warn;
-  const _Scale(this.pos, this.warn);
+  final Balance balance;
+  const _Scale(this.balance);
 
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final card = Theme.of(context).cardTheme.color ?? c.surfaceContainerLow;
-    final dot = warn ? c.tertiary : c.primary;
+    final axis = _BalanceAxis(balance);
+    final pos = axis.position(balance.ratio);
+    final lagging = balance.laggingSide;
+    final band = lagging == null ? c.referenceGreen.withValues(alpha: .55) : c.balanceBand;
+    final dot = lagging == null ? c.referenceGreen : c.referenceAmber;
     return SizedBox(
       height: 14,
       child: LayoutBuilder(
         builder: (context, box) {
-          double x(double p) => box.maxWidth * (50 + p) / 100;
-          final edge = pos < 0 ? -_field : _field;
+          double x(double position) => box.maxWidth * position;
+          final edge = lagging == 1 ? axis.start : axis.end;
           return Stack(
             clipBehavior: Clip.none,
             children: [
@@ -303,21 +531,23 @@ class _Scale extends StatelessWidget {
                   decoration: BoxDecoration(color: c.surfaceContainerHighest, borderRadius: BorderRadius.circular(3)),
                 ),
               ),
-              Positioned(
-                left: x(-_field),
-                width: x(_field) - x(-_field),
-                top: 4,
-                height: 6,
-                child: ColoredBox(color: c.primary.withValues(alpha: .22)),
-              ),
-              Positioned(
-                left: x(0) - 1,
-                width: 2,
-                top: 0,
-                bottom: 0,
-                child: ColoredBox(color: c.outline),
-              ),
-              if (warn)
+              if (axis.start != axis.end)
+                Positioned(
+                  left: x(axis.start),
+                  width: x(axis.end) - x(axis.start),
+                  top: 4,
+                  height: 6,
+                  child: ColoredBox(color: band),
+                ),
+              for (final limit in [axis.start, if (!axis.singleLimit) axis.end])
+                Positioned(
+                  left: x(limit) - 1,
+                  width: 2,
+                  top: 0,
+                  bottom: 0,
+                  child: ColoredBox(color: c.outline),
+                ),
+              if (lagging != null)
                 Positioned(
                   left: x(pos < edge ? pos : edge),
                   width: (x(pos) - x(edge)).abs(),
@@ -390,6 +620,7 @@ void showBalanceInfo(BuildContext context) {
           point(tr.infoGuides3),
           point(tr.infoGuides4),
           point(tr.infoGuides5),
+          point(tr.infoGuideRanges),
           heading(tr.infoMath),
           point(tr.infoMath1),
           point(tr.infoMath2),
@@ -426,7 +657,7 @@ void showBalanceInfo(BuildContext context) {
   );
 }
 
-/// Every pair's guide values to change: a range, or a lower bound where more of side b is never off.
+/// Edit the lower and upper guide values for each pair.
 void showGuideEditor(BuildContext context) {
   void changed(Pair p, double low, double high) {
     setBalanceGuide(p, low, high);
@@ -441,6 +672,29 @@ void showGuideEditor(BuildContext context) {
       valueListenable: balanceGuides,
       builder: (context, _, _) {
         final text = Theme.of(context).textTheme;
+        Widget guideEditor(Pair p) {
+          final (low, high) = guideOf(p);
+          final limit = max(2.0, high);
+          return Column(
+            children: [
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: Text('${p.a} ↔ ${p.b}', style: text.titleSmall)),
+                  Text(guideRange(low, high), style: text.bodyMedium),
+                ],
+              ),
+              RangeSlider(
+                values: RangeValues(low, high),
+                min: .2,
+                max: limit,
+                divisions: ((limit - .2) * 20).round(),
+                onChanged: (v) => changed(p, v.start, v.end),
+              ),
+            ],
+          );
+        }
+
         return DraggableScrollableSheet(
           expand: false,
           initialChildSize: .7,
@@ -452,31 +706,7 @@ void showGuideEditor(BuildContext context) {
               Text(tr.guides, style: text.titleLarge),
               const SizedBox(height: 4),
               Text(tr.guidesHint, style: text.bodyMedium),
-              for (final p in Pair.values) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(child: Text('${p.a} ↔ ${p.b}', style: text.titleSmall)),
-                    Text(guideRange(guideOf(p).$1, guideOf(p).$2), style: text.bodyMedium),
-                  ],
-                ),
-                if (p.high.isFinite)
-                  RangeSlider(
-                    values: RangeValues(guideOf(p).$1, guideOf(p).$2),
-                    min: .2,
-                    max: 2,
-                    divisions: 36,
-                    onChanged: (v) => changed(p, v.start, v.end),
-                  )
-                else
-                  Slider(
-                    value: guideOf(p).$1,
-                    min: .2,
-                    max: 2,
-                    divisions: 36,
-                    onChanged: (v) => changed(p, v, double.infinity),
-                  ),
-              ],
+              for (final p in Pair.values) guideEditor(p),
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerLeft,

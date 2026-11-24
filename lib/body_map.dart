@@ -5,35 +5,41 @@ import 'body_shapes.dart';
 import 'language.dart';
 import 'muscles.dart';
 
-/// Front and back of a body with muscles filled in by how much they work, 0 (grey) to 1 (full colour).
+/// Front and back of a body colored by exercise involvement or recent training volume.
 /// With [onTap], a tap on a muscle reports it.
 class BodyMap extends StatelessWidget {
-  final Map<Muscle, double> level;
+  final Map<Muscle, double> _level;
+  final Map<Muscle, Color> _heatColors;
   final double height;
   final ValueChanged<Muscle>? onTap;
 
   /// The muscles of an exercise: primary strong, secondary light.
   BodyMap(Muscles muscles, {super.key, this.height = 200})
       : onTap = null,
-        level = {
+        _heatColors = const {},
+        _level = {
           for (final m in musclesIn(muscles.$2)) m: .4,
           for (final m in musclesIn(muscles.$1)) m: 1,
         };
 
-  /// How much each muscle was trained, as a share of the most trained one.
-  const BodyMap.heat(this.level, {super.key, this.height = 200, this.onTap});
+  /// Colors of the training-volume categories. Unlisted muscles use the idle color.
+  const BodyMap.heat(this._heatColors, {super.key, this.height = 200, this.onTap}) : _level = const {};
 
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
+    final idle = c.onSurface.withValues(alpha: .16);
+    final muscleColors = {
+      for (final entry in _level.entries) entry.key: Color.lerp(idle, c.primary, entry.value)!,
+      ..._heatColors,
+    };
     final label = TextStyle(fontSize: 11, color: c.onSurfaceVariant);
     Widget view(_View v) {
       final size = Size(height * v.bounds.width / v.bounds.height, height);
       final painter = _BodyPainter(
         view: v,
-        level: level,
-        primary: c.primary,
-        idle: c.onSurface.withValues(alpha: .16),
+        muscleColors: muscleColors,
+        idle: idle,
         body: c.onSurface.withValues(alpha: .07),
       );
       return Column(mainAxisSize: MainAxisSize.min, children: [
@@ -97,12 +103,11 @@ class _View {
 
 class _BodyPainter extends CustomPainter {
   final _View view;
-  final Map<Muscle, double> level;
-  final Color primary, idle, body;
+  final Map<Muscle, Color> muscleColors;
+  final Color idle, body;
   const _BodyPainter({
     required this.view,
-    required this.level,
-    required this.primary,
+    required this.muscleColors,
     required this.idle,
     required this.body,
   });
@@ -113,11 +118,11 @@ class _BodyPainter extends CustomPainter {
     // Silhouette underneath, so the muscles read as one body.
     canvas.drawPath(view.outline, Paint()..color = body);
     for (final (m, path) in view.parts) {
-      canvas.drawPath(path, Paint()..color = m == null ? body : Color.lerp(idle, primary, level[m] ?? 0)!);
+      canvas.drawPath(path, Paint()..color = m == null ? body : (muscleColors[m] ?? idle));
     }
   }
 
   @override
   bool shouldRepaint(_BodyPainter old) =>
-      old.level != level || old.primary != primary || old.idle != idle || old.view != view;
+      old.muscleColors != muscleColors || old.idle != idle || old.body != body || old.view != view;
 }

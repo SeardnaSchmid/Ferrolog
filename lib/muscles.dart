@@ -260,10 +260,10 @@ List<(String, double)> exercisesFor(Muscle m, Iterable<Session> sessions) {
 /// object of a sentence), [aLabel] and [bLabel] name what's counted, [note] what counts half.
 enum Pair {
   pushPullFlat(1, 1.5),
-  pushPullOverhead(1, double.infinity),
-  rearDelts(.5, double.infinity),
-  quadsHamstrings(.6, double.infinity),
-  rotators(.5, double.infinity),
+  pushPullOverhead(1, 1.5),
+  rearDelts(.5, 1),
+  quadsHamstrings(.6, 1),
+  rotators(.5, 1),
   core(.75, 1.35);
 
   const Pair(this.low, this.high);
@@ -302,13 +302,20 @@ void loadBalanceGuides() {
   final raw = prefs.getString('balance.guides');
   if (raw == null) return;
   final map = jsonDecode(raw) as Map<String, dynamic>;
-  balanceGuides.value = {
-    for (final MapEntry(:key, :value) in map.entries)
-      ?Pair.values.asNameMap()[key]: (
-        (value[0] as num).toDouble(),
-        value[1] == null ? double.infinity : (value[1] as num).toDouble(),
-      ),
-  };
+  final guides = <Pair, (double, double)>{};
+  for (final pair in Pair.values) {
+    if (map[pair.name] case final List<dynamic> values) {
+      guides[pair] = _readBalanceGuide(pair, values);
+    }
+  }
+  balanceGuides.value = guides;
+}
+
+(double, double) _readBalanceGuide(Pair pair, List<dynamic> values) {
+  final low = (values[0] as num).toDouble();
+  // Open guides saved by older versions keep their minimum and gain an upper bound.
+  final high = (values[1] as num?)?.toDouble() ?? max(pair.high, low + .05);
+  return (low, high);
 }
 
 /// Stores [p]'s guide values; the defaults again remove the own ones. Null: all back to the defaults.
@@ -456,14 +463,16 @@ const balanceDays = 28;
 
 /// The pairs from [sessions] (newest first) over [weeks]; a pair shows once either side was trained
 /// (nothing on one side is the clearest imbalance).
-List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
+List<Balance> balances(List<Session> sessions, {double weeks = 1}) => _balances(sessions, Pair.values, weeks);
+
+List<Balance> _balances(Iterable<Session> sessions, List<Pair> pairs, double weeks) {
   final sums = {
-    for (final p in Pair.values) p: [0.0, 0.0],
+    for (final p in pairs) p: [0.0, 0.0],
   };
   for (final s in sessions) {
     for (final e in s.exercises) {
       if (e.cardio || e.setsDone == 0) continue;
-      for (final p in Pair.values) {
+      for (final p in pairs) {
         final (a, b) = shareOf(p, e.name);
         sums[p]![0] += e.setsDone * a;
         sums[p]![1] += e.setsDone * b;
@@ -474,6 +483,31 @@ List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
     for (final MapEntry(key: p, value: v) in sums.entries)
       if (v[0] > 0 || v[1] > 0) Balance(p, v[0] / weeks, v[1] / weeks),
   ];
+}
+
+/// Weekly samples of the trailing four weeks, oldest first. Null marks a window in which neither
+/// side was trained. Sessions are newest first and can include workouts before [from].
+List<(DateTime, Balance?)> balanceHistory(Pair pair, List<Session> sessions, DateTime from, DateTime now) {
+  final samples = <(DateTime, Balance?)>[];
+  final pairs = [pair];
+  var newest = 0, oldest = 0;
+  var date = now;
+  while (true) {
+    while (newest < sessions.length && sessions[newest].date.isAfter(date)) {
+      newest++;
+    }
+    oldest = max(oldest, newest);
+    final cutoff = date.subtract(const Duration(days: balanceDays));
+    while (oldest < sessions.length && sessions[oldest].date.isAfter(cutoff)) {
+      oldest++;
+    }
+    final window = _balances(sessions.getRange(newest, oldest), pairs, balanceDays / 7);
+    samples.add((date, window.firstOrNull));
+    if (!date.isAfter(from)) break;
+    date = date.subtract(const Duration(days: 7));
+    if (date.isBefore(from)) date = from;
+  }
+  return samples.reversed.toList();
 }
 
 /// The two strength ratios of the barbell lifts over [sessions] (newest first, e.g. 90 days), as

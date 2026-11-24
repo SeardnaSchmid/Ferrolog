@@ -3118,8 +3118,38 @@ abstract class L10n {
   /// No description provided for @balanceScaleHint.
   ///
   /// In de, this message translates to:
-  /// **'Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.'**
+  /// **'Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.'**
   String get balanceScaleHint;
+
+  /// No description provided for @balanceHistory.
+  ///
+  /// In de, this message translates to:
+  /// **'Balanceverlauf'**
+  String get balanceHistory;
+
+  /// No description provided for @balanceHistoryGuide.
+  ///
+  /// In de, this message translates to:
+  /// **'Zielbereich · {range}'**
+  String balanceHistoryGuide(Object range);
+
+  /// No description provided for @balanceHistoryHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Jeder Wochenpunkt umfasst die letzten {days} Tage. Tippe auf einen Punkt für das Verhältnis.'**
+  String balanceHistoryHint(Object days);
+
+  /// No description provided for @balanceHistoryNoSets.
+  ///
+  /// In de, this message translates to:
+  /// **'Keine Sätze in diesem Zeitraum'**
+  String get balanceHistoryNoSets;
+
+  /// No description provided for @balanceImbalance.
+  ///
+  /// In de, this message translates to:
+  /// **'Ungleichgewicht · {group} kommt zu kurz'**
+  String balanceImbalance(Object group);
 
   /// No description provided for @strengthTrend.
   ///
@@ -3171,18 +3201,6 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'✓ Ausgewogen'**
   String get balanced;
-
-  /// No description provided for @verdictSlightly.
-  ///
-  /// In de, this message translates to:
-  /// **'{strong} etwas mehr trainiert als {weak}'**
-  String verdictSlightly(Object strong, Object weak);
-
-  /// No description provided for @verdictClearly.
-  ///
-  /// In de, this message translates to:
-  /// **'{strong} deutlich mehr trainiert als {weak}'**
-  String verdictClearly(Object strong, Object weak);
 
   /// No description provided for @balanceInfoTitle.
   ///
@@ -3268,6 +3286,12 @@ abstract class L10n {
   /// **'Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.'**
   String get infoGuides5;
 
+  /// No description provided for @infoGuideRanges.
+  ///
+  /// In de, this message translates to:
+  /// **'FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.'**
+  String get infoGuideRanges;
+
   /// No description provided for @infoMath.
   ///
   /// In de, this message translates to:
@@ -3307,7 +3331,7 @@ abstract class L10n {
   /// No description provided for @infoScale1.
   ///
   /// In de, this message translates to:
-  /// **'Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.'**
+  /// **'Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.'**
   String get infoScale1;
 
   /// No description provided for @infoScale2.
@@ -3802,11 +3826,71 @@ abstract class L10n {
   /// **'über 20'**
   String get over20;
 
+  /// No description provided for @musclesBelowReference.
+  ///
+  /// In de, this message translates to:
+  /// **'Unter 10 Sätzen pro Woche · {names}'**
+  String musclesBelowReference(Object names);
+
   /// No description provided for @muscleBarsHint.
   ///
   /// In de, this message translates to:
-  /// **'Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.'**
+  /// **'Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.'**
   String get muscleBarsHint;
+
+  /// No description provided for @muscleVolumeInfoTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Warum 10–20 Sätze?'**
+  String get muscleVolumeInfoTitle;
+
+  /// No description provided for @muscleVolumeInfoEvidence.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.'**
+  String get muscleVolumeInfoEvidence;
+
+  /// No description provided for @muscleVolumeInfoRange.
+  ///
+  /// In de, this message translates to:
+  /// **'10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.'**
+  String get muscleVolumeInfoRange;
+
+  /// No description provided for @muscleGoal.
+  ///
+  /// In de, this message translates to:
+  /// **'Persönliches Wochenziel'**
+  String get muscleGoal;
+
+  /// No description provided for @muscleGoalInput.
+  ///
+  /// In de, this message translates to:
+  /// **'Sätze pro Woche'**
+  String get muscleGoalInput;
+
+  /// No description provided for @muscleGoalHelp.
+  ///
+  /// In de, this message translates to:
+  /// **'Leer lassen, um das Ziel zu entfernen.'**
+  String get muscleGoalHelp;
+
+  /// No description provided for @muscleGoalInvalid.
+  ///
+  /// In de, this message translates to:
+  /// **'Gib eine ganze Zahl größer als null ein.'**
+  String get muscleGoalInvalid;
+
+  /// No description provided for @muscleGoalValue.
+  ///
+  /// In de, this message translates to:
+  /// **'Wochenziel · {n, plural, =1{1 Satz} other{{n} Sätze}}'**
+  String muscleGoalValue(num n);
+
+  /// No description provided for @muscleGoalReached.
+  ///
+  /// In de, this message translates to:
+  /// **'✓ Wochenziel erreicht'**
+  String get muscleGoalReached;
 
   /// No description provided for @musclesNote.
   ///

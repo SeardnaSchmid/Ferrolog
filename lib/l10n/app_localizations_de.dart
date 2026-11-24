@@ -1852,7 +1852,28 @@ class L10nDe extends L10n {
 
   @override
   String get balanceScaleHint =>
-      'Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.';
+      'Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.';
+
+  @override
+  String get balanceHistory => 'Balanceverlauf';
+
+  @override
+  String balanceHistoryGuide(Object range) {
+    return 'Zielbereich · $range';
+  }
+
+  @override
+  String balanceHistoryHint(Object days) {
+    return 'Jeder Wochenpunkt umfasst die letzten $days Tage. Tippe auf einen Punkt für das Verhältnis.';
+  }
+
+  @override
+  String get balanceHistoryNoSets => 'Keine Sätze in diesem Zeitraum';
+
+  @override
+  String balanceImbalance(Object group) {
+    return 'Ungleichgewicht · $group kommt zu kurz';
+  }
 
   @override
   String get strengthTrend => 'Kraft im Verlauf';
@@ -1886,16 +1907,6 @@ class L10nDe extends L10n {
 
   @override
   String get balanced => '✓ Ausgewogen';
-
-  @override
-  String verdictSlightly(Object strong, Object weak) {
-    return '$strong etwas mehr trainiert als $weak';
-  }
-
-  @override
-  String verdictClearly(Object strong, Object weak) {
-    return '$strong deutlich mehr trainiert als $weak';
-  }
 
   @override
   String get balanceInfoTitle => 'Balance: was dahintersteckt';
@@ -1950,6 +1961,10 @@ class L10nDe extends L10n {
       'Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.';
 
   @override
+  String get infoGuideRanges =>
+      'FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.';
+
+  @override
   String get infoMath => 'Wie FerroLog rechnet';
 
   @override
@@ -1972,7 +1987,7 @@ class L10nDe extends L10n {
 
   @override
   String get infoScale1 =>
-      'Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.';
+      'Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.';
 
   @override
   String get infoScale2 =>
@@ -2321,8 +2336,50 @@ class L10nDe extends L10n {
   String get over20 => 'über 20';
 
   @override
+  String musclesBelowReference(Object names) {
+    return 'Unter 10 Sätzen pro Woche · $names';
+  }
+
+  @override
   String get muscleBarsHint =>
-      'Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.';
+      'Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.';
+
+  @override
+  String get muscleVolumeInfoTitle => 'Warum 10–20 Sätze?';
+
+  @override
+  String get muscleVolumeInfoEvidence =>
+      'Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.';
+
+  @override
+  String get muscleVolumeInfoRange =>
+      '10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.';
+
+  @override
+  String get muscleGoal => 'Persönliches Wochenziel';
+
+  @override
+  String get muscleGoalInput => 'Sätze pro Woche';
+
+  @override
+  String get muscleGoalHelp => 'Leer lassen, um das Ziel zu entfernen.';
+
+  @override
+  String get muscleGoalInvalid => 'Gib eine ganze Zahl größer als null ein.';
+
+  @override
+  String muscleGoalValue(num n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n Sätze',
+      one: '1 Satz',
+    );
+    return 'Wochenziel · $_temp0';
+  }
+
+  @override
+  String get muscleGoalReached => '✓ Wochenziel erreicht';
 
   @override
   String get musclesNote =>
