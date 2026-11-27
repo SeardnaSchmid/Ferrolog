@@ -738,6 +738,9 @@ class _SessionPageState extends State<SessionPage> {
           style: TextButton.styleFrom(foregroundColor: c.error),
           onPressed: () async {
             if (!await confirm(context, tr.discardTrainingAsk)) return;
+            // Stop the "ended elsewhere → close" check first: it would pop too while the save runs, and the
+            // second pop closes the home page (black screen).
+            ticker.cancel();
             await store.saveActive(null);
             if (context.mounted) Navigator.pop(context);
           },
