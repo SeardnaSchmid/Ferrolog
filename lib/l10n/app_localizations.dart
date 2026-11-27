@@ -1909,12 +1909,6 @@ abstract class L10n {
   /// **'Drückübungen zählen halb'**
   String get notePressHalf;
 
-  /// No description provided for @noteHingeSquatHalf.
-  ///
-  /// In de, this message translates to:
-  /// **'Kreuzheben und Kniebeuge zählen halb'**
-  String get noteHingeSquatHalf;
-
   /// No description provided for @ratioRowBench.
   ///
   /// In de, this message translates to:
@@ -2983,6 +2977,78 @@ abstract class L10n {
   /// **'PAUSE'**
   String get stripRest;
 
+  /// No description provided for @stripWaitingForPulse.
+  ///
+  /// In de, this message translates to:
+  /// **'WARTE AUF PULS'**
+  String get stripWaitingForPulse;
+
+  /// No description provided for @simulatedPulse.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} bpm (sim.)'**
+  String simulatedPulse(int bpm);
+
+  /// No description provided for @pulseRestTarget.
+  ///
+  /// In de, this message translates to:
+  /// **'Unter {bpm} bpm oder bei 0:00'**
+  String pulseRestTarget(int bpm);
+
+  /// No description provided for @pulseSensor.
+  ///
+  /// In de, this message translates to:
+  /// **'Pulssensor verbinden'**
+  String get pulseSensor;
+
+  /// No description provided for @pulseDisconnect.
+  ///
+  /// In de, this message translates to:
+  /// **'Pulssensor trennen'**
+  String get pulseDisconnect;
+
+  /// No description provided for @pulseSearching.
+  ///
+  /// In de, this message translates to:
+  /// **'Suche nach Pulssensoren …'**
+  String get pulseSearching;
+
+  /// No description provided for @pulseChooseSensor.
+  ///
+  /// In de, this message translates to:
+  /// **'Wähle deinen Pulssensor aus.'**
+  String get pulseChooseSensor;
+
+  /// No description provided for @pulseNoDevices.
+  ///
+  /// In de, this message translates to:
+  /// **'Kein Sensor gefunden. Aktiviere die Pulsübertragung am Sensor.'**
+  String get pulseNoDevices;
+
+  /// No description provided for @pulseScanFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Bluetooth-Suche fehlgeschlagen. Prüfe Bluetooth und die App-Berechtigungen.'**
+  String get pulseScanFailed;
+
+  /// No description provided for @pulseConnectFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Verbindung zum Pulssensor fehlgeschlagen.'**
+  String get pulseConnectFailed;
+
+  /// No description provided for @pulseNoSignal.
+  ///
+  /// In de, this message translates to:
+  /// **'Puls: kein Signal'**
+  String get pulseNoSignal;
+
+  /// No description provided for @livePulse.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} bpm'**
+  String livePulse(int bpm);
+
   /// No description provided for @stripSoon.
   ///
   /// In de, this message translates to:
@@ -3118,8 +3184,38 @@ abstract class L10n {
   /// No description provided for @balanceScaleHint.
   ///
   /// In de, this message translates to:
-  /// **'Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.'**
+  /// **'Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.'**
   String get balanceScaleHint;
+
+  /// No description provided for @balanceHistory.
+  ///
+  /// In de, this message translates to:
+  /// **'Balanceverlauf'**
+  String get balanceHistory;
+
+  /// No description provided for @balanceHistoryGuide.
+  ///
+  /// In de, this message translates to:
+  /// **'Zielbereich · {range}'**
+  String balanceHistoryGuide(Object range);
+
+  /// No description provided for @balanceHistoryHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Jeder Wochenpunkt umfasst die letzten {days} Tage. Tippe auf einen Punkt für das Verhältnis.'**
+  String balanceHistoryHint(Object days);
+
+  /// No description provided for @balanceHistoryNoSets.
+  ///
+  /// In de, this message translates to:
+  /// **'Keine Sätze in diesem Zeitraum'**
+  String get balanceHistoryNoSets;
+
+  /// No description provided for @balanceImbalance.
+  ///
+  /// In de, this message translates to:
+  /// **'Ungleichgewicht · {group} kommt zu kurz'**
+  String balanceImbalance(Object group);
 
   /// No description provided for @strengthTrend.
   ///
@@ -3171,18 +3267,6 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'✓ Ausgewogen'**
   String get balanced;
-
-  /// No description provided for @verdictSlightly.
-  ///
-  /// In de, this message translates to:
-  /// **'{strong} etwas mehr trainiert als {weak}'**
-  String verdictSlightly(Object strong, Object weak);
-
-  /// No description provided for @verdictClearly.
-  ///
-  /// In de, this message translates to:
-  /// **'{strong} deutlich mehr trainiert als {weak}'**
-  String verdictClearly(Object strong, Object weak);
 
   /// No description provided for @balanceInfoTitle.
   ///
@@ -3268,6 +3352,12 @@ abstract class L10n {
   /// **'Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.'**
   String get infoGuides5;
 
+  /// No description provided for @infoGuideRanges.
+  ///
+  /// In de, this message translates to:
+  /// **'FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.'**
+  String get infoGuideRanges;
+
   /// No description provided for @infoMath.
   ///
   /// In de, this message translates to:
@@ -3307,7 +3397,7 @@ abstract class L10n {
   /// No description provided for @infoScale1.
   ///
   /// In de, this message translates to:
-  /// **'Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.'**
+  /// **'Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.'**
   String get infoScale1;
 
   /// No description provided for @infoScale2.
@@ -3802,11 +3892,71 @@ abstract class L10n {
   /// **'über 20'**
   String get over20;
 
+  /// No description provided for @musclesBelowReference.
+  ///
+  /// In de, this message translates to:
+  /// **'Unter 10 Sätzen pro Woche · {names}'**
+  String musclesBelowReference(Object names);
+
   /// No description provided for @muscleBarsHint.
   ///
   /// In de, this message translates to:
-  /// **'Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.'**
+  /// **'Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.'**
   String get muscleBarsHint;
+
+  /// No description provided for @muscleVolumeInfoTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Warum 10–20 Sätze?'**
+  String get muscleVolumeInfoTitle;
+
+  /// No description provided for @muscleVolumeInfoEvidence.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.'**
+  String get muscleVolumeInfoEvidence;
+
+  /// No description provided for @muscleVolumeInfoRange.
+  ///
+  /// In de, this message translates to:
+  /// **'10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.'**
+  String get muscleVolumeInfoRange;
+
+  /// No description provided for @muscleGoal.
+  ///
+  /// In de, this message translates to:
+  /// **'Persönliches Wochenziel'**
+  String get muscleGoal;
+
+  /// No description provided for @muscleGoalInput.
+  ///
+  /// In de, this message translates to:
+  /// **'Sätze pro Woche'**
+  String get muscleGoalInput;
+
+  /// No description provided for @muscleGoalHelp.
+  ///
+  /// In de, this message translates to:
+  /// **'Leer lassen, um das Ziel zu entfernen.'**
+  String get muscleGoalHelp;
+
+  /// No description provided for @muscleGoalInvalid.
+  ///
+  /// In de, this message translates to:
+  /// **'Gib eine ganze Zahl größer als null ein.'**
+  String get muscleGoalInvalid;
+
+  /// No description provided for @muscleGoalValue.
+  ///
+  /// In de, this message translates to:
+  /// **'Wochenziel · {n, plural, =1{1 Satz} other{{n} Sätze}}'**
+  String muscleGoalValue(num n);
+
+  /// No description provided for @muscleGoalReached.
+  ///
+  /// In de, this message translates to:
+  /// **'✓ Wochenziel erreicht'**
+  String get muscleGoalReached;
 
   /// No description provided for @musclesNote.
   ///
@@ -3891,6 +4041,12 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'steigt'**
   String get trendRising;
+
+  /// No description provided for @trendDeclining.
+  ///
+  /// In de, this message translates to:
+  /// **'sinkt'**
+  String get trendDeclining;
 
   /// No description provided for @trendSteady.
   ///
@@ -4227,6 +4383,351 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'{fails} Trainings in Folge Ziel nicht erreicht'**
   String progDeloadNoChange(Object fails);
+
+  /// No description provided for @recapPulse.
+  ///
+  /// In de, this message translates to:
+  /// **'Puls'**
+  String get recapPulse;
+
+  /// No description provided for @recapPulseSummary.
+  ///
+  /// In de, this message translates to:
+  /// **'Ø {avg} · max {max} bpm'**
+  String recapPulseSummary(int avg, int max);
+
+  /// No description provided for @recapPulseRest.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause'**
+  String get recapPulseRest;
+
+  /// No description provided for @recapPulseAbove.
+  ///
+  /// In de, this message translates to:
+  /// **'{minutes} min über {bpm} bpm'**
+  String recapPulseAbove(int minutes, int bpm);
+
+  /// An estimated rest, rounded to half minutes
+  ///
+  /// In de, this message translates to:
+  /// **'rund {n} Min'**
+  String restAbout(String n);
+
+  /// No description provided for @restSuggest.
+  ///
+  /// In de, this message translates to:
+  /// **'Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal {time} testen?'**
+  String restSuggest(
+    int set,
+    String short,
+    int shortMet,
+    int shortN,
+    String long,
+    int longMet,
+    int longN,
+    String time,
+  );
+
+  /// No description provided for @restTryOnce.
+  ///
+  /// In de, this message translates to:
+  /// **'Einmal testen'**
+  String get restTryOnce;
+
+  /// No description provided for @restKeep.
+  ///
+  /// In de, this message translates to:
+  /// **'Beibehalten'**
+  String get restKeep;
+
+  /// No description provided for @restTrialPending.
+  ///
+  /// In de, this message translates to:
+  /// **'Nächstes Training: {time} Pause vor Satz {set} als Test'**
+  String restTrialPending(String time, int set);
+
+  /// No description provided for @restTrialCancel.
+  ///
+  /// In de, this message translates to:
+  /// **'Nicht testen'**
+  String get restTrialCancel;
+
+  /// No description provided for @restAdoptAsk.
+  ///
+  /// In de, this message translates to:
+  /// **'{worked} Tests mit {time} vor Satz {set} geschafft. Dauerhaft übernehmen?'**
+  String restAdoptAsk(int worked, String time, int set);
+
+  /// No description provided for @restAdopt.
+  ///
+  /// In de, this message translates to:
+  /// **'Übernehmen'**
+  String get restAdopt;
+
+  /// No description provided for @restAdoptNo.
+  ///
+  /// In de, this message translates to:
+  /// **'Nicht übernehmen'**
+  String get restAdoptNo;
+
+  /// No description provided for @restNeedsVariety.
+  ///
+  /// In de, this message translates to:
+  /// **'Für Satz {set} fehlen noch Trainings mit unterschiedlich langen Pausen'**
+  String restNeedsVariety(int set);
+
+  /// No description provided for @restBeforeSetRemove.
+  ///
+  /// In de, this message translates to:
+  /// **'Gelernte Pause entfernen'**
+  String get restBeforeSetRemove;
+
+  /// No description provided for @restSmart.
+  ///
+  /// In de, this message translates to:
+  /// **'Intelligent'**
+  String get restSmart;
+
+  /// No description provided for @restFixed.
+  ///
+  /// In de, this message translates to:
+  /// **'Fest'**
+  String get restFixed;
+
+  /// No description provided for @restSmartHelp.
+  ///
+  /// In de, this message translates to:
+  /// **'So funktionieren intelligente Pausen'**
+  String get restSmartHelp;
+
+  /// No description provided for @restSmartHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.'**
+  String get restSmartHint;
+
+  /// No description provided for @restRuleStartTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Startwerte'**
+  String get restRuleStartTitle;
+
+  /// No description provided for @restRuleStart.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Zeiten unten gelten, bis deine Trainings etwas anderes zeigen. Jede Pause vor einem Satz lernt für sich. Die Pause nach einem nicht geschafften Satz bleibt, wie eingestellt.'**
+  String get restRuleStart;
+
+  /// No description provided for @restRuleMeasureTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Gemessen an deinen Tipps'**
+  String get restRuleMeasureTitle;
+
+  /// No description provided for @restRuleMeasure.
+  ///
+  /// In de, this message translates to:
+  /// **'Pause = Zeit zwischen zwei Satz-Tipps minus geschätzte Satzdauer. Kein Extra-Tipp nötig. Unterbrechungen, andere Übungen dazwischen und ausgelassene Sätze zählen nicht.'**
+  String get restRuleMeasure;
+
+  /// No description provided for @restRuleShorterTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Kürzer'**
+  String get restRuleShorterTitle;
+
+  /// No description provided for @restRuleShorter.
+  ///
+  /// In de, this message translates to:
+  /// **'Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.'**
+  String get restRuleShorter;
+
+  /// No description provided for @restRuleLongerTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Länger'**
+  String get restRuleLongerTitle;
+
+  /// No description provided for @restRuleLonger.
+  ///
+  /// In de, this message translates to:
+  /// **'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.'**
+  String get restRuleLonger;
+
+  /// No description provided for @restRuleTestTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Erst testen, dann übernehmen'**
+  String get restRuleTestTitle;
+
+  /// No description provided for @restRuleTest.
+  ///
+  /// In de, this message translates to:
+  /// **'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.'**
+  String get restRuleTest;
+
+  /// No description provided for @restRuleStableTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Neues Gewicht zuerst'**
+  String get restRuleStableTitle;
+
+  /// No description provided for @restRuleStable.
+  ///
+  /// In de, this message translates to:
+  /// **'Steigt das Gewicht oder steht ein Deload an, gelten erst die bewährten Zeiten.'**
+  String get restRuleStable;
+
+  /// No description provided for @restPulse.
+  ///
+  /// In de, this message translates to:
+  /// **'Herzfrequenz berücksichtigen'**
+  String get restPulse;
+
+  /// No description provided for @restPulseHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Mit Pulssensor: verlängert die Pause, solange der Puls über 110 liegt, höchstens auf das Doppelte.'**
+  String get restPulseHint;
+
+  /// No description provided for @restSuggestShorter.
+  ///
+  /// In de, this message translates to:
+  /// **'Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal {time} statt {current} testen?'**
+  String restSuggestShorter(
+    int set,
+    int n,
+    String rest,
+    String time,
+    String current,
+  );
+
+  /// No description provided for @restSuggestTryShorter.
+  ///
+  /// In de, this message translates to:
+  /// **'{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} einmal {time} statt {current} testen?'**
+  String restSuggestTryShorter(int n, int set, String time, String current);
+
+  /// No description provided for @restTrialOutcome.
+  ///
+  /// In de, this message translates to:
+  /// **'Test vor Satz {set}: {rest} statt {usual} · {done} von {total} Wdh.'**
+  String restTrialOutcome(
+    int set,
+    String rest,
+    String usual,
+    int done,
+    int total,
+  );
+
+  /// No description provided for @restTrialWorked.
+  ///
+  /// In de, this message translates to:
+  /// **'Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst.'**
+  String get restTrialWorked;
+
+  /// No description provided for @restTrialWorkedAfter.
+  ///
+  /// In de, this message translates to:
+  /// **'Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst {context}.'**
+  String restTrialWorkedAfter(String context);
+
+  /// No description provided for @restTrialFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Nicht gelungen.'**
+  String get restTrialFailed;
+
+  /// No description provided for @restTrialNoComparison.
+  ///
+  /// In de, this message translates to:
+  /// **'Alles geschafft, aber noch kein Vergleich {context}. Zählt nicht für die Übernahme.'**
+  String restTrialNoComparison(String context);
+
+  /// No description provided for @restTrialUnclear.
+  ///
+  /// In de, this message translates to:
+  /// **'Alles geschafft, aber die Vorbelastung ist unklar. Zählt nicht für die Übernahme.'**
+  String get restTrialUnclear;
+
+  /// No description provided for @restAfterSets.
+  ///
+  /// In de, this message translates to:
+  /// **'nach {sets} Sätzen {name}'**
+  String restAfterSets(int sets, String name);
+
+  /// No description provided for @restNoPreload.
+  ///
+  /// In de, this message translates to:
+  /// **'ohne Vorbelastung'**
+  String get restNoPreload;
+
+  /// No description provided for @restStageAfter.
+  ///
+  /// In de, this message translates to:
+  /// **'In Trainings nach {name}:'**
+  String restStageAfter(String name);
+
+  /// No description provided for @restStageFresh.
+  ///
+  /// In de, this message translates to:
+  /// **'In Trainings ohne Vorbelastung:'**
+  String get restStageFresh;
+
+  /// No description provided for @restNow.
+  ///
+  /// In de, this message translates to:
+  /// **'Aktuell vor jedem Satz'**
+  String get restNow;
+
+  /// No description provided for @restNowHint.
+  ///
+  /// In de, this message translates to:
+  /// **'✦ gelernt aus Tests. Tippen setzt auf den Startwert zurück.'**
+  String get restNowHint;
+
+  /// No description provided for @restStartValue.
+  ///
+  /// In de, this message translates to:
+  /// **'Startwert'**
+  String get restStartValue;
+
+  /// No description provided for @restStartHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Gilt vor jedem Satz, bis Tests eine bessere Pause bestätigen.'**
+  String get restStartHint;
+
+  /// No description provided for @restNowNone.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch nichts gelernt: vor jedem Satz gilt der Startwert.'**
+  String get restNowNone;
+
+  /// No description provided for @restTileStart.
+  ///
+  /// In de, this message translates to:
+  /// **'Start'**
+  String get restTileStart;
+
+  /// No description provided for @restPulseInfoTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Herzfrequenz in der Pause'**
+  String get restPulseInfoTitle;
+
+  /// No description provided for @restPulseInfo.
+  ///
+  /// In de, this message translates to:
+  /// **'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.'**
+  String get restPulseInfo;
+
+  /// No description provided for @restResetBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Vor Satz {set} gilt dann wieder der Startwert {start} statt {learned}.'**
+  String restResetBody(int set, String learned, String start);
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

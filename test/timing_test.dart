@@ -87,5 +87,67 @@ void main() {
     expect((e.timed, setsLabel(e.repsPerSet, null, seconds: true)), (true, '3×30 s'));
     expect(Session.start(Workout(name: 'W', exercises: [e])).exercises.single.timed, isTrue);
   });
+  group('restObservations', () {
+    ExerciseLog bench(List<int?> reps, List<DateTime?> times, {int? rir, int? failRest}) => ExerciseLog(
+        name: 'Bankdrücken', weight: 80, targetReps: 5, reps: reps, doneAt: times, rir: rir,
+        restSeconds: 150, failRestSeconds: failRest);
+    Session one(ExerciseLog log, [List<ExerciseLog> more = const [], List<String> tags = const []]) =>
+        Session(workoutId: 'w', workoutName: 'A', date: start, exercises: [log, ...more], tags: tags);
+
+    test('the rest belongs to the set after it; the work of that set is taken off', () {
+      final log = bench([5, 5, 5, 5, 4], [at(1), at(4), at(7), at(10), at(13)], rir: 0);
+      final obs = restObservations(one(log), log);
+      expect(obs.map((o) => o.set), [1, 2, 3, 4], reason: 'none before the first set');
+      expect(obs.first.rest, const Duration(minutes: 2, seconds: 37, milliseconds: 500), reason: '5 × 4.5 s barbell reps');
+      expect(obs.last.rest, const Duration(minutes: 2, seconds: 42), reason: 'counted with the reps done');
+      expect((obs.last.reps, obs.last.target, obs.last.kg, obs.last.rir), (4, 5, 80.0, 0));
+      expect(obs.take(3).map((o) => o.rir), [null, null, null], reason: 'the reserve was asked after the last set');
+      expect(obs.every((o) => o.kind == RestKind.normal && o.planned == 150 && o.priorMet && o.regular), isTrue);
+    });
+
+    test('after a miss the fail rest counts, and later sets know an earlier one fell short', () {
+      final log = bench([5, 4, 5], [at(1), at(4), at(9)], failRest: 300);
+      final obs = restObservations(one(log), log);
+      expect((obs[0].kind, obs[0].planned, obs[0].priorMet), (RestKind.normal, 150, true));
+      expect((obs[1].kind, obs[1].planned, obs[1].priorMet), (RestKind.afterMiss, 300, false));
+      final noFail = bench([5, 4, 5], [at(1), at(4), at(9)]);
+      expect(restObservations(one(noFail), noFail)[1].kind, RestKind.normal, reason: 'no fail rest set');
+    });
+
+    test('left out instead of guessed', () {
+      final skipped = bench([5, 5, null, 5, 5], [at(1), at(4), null, at(10), at(13)]);
+      expect(restObservations(one(skipped), skipped).map((o) => o.set), [1, 4], reason: 'no rest across a skipped set');
+      final untimed = bench([5, 5, 5], [null, at(4), at(7)]);
+      expect(restObservations(one(untimed), untimed).map((o) => o.set), [2]);
+      final odd = bench([5, 5, 5], [at(1), at(1, 10), at(30)]);
+      expect(restObservations(one(odd), odd), isEmpty, reason: 'negative and longer than 15 min');
+      final backwards = bench([5, 5], [at(4), at(1)]);
+      expect(restObservations(one(backwards), backwards), isEmpty);
+
+      final log = bench([5, 5, 5], [at(1), at(6), at(9)]);
+      final curls = ExerciseLog(name: 'Curls', weight: 12, targetReps: 10, reps: [10], doneAt: [at(3)]);
+      expect(restObservations(one(log, [curls]), log).map((o) => o.set), [2], reason: 'curls in between');
+      final cardio = ExerciseLog(name: 'Laufen', weight: 0, targetReps: 20, reps: [null], cardio: true);
+      expect(restObservations(one(cardio), cardio), isEmpty);
+    });
+
+    test('swaps, comebacks, pain and bad days are not regular', () {
+      final log = bench([5, 5], [at(1), at(4)]);
+      expect(restObservations(one(log, const [], ['Schmerzen']), log).single.regular, isFalse);
+      expect(restObservations(one(log, const [], ['Stress']), log).single.regular, isFalse);
+      expect(restObservations(one(log, const [], ['Studio voll']), log).single.regular, isTrue);
+      final swapped = ExerciseLog(name: 'Bankdrücken', weight: 80, targetReps: 5, reps: [5, 5], doneAt: [at(1), at(4)],
+          replaces: 'Schrägbankdrücken');
+      expect(restObservations(one(swapped), swapped).single.regular, isFalse);
+      final comeback = ExerciseLog(name: 'Bankdrücken', weight: 70, targetReps: 5, reps: [5, 5], doneAt: [at(1), at(4)],
+          backoff: 10);
+      expect(restObservations(one(comeback), comeback).single.regular, isFalse);
+    });
+
+    test('shown to the half minute', () {
+      expect([20, 100, 120, 150, 170, 200].map((s) => restAboutLabel(Duration(seconds: s))),
+          ['rund ½ Min', 'rund 1½ Min', 'rund 2 Min', 'rund 2½ Min', 'rund 3 Min', 'rund 3½ Min']);
+    });
+  });
 }
 

@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'balance_card.dart';
 import 'body_map.dart';
@@ -11,6 +13,7 @@ import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'stats_colors.dart';
 import 'units.dart';
 
 /// Series colors, fixed order (a colorblind-safe categorical palette); an exercise keeps its color
@@ -375,17 +378,18 @@ class _StatsPageState extends State<StatsPage> {
   Widget exercisesSection(DateTime? from, DateTime now, ColorScheme c, TextStyle small) {
     final rows = [
       for (final name in store.loggedExercises)
-        (name, store.historyOf(name), [for (final (d, l) in store.historyOf(name)) if (from == null || d.isAfter(from)) l]),
+        if (store.historyOf(name) case final history)
+          (name, history, [for (final (d, l) in history) if (from == null || d.isAfter(from)) l], store.exerciseTrend(history, now)),
     ].where((e) => e.$3.isNotEmpty).toList()
       ..sort((a, b) => b.$3.length.compareTo(a.$3.length));
     final colored = strengthExercises();
     final palette = Theme.of(context).brightness == Brightness.dark ? _seriesDark : _seriesLight;
-    final stuck = [for (final (_, history, logs) in rows) if (!logs.last.cardio && trendOf(history, now)?.$1 == Trend.stuck) 1].length;
+    final stuck = [for (final (_, _, logs, trend) in rows) if (!logs.last.cardio && trend?.$1 == Trend.stuck) 1].length;
     return section(tr.exercises, tr.statusLast4Weeks,
         fold: 'exercises',
         openByDefault: false,
         summary: [tr.exercisesCount(rows.length), if (stuck > 0) tr.stuckCount(stuck)].join(' · '), [
-      for (final (name, history, logs) in rows)
+      for (final (name, history, logs, trend) in rows)
         InkWell(
           onTap: () => openExercise(name),
           child: Padding(
@@ -395,14 +399,14 @@ class _StatsPageState extends State<StatsPage> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name, style: const TextStyle(fontSize: 15)),
                   Text(
-                    logs.last.cardio || logs.last.timed || logs.last.weight <= 0
+                    logs.last.cardio || logs.last.timed || logs.last.weight <= 0 || logs.last.assisted
                         ? exerciseLine(logs)
                         : '${logs.length}× · 1RM ${weightLabel(roundedKg(logs.map(estimated1rm).reduce(max)))}',
                     style: small,
                   ),
                 ]),
               ),
-              if (!logs.last.cardio && !logs.last.timed && logs.last.weight > 0) ...[
+              if (!logs.last.cardio && !logs.last.timed && logs.last.weight > 0 && !logs.last.assisted) ...[
                 CustomPaint(
                   size: const Size(64, 26),
                   // Same color as in the chart above.
@@ -410,14 +414,15 @@ class _StatsPageState extends State<StatsPage> {
                       switch (colored.indexOf(name)) { final i when i >= 0 && i < 6 => palette[i], _ => c.primary }),
                 ),
                 const SizedBox(width: 10),
+              ],
+              if (!logs.last.cardio && (trend != null || history.length == 1))
                 SizedBox(
                   width: 118,
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: FittedBox(fit: BoxFit.scaleDown, child: TrendChip(trendOf(history, now))),
+                    child: FittedBox(fit: BoxFit.scaleDown, child: TrendChip(trend)),
                   ),
-                ),
-              ] else
+                ) else
                 Icon(Icons.chevron_right, color: c.onSurfaceVariant),
             ]),
           ),
@@ -599,53 +604,76 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  /// The balance card: the pairs of the last four weeks as scales, independent of the period (the
-  /// findings look at the same four weeks), and the strength ratios over 90 days as a course.
+  /// The balance card: four-week scales, their history over the selected period, and the strength
+  /// ratios over 90 days.
   Widget? balanceSection(List<Session> sessions, DateTime now) {
-    final recent = [for (final s in sessions) if (now.difference(s.date).inDays < balanceDays) s];
+    final recent = [
+      for (final s in sessions)
+        if (!s.date.isAfter(now) && now.difference(s.date).inDays < balanceDays) s,
+    ];
     final pairs = balances(recent, weeks: periodStats(sessions, now, days: balanceDays).weeks);
     if (pairs.isEmpty) return null;
     final trends = strengthTrends([for (final s in sessions) if (now.difference(s.date).inDays < 90) s]);
     final off = pairs.where((b) => b.lagging != null).length;
+    final period = days == 0 ? sessions.last.date : now.subtract(Duration(days: days));
+    final historyFrom = period.isBefore(sessions.last.date) ? sessions.last.date : period;
     return section('Balance', tr.balanceDaysLabel(balanceDays),
         onInfo: () => showBalanceInfo(context),
         highlight: focus?.view == StatsView.balance,
         fold: 'balance',
         summary: off == 0 ? tr.allPairsBalanced : '${tr.hintsCount(off)}${tr.pairsBalanced(pairs.length - off, pairs.length)}', [
-      BalanceBody(pairs, recent, trends, focus: focus?.pair),
+      BalanceBody(pairs, recent, trends, sessions: sessions, from: historyFrom, now: now, focus: focus?.pair),
     ]);
   }
 
-  /// Sets per muscle and week: the body map in fixed steps (so it shows too little, not just the most),
-  /// then each main muscle against 10–20 sets. Tap a muscle for the exercises behind it.
+  String _muscleGoalKey(Muscle muscle) => 'stats.muscleGoal.${muscle.name}';
+
+  /// Sets per muscle and week, with a reference band and optional personal goals.
   Widget musclesSection(List<Session> sessions, double weeks, ColorScheme c, TextStyle small) {
     final perWeek = {for (final e in setsPerSingleMuscle(sessions).entries) e.key: e.value / weeks};
     if (perWeek.values.every((v) => v == 0)) return const SizedBox();
-    final never = [for (final m in _mainMuscles) if (perWeek[m] == 0) m.label];
-    const maxSets = 25.0;
+    final goals = {
+      for (final muscle in Muscle.values)
+        muscle: ?prefs.getInt(_muscleGoalKey(muscle)),
+    };
+    final reachedGoals = {
+      for (final MapEntry(key: muscle, value: goal) in goals.entries)
+        if (perWeek[muscle]! >= goal) muscle,
+    };
+    final rows = {..._mainMuscles, ...goals.keys};
+    final never = [for (final m in rows) if (perWeek[m] == 0) m.label];
+    const referenceMin = 10.0, referenceMax = 20.0;
+    final below = [
+      for (final m in Muscle.values)
+        if (perWeek[m]! > 0 && perWeek[m]! < referenceMin) m.label,
+    ];
+    final maxSets = [
+      25.0,
+      ...goals.values.map((goal) => goal.toDouble()),
+    ].reduce(max);
+    Color muscleColor(double sets) => switch (sets) {
+          < 5 => c.referenceAmber.withValues(alpha: .64),
+          < referenceMin => c.referenceAmber,
+          <= referenceMax => c.referenceGreen,
+          _ => c.volumeColor,
+        };
     String n(double v) => v == 0 ? '–' : decimal(v.toStringAsFixed(v < 10 ? 1 : 0));
-    Widget swatch(double level, String text) => Row(mainAxisSize: MainAxisSize.min, children: [
+    Widget swatch(double sets, String text) => Row(mainAxisSize: MainAxisSize.min, children: [
           Container(
             width: 12,
             height: 12,
-            decoration: BoxDecoration(
-              color: Color.lerp(c.onSurface.withValues(alpha: .16), c.primary, level),
-              borderRadius: BorderRadius.circular(3),
-            ),
+            decoration: BoxDecoration(color: muscleColor(sets), borderRadius: BorderRadius.circular(3)),
           ),
           const SizedBox(width: 4),
           Text(text, style: small),
         ]);
-    final low = [for (final m in _mainMuscles) if (perWeek[m]! > 0 && perWeek[m]! < 10) m].length;
     return section(tr.setsPerMuscle, tr.perWeekLower,
         fold: 'muscles',
-        summary: [
-          if (never.isNotEmpty) tr.notTrained(never.join(', ')),
-          if (low > 0) tr.musclesUnder10(low),
-        ].join(' · '), [
+        onInfo: showMuscleVolumeInfo,
+        summary: never.isEmpty ? null : tr.notTrained(never.join(', ')), [
       Center(
         child: BodyMap.heat(
-          {for (final e in perWeek.entries) e.key: muscleLevel(e.value)},
+          {for (final e in perWeek.entries) if (e.value > 0) e.key: muscleColor(e.value)},
           height: 220,
           onTap: (m) => showMuscle(m, perWeek[m] ?? 0, sessions),
         ),
@@ -654,20 +682,18 @@ class _StatsPageState extends State<StatsPage> {
       Text(tr.tapMuscle, textAlign: TextAlign.center, style: small),
       const SizedBox(height: 10),
       Wrap(alignment: WrapAlignment.center, spacing: 12, runSpacing: 4, children: [
-        swatch(.35, tr.under5),
-        swatch(.6, '5–10'),
-        swatch(.82, '10–20'),
-        swatch(1, tr.over20),
+        swatch(1, tr.under5),
+        swatch(5, '5–<10'),
+        swatch(referenceMin, '10–20'),
+        swatch(referenceMax + 1, tr.over20),
       ]),
-      if (never.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        Text(tr.notTrained(never.join(', ')), style: small.copyWith(color: c.tertiary, fontWeight: FontWeight.w600)),
-      ],
+      if (below.isNotEmpty || never.isNotEmpty) const SizedBox(height: 12),
+      if (below.isNotEmpty) Text(tr.musclesBelowReference(below.join(', ')), style: small),
+      if (never.isNotEmpty) Text(tr.notTrained(never.join(', ')), style: small),
       const SizedBox(height: 14),
-      Text(tr.muscleBarsHint,
-          style: small),
+      Text(tr.muscleBarsHint, style: small),
       const SizedBox(height: 8),
-      for (final m in _mainMuscles)
+      for (final m in rows)
         InkWell(
           onTap: () => showMuscle(m, perWeek[m]!, sessions),
           child: Padding(
@@ -678,6 +704,7 @@ class _StatsPageState extends State<StatsPage> {
                 child: LayoutBuilder(builder: (context, box) {
                   double x(double v) => box.maxWidth * min(v, maxSets) / maxSets;
                   final v = perWeek[m]!;
+                  final goal = goals[m];
                   return SizedBox(
                     height: 12,
                     child: Stack(children: [
@@ -685,14 +712,14 @@ class _StatsPageState extends State<StatsPage> {
                         child: DecoratedBox(
                             decoration: BoxDecoration(color: c.surfaceContainerHighest, borderRadius: BorderRadius.circular(4))),
                       ),
-                      // Target band.
+                      // Reference range for hypertrophy.
                       Positioned(
-                        left: x(10),
-                        width: x(20) - x(10),
+                        left: x(referenceMin),
+                        width: x(referenceMax) - x(referenceMin),
                         top: 0,
                         bottom: 0,
                         child: DecoratedBox(
-                            decoration: BoxDecoration(color: c.primary.withValues(alpha: .35), borderRadius: BorderRadius.circular(2))),
+                            decoration: BoxDecoration(color: c.volumeColor.withValues(alpha: .16), borderRadius: BorderRadius.circular(2))),
                       ),
                       Positioned(
                         left: 0,
@@ -700,13 +727,30 @@ class _StatsPageState extends State<StatsPage> {
                         top: 3,
                         bottom: 3,
                         child: DecoratedBox(
-                            decoration: BoxDecoration(color: v < 10 ? c.tertiary : c.primary, borderRadius: BorderRadius.circular(3))),
+                            decoration: BoxDecoration(color: muscleColor(v), borderRadius: BorderRadius.circular(3))),
                       ),
+                      if (goal != null)
+                        Positioned(
+                          left: (x(goal.toDouble()) - 1).clamp(0.0, max(0.0, box.maxWidth - 2)),
+                          top: 0,
+                          bottom: 0,
+                          width: 2,
+                          child: ColoredBox(color: reachedGoals.contains(m) ? c.personalGoal : c.onSurfaceVariant),
+                        ),
                     ]),
                   );
                 }),
               ),
-              SizedBox(width: 44, child: Text(n(perWeek[m]!), textAlign: TextAlign.end, style: small)),
+              SizedBox(
+                width: 44,
+                child: Text(
+                  n(perWeek[m]!),
+                  textAlign: TextAlign.end,
+                  style: reachedGoals.contains(m)
+                      ? small.copyWith(color: c.personalGoal, fontWeight: FontWeight.w600)
+                      : small,
+                ),
+              ),
             ]),
           ),
         ),
@@ -718,33 +762,132 @@ class _StatsPageState extends State<StatsPage> {
     ]);
   }
 
+  void showMuscleVolumeInfo() {
+    const sources = [
+      ('Heaselgrave et al.', 'https://pubmed.ncbi.nlm.nih.gov/30160627/'),
+      ('Pelland et al.', 'https://pubmed.ncbi.nlm.nih.gov/41343037/'),
+      ('Baz-Valle et al.', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC8884877/'),
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.muscleVolumeInfoTitle),
+        scrollable: true,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr.muscleVolumeInfoEvidence),
+            const SizedBox(height: 12),
+            Text(tr.muscleVolumeInfoRange),
+            const SizedBox(height: 8),
+            Wrap(
+              children: [
+                for (final (name, url) in sources)
+                  TextButton(onPressed: () => launchUrl(Uri.parse(url)), child: Text(name)),
+              ],
+            ),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr.close))],
+      ),
+    );
+  }
+
+  Future<String?> editMuscleGoal(BuildContext context, int? goal) {
+    final form = GlobalKey<FormState>();
+    var input = goal?.toString() ?? '';
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        void save() {
+          if (form.currentState!.validate()) Navigator.pop(context, input);
+        }
+
+        return AlertDialog(
+          scrollable: true,
+          title: Text(tr.muscleGoal),
+          content: Form(
+            key: form,
+            child: TextFormField(
+              initialValue: input,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: tr.muscleGoalInput,
+                helperText: tr.muscleGoalHelp,
+                helperMaxLines: 2,
+              ),
+              onChanged: (value) => input = value,
+              onFieldSubmitted: (_) => save(),
+              validator: (value) => value == null || value.isEmpty || (int.tryParse(value) ?? 0) > 0
+                  ? null
+                  : tr.muscleGoalInvalid,
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr.cancel)),
+            FilledButton(onPressed: save, child: Text(tr.save)),
+          ],
+        );
+      },
+    );
+  }
+
   void showMuscle(Muscle m, double perWeek, List<Session> sessions) {
     final c = Theme.of(context).colorScheme;
     final exercises = exercisesFor(m, sessions);
+    final goalKey = _muscleGoalKey(m);
+    var goal = prefs.getInt(goalKey);
     String n(double v) => decimal(v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1));
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(m.label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            Text(tr.setsPerWeek(n(perWeek)), style: TextStyle(color: c.onSurfaceVariant)),
-            const SizedBox(height: 12),
-            if (exercises.isEmpty)
-              Text(tr.noExerciseForMuscle)
-            else
-              for (final (name, sets) in exercises)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    Expanded(child: Text(name)),
-                    Text(tr.setsN(n(sets)), style: TextStyle(color: c.onSurfaceVariant)),
-                  ]),
+      builder: (context) => StatefulBuilder(
+        builder: (context, updateSheet) {
+          final target = goal;
+          final reached = target != null && perWeek >= target;
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(m.label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                Text(tr.setsPerWeek(n(perWeek)), style: TextStyle(color: c.onSurfaceVariant)),
+                TextButton.icon(
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text(target == null ? tr.muscleGoal : tr.muscleGoalValue(target)),
+                  onPressed: () async {
+                    final value = await editMuscleGoal(context, goal);
+                    if (value == null) return;
+                    final next = int.tryParse(value);
+                    if (next == null) {
+                      await prefs.remove(goalKey);
+                    } else {
+                      await prefs.setInt(goalKey, next);
+                    }
+                    if (mounted) setState(() {});
+                    if (context.mounted) updateSheet(() => goal = next);
+                  },
                 ),
-          ]),
-        ),
+                if (reached)
+                  Text(tr.muscleGoalReached, style: TextStyle(color: c.personalGoal, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 12),
+                if (exercises.isEmpty)
+                  Text(tr.noExerciseForMuscle)
+                else
+                  for (final (name, sets) in exercises)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        Expanded(child: Text(name)),
+                        Text(tr.setsN(n(sets)), style: TextStyle(color: c.onSurfaceVariant)),
+                      ]),
+                    ),
+              ]),
+            ),
+          );
+        },
       ),
     );
   }
@@ -807,15 +950,6 @@ String weekLabel(DateTime monday) => DateFormat.Md(appLocale.languageCode).forma
 /// An estimate shown to the half unit (±0,5).
 double roundedKg(double kg) => toKg((shown(kg) * 2).round() / 2);
 
-/// Body map shade for sets per week: 0, under 5, 5–10, 10–20, over 20.
-double muscleLevel(double perWeek) => switch (perWeek) {
-      0 => 0,
-      < 5 => .35,
-      < 10 => .6,
-      <= 20 => .82,
-      _ => 1,
-    };
-
 /// "steigt +4 %", "stabil +1 %", "hängt fest −2 %" for the last four weeks.
 class TrendChip extends StatelessWidget {
   final (Trend, double)? trend;
@@ -828,6 +962,7 @@ class TrendChip extends StatelessWidget {
     if (t == null) return Text(tr.trendNew, style: TextStyle(fontSize: 12, color: c.onSurfaceVariant));
     final (label, bg, fg) = switch (t.$1) {
       Trend.up => (tr.trendRising, c.primaryContainer, c.onPrimaryContainer),
+      Trend.down => (tr.trendDeclining, c.surfaceContainerHighest, c.onSurfaceVariant),
       Trend.flat => (tr.trendSteady, c.surfaceContainerHighest, c.onSurfaceVariant),
       Trend.stuck => (tr.trendStuck, c.tertiaryContainer, c.onTertiaryContainer),
     };
@@ -917,7 +1052,7 @@ class _ExerciseStatsState extends State<ExerciseStats> {
     final names = strengthExercises();
     final colorIndex = max(0, names.indexOf(name)) % 6;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final trend = trendOf(history, DateTime.now());
+    final trend = store.exerciseTrend(history, DateTime.now());
     final best = history.isEmpty ? 0.0 : history.map((h) => estimated1rm(h.$2)).reduce(max);
     return Scaffold(
       appBar: AppBar(title: Text(name), actions: [
@@ -970,7 +1105,7 @@ class _ExerciseStatsState extends State<ExerciseStats> {
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: Text(tr.bestE1rm(weightLabel(roundedKg(best))), style: const TextStyle(fontWeight: FontWeight.w600))),
-            if ((history.lastOrNull?.$2.weight ?? 0) > 0) TrendChip(trend),
+            if (trend != null || (history.length == 1 && history.single.$2.weight > 0)) TrendChip(trend),
           ]),
           const SizedBox(height: 12),
           if (shownHistory.isEmpty)

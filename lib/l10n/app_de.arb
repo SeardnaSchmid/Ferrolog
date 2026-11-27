@@ -761,7 +761,6 @@
   "sideAbs": "Bauch",
   "sideLowerBack": "unterer Rücken",
   "notePressHalf": "Drückübungen zählen halb",
-  "noteHingeSquatHalf": "Kreuzheben und Kniebeuge zählen halb",
   "ratioRowBench": "Rudern : Bankdrücken",
   "ratioHingeSquat": "Kreuzheben : Kniebeuge",
   "weekDaysLeft": "noch {n} Tage",
@@ -1437,6 +1436,39 @@
   },
   "stripPaused": "ANGEHALTEN",
   "stripRest": "PAUSE",
+  "stripWaitingForPulse": "WARTE AUF PULS",
+  "simulatedPulse": "{bpm} bpm (sim.)",
+  "@simulatedPulse": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseRestTarget": "Unter {bpm} bpm oder bei 0:00",
+  "pulseSensor": "Pulssensor verbinden",
+  "pulseDisconnect": "Pulssensor trennen",
+  "pulseSearching": "Suche nach Pulssensoren …",
+  "pulseChooseSensor": "Wähle deinen Pulssensor aus.",
+  "pulseNoDevices": "Kein Sensor gefunden. Aktiviere die Pulsübertragung am Sensor.",
+  "pulseScanFailed": "Bluetooth-Suche fehlgeschlagen. Prüfe Bluetooth und die App-Berechtigungen.",
+  "pulseConnectFailed": "Verbindung zum Pulssensor fehlgeschlagen.",
+  "pulseNoSignal": "Puls: kein Signal",
+  "livePulse": "{bpm} bpm",
+  "@livePulse": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "@pulseRestTarget": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
   "stripSoon": "GLEICH WEITER",
   "stripGo": "LOS",
   "stripLate": "ÜBERZOGEN",
@@ -1541,7 +1573,12 @@
     }
   },
   "allPairsBalanced": "Alle Muskelpaare ausgewogen",
-  "balanceScaleHint": "Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.",
+  "balanceScaleHint": "Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.",
+  "balanceHistory": "Balanceverlauf",
+  "balanceHistoryGuide": "Zielbereich · {range}",
+  "balanceHistoryHint": "Jeder Wochenpunkt umfasst die letzten {days} Tage. Tippe auf einen Punkt für das Verhältnis.",
+  "balanceHistoryNoSets": "Keine Sätze in diesem Zeitraum",
+  "balanceImbalance": "Ungleichgewicht · {group} kommt zu kurz",
   "strengthTrend": "Kraft im Verlauf",
   "trendUp": "↗ steigt",
   "trendDown": "↘ sinkt",
@@ -1577,28 +1614,6 @@
     }
   },
   "balanced": "✓ Ausgewogen",
-  "verdictSlightly": "{strong} etwas mehr trainiert als {weak}",
-  "@verdictSlightly": {
-    "placeholders": {
-      "strong": {
-        "type": "Object"
-      },
-      "weak": {
-        "type": "Object"
-      }
-    }
-  },
-  "verdictClearly": "{strong} deutlich mehr trainiert als {weak}",
-  "@verdictClearly": {
-    "placeholders": {
-      "strong": {
-        "type": "Object"
-      },
-      "weak": {
-        "type": "Object"
-      }
-    }
-  },
   "balanceInfoTitle": "Balance: was dahintersteckt",
   "infoProven": "Was belegt ist",
   "infoProven1": "Mehr Sätze pro Muskel und Woche bringen mehr Muskelwachstum, abgestuft nach unter 5, 5–9 und 10+ Sätzen [1].",
@@ -1613,13 +1628,14 @@
   "infoGuides3": "Freizeitsportler drücken in Tests 1,5- bis 2,7-mal so viel, wie sie ziehen [6].",
   "infoGuides4": "Bei der Schulter liegt die Außenrotation in Kraftmessungen bei 86–99 % der Innenrotation [7]. Für Sätze gibt es keinen Studienwert, der Richtwert ist bewusst niedrig angesetzt.",
   "infoGuides5": "Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.",
+  "infoGuideRanges": "FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.",
   "infoMath": "Wie FerroLog rechnet",
   "infoMath1": "Jede Übung zählt voll für ihre Hauptgruppe und halb für Hilfsmuskeln.",
   "infoMath2": "Sätze pro Woche, gemittelt über die letzten 28 Tage, je Paar als Verhältnis.",
   "infoMath3": "Kraftverhältnisse (geschätztes 1RM) nur als Verlauf, nicht gegen Literaturwerte.",
   "infoMath4": "Alle Richtwerte kannst du anpassen.",
   "infoScale": "So liest du die Waage",
-  "infoScale1": "Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.",
+  "infoScale1": "Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.",
   "infoScale2": "Der Richtwert stammt aus der Trainingspraxis und ist keine medizinische Grenze. Hilfsmuskeln zählen halb.",
   "adjustGuides": "Richtwerte anpassen",
   "sources": "QUELLEN",
@@ -1997,7 +2013,17 @@
   "tapMuscle": "Tippe auf einen Muskel für seine Übungen",
   "under5": "unter 5",
   "over20": "über 20",
-  "muscleBarsHint": "Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.",
+  "musclesBelowReference": "Unter 10 Sätzen pro Woche · {names}",
+  "muscleBarsHint": "Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.",
+  "muscleVolumeInfoTitle": "Warum 10–20 Sätze?",
+  "muscleVolumeInfoEvidence": "Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.",
+  "muscleVolumeInfoRange": "10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.",
+  "muscleGoal": "Persönliches Wochenziel",
+  "muscleGoalInput": "Sätze pro Woche",
+  "muscleGoalHelp": "Leer lassen, um das Ziel zu entfernen.",
+  "muscleGoalInvalid": "Gib eine ganze Zahl größer als null ein.",
+  "muscleGoalValue": "Wochenziel · {n, plural, =1{1 Satz} other{{n} Sätze}}",
+  "muscleGoalReached": "✓ Wochenziel erreicht",
   "musclesNote": "Kraftprogramme wie 5×5 lassen bewusst Muskeln aus. Hilfsmuskeln zählen halb.",
   "setsPerWeek": "{n} Sätze pro Woche",
   "@setsPerWeek": {
@@ -2089,6 +2115,7 @@
   },
   "trendNew": "neu",
   "trendRising": "steigt",
+  "trendDeclining": "sinkt",
   "trendSteady": "stabil",
   "trendStuck": "hängt fest",
   "mergeWith": "„{name}“ zusammenführen mit",
@@ -2299,5 +2326,232 @@
         "type": "Object"
       }
     }
-  }
+  },
+  "recapPulse": "Puls",
+  "recapPulseSummary": "Ø {avg} · max {max} bpm",
+  "@recapPulseSummary": {
+    "placeholders": {
+      "avg": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "recapPulseRest": "Pause",
+  "recapPulseAbove": "{minutes} min über {bpm} bpm",
+  "@recapPulseAbove": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      },
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "restAbout": "rund {n} Min",
+  "@restAbout": {
+    "description": "An estimated rest, rounded to half minutes",
+    "placeholders": {
+      "n": {
+        "type": "String",
+        "example": "2½"
+      }
+    }
+  },
+  "restSuggest": "Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal {time} testen?",
+  "@restSuggest": {
+    "placeholders": {
+      "set": {
+        "type": "int"
+      },
+      "short": {
+        "type": "String"
+      },
+      "shortMet": {
+        "type": "int"
+      },
+      "shortN": {
+        "type": "int"
+      },
+      "long": {
+        "type": "String"
+      },
+      "longMet": {
+        "type": "int"
+      },
+      "longN": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "restTryOnce": "Einmal testen",
+  "restKeep": "Beibehalten",
+  "restTrialPending": "Nächstes Training: {time} Pause vor Satz {set} als Test",
+  "@restTrialPending": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "set": {
+        "type": "int"
+      }
+    }
+  },
+  "restTrialCancel": "Nicht testen",
+  "restAdoptAsk": "{worked} Tests mit {time} vor Satz {set} geschafft. Dauerhaft übernehmen?",
+  "@restAdoptAsk": {
+    "placeholders": {
+      "worked": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      },
+      "set": {
+        "type": "int"
+      }
+    }
+  },
+  "restAdopt": "Übernehmen",
+  "restAdoptNo": "Nicht übernehmen",
+  "restNeedsVariety": "Für Satz {set} fehlen noch Trainings mit unterschiedlich langen Pausen",
+  "@restNeedsVariety": {
+    "placeholders": {
+      "set": {
+        "type": "int"
+      }
+    }
+  },
+  "restBeforeSetRemove": "Gelernte Pause entfernen",
+  "restSmart": "Intelligent",
+  "restFixed": "Fest",
+  "restSmartHelp": "So funktionieren intelligente Pausen",
+  "restSmartHint": "Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.",
+  "restRuleStartTitle": "Startwerte",
+  "restRuleStart": "Die Zeiten unten gelten, bis deine Trainings etwas anderes zeigen. Jede Pause vor einem Satz lernt für sich. Die Pause nach einem nicht geschafften Satz bleibt, wie eingestellt.",
+  "restRuleMeasureTitle": "Gemessen an deinen Tipps",
+  "restRuleMeasure": "Pause = Zeit zwischen zwei Satz-Tipps minus geschätzte Satzdauer. Kein Extra-Tipp nötig. Unterbrechungen, andere Übungen dazwischen und ausgelassene Sätze zählen nicht.",
+  "restRuleShorterTitle": "Kürzer",
+  "restRuleShorter": "Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.",
+  "restRuleLongerTitle": "Länger",
+  "restRuleLonger": "Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.",
+  "restRuleTestTitle": "Erst testen, dann übernehmen",
+  "restRuleTest": "Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.",
+  "restRuleStableTitle": "Neues Gewicht zuerst",
+  "restRuleStable": "Steigt das Gewicht oder steht ein Deload an, gelten erst die bewährten Zeiten.",
+  "restPulse": "Herzfrequenz berücksichtigen",
+  "restPulseHint": "Mit Pulssensor: verlängert die Pause, solange der Puls über 110 liegt, höchstens auf das Doppelte.",
+  "restSuggestShorter": "Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal {time} statt {current} testen?",
+  "@restSuggestShorter": {
+    "placeholders": {
+      "set": {
+        "type": "int"
+      },
+      "n": {
+        "type": "int"
+      },
+      "rest": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "current": {
+        "type": "String"
+      }
+    }
+  },
+  "restSuggestTryShorter": "{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} einmal {time} statt {current} testen?",
+  "@restSuggestTryShorter": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "set": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      },
+      "current": {
+        "type": "String"
+      }
+    }
+  },
+  "restTrialOutcome": "Test vor Satz {set}: {rest} statt {usual} · {done} von {total} Wdh.",
+  "@restTrialOutcome": {
+    "placeholders": {
+      "set": {
+        "type": "int"
+      },
+      "rest": {
+        "type": "String"
+      },
+      "usual": {
+        "type": "String"
+      },
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "restTrialWorked": "Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst.",
+  "restTrialWorkedAfter": "Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst {context}.",
+  "@restTrialWorkedAfter": {
+    "placeholders": {
+      "context": {
+        "type": "String"
+      }
+    }
+  },
+  "restTrialFailed": "Nicht gelungen.",
+  "restTrialNoComparison": "Alles geschafft, aber noch kein Vergleich {context}. Zählt nicht für die Übernahme.",
+  "@restTrialNoComparison": {
+    "placeholders": {
+      "context": {
+        "type": "String"
+      }
+    }
+  },
+  "restTrialUnclear": "Alles geschafft, aber die Vorbelastung ist unklar. Zählt nicht für die Übernahme.",
+  "restAfterSets": "nach {sets} Sätzen {name}",
+  "@restAfterSets": {
+    "placeholders": {
+      "sets": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "restNoPreload": "ohne Vorbelastung",
+  "restStageAfter": "In Trainings nach {name}:",
+  "@restStageAfter": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "restStageFresh": "In Trainings ohne Vorbelastung:",
+  "restNow": "Aktuell vor jedem Satz",
+  "restNowHint": "✦ gelernt aus Tests. Tippen setzt auf den Startwert zurück.",
+  "restStartValue": "Startwert",
+  "restStartHint": "Gilt vor jedem Satz, bis Tests eine bessere Pause bestätigen.",
+  "restNowNone": "Noch nichts gelernt: vor jedem Satz gilt der Startwert.",
+  "restTileStart": "Start",
+  "restPulseInfoTitle": "Herzfrequenz in der Pause",
+  "restPulseInfo": "Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.",
+  "restResetBody": "Vor Satz {set} gilt dann wieder der Startwert {start} statt {learned}.",
+  "@restResetBody": {"placeholders": {"set": {"type": "int"}, "learned": {"type": "String"}, "start": {"type": "String"}}}
 }

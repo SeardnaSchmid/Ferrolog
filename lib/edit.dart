@@ -8,6 +8,7 @@ import 'main.dart';
 import 'body_map.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'rest_learning.dart';
 import 'templates.dart';
 import 'units.dart';
 
@@ -346,14 +347,16 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
     nameField.text = name;
     final x = knownExercise(name);
     final planned = store.workouts.any((w) => w.exercises.any((y) => y.name == name));
+    final keepTargets = widget.forTraining && widget.initial != null && !e.cardio && !x.cardio && e.timed == x.timed;
+    final targets = keepTargets ? rs : x.repsPerSet;
     setState(() {
       e
         ..name = name
         ..cardio = x.cardio
         ..timed = x.timed
         ..km = x.km
-        ..sets = x.sets
-        ..reps = x.reps
+        ..sets = targets.length
+        ..reps = targets.first
         ..weight = x.weight
         ..increment = x.increment
         ..up = x.up
@@ -366,9 +369,10 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..barbellSetups = x.barbellSetups
         ..restSeconds = x.restSeconds;
       noWeight = x.noWeight;
-      ws = List.of(noWeight ? List.filled(x.sets, 20.0) : x.weights);
-      rs = List.of(x.repsPerSet);
-      maxReps = x.maxReps;
+      final weights = x.weights;
+      ws = List.generate(targets.length, (i) => noWeight ? 20.0 : weights[min(i, weights.length - 1)]);
+      rs = List.of(targets);
+      if (!keepTargets) maxReps = x.maxReps;
       byDistance = x.cardio && x.km != null;
       e.failRestSeconds = x.failRestSeconds;
       filledFrom = name;
@@ -398,6 +402,9 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..setReps = null
         ..maxReps = null
         ..failRestSeconds = null
+        ..learnRest = false
+        ..setRests = {}
+        ..restTrial = null
         ..weight = 0
         ..timed = false
         ..reps = byDistance ? 0 : max(1, e.reps)
@@ -418,6 +425,7 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
         ..up = false
         ..down = false;
     }
+    e.setRests.removeWhere((set, _) => set >= e.sets); // learned for a set that's gone
     if (rs.join(',') != repsBefore.join(',') || maxReps != null) {
       e.state?.bridgeFrom = null;
     } else if (!e.auto || noWeight) {
@@ -834,7 +842,11 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               padding: const EdgeInsets.all(14),
               decoration: card,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(tr.adjustWeight, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+                Row(children: [
+                  Text(tr.adjustWeight, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+                  if (e.auto && !widget.forTraining)
+                    infoButton(tr.autoHelp, e.timed ? tr.autoHintTimed : tr.autoHintReps, autoRules),
+                ]),
                 loadStepPicker(muted),
                 if (!widget.forTraining) ...[
                   const SizedBox(height: 10),
@@ -854,39 +866,6 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                     ),
                   ),
                   if (e.auto) ...[
-                    const SizedBox(height: 4),
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      shape: const Border(),
-                      collapsedShape: const Border(),
-                      leading: Icon(Icons.info_outline, size: 20, color: c.primary),
-                      title: Text(tr.autoHelp),
-                      subtitle: Text(e.timed ? tr.autoHintTimed : tr.autoHintReps, style: muted),
-                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                      childrenPadding: const EdgeInsets.only(bottom: 4),
-                      children: [
-                        for (final (title, description) in autoRules)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('•', style: muted),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      Text(description, style: muted.copyWith(height: 1.4)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
                     if (e.state?.bridgeFrom case final base? when rs.first > base) ...[
                       const SizedBox(height: 10),
                       Text(tr.progBridgeTarget(rs.first, base), style: muted),
@@ -953,12 +932,69 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
               decoration: card,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Icon(Icons.timer_outlined, size: 20, color: c.onSurfaceVariant),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(tr.rest, style: const TextStyle(fontWeight: FontWeight.w500))),
-                  Text(clock(e.restSeconds), style: TextStyle(fontWeight: FontWeight.w500, color: c.primary)),
+                  Text(tr.rest, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.primary)),
+                  if (e.learnRest) infoButton(tr.restSmartHelp, tr.restSmartHint, restRules),
+                  const Spacer(),
+                  // Smart: the range of what applies now, learned rests included.
+                  Text(
+                    switch ([for (var i = 1; i < rs.length; i++) e.learnRest ? restBefore(e, i) : e.restSeconds]) {
+                      final r when e.learnRest && r.isNotEmpty && r.reduce(min) != r.reduce(max) =>
+                        '${clock(r.reduce(min))}–${clock(r.reduce(max))}',
+                      _ => clock(e.restSeconds),
+                    },
+                    style: TextStyle(fontWeight: FontWeight.w500, color: c.primary),
+                  ),
                 ]),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(value: true, icon: const Icon(Icons.auto_awesome_outlined), label: Text(tr.restSmart)),
+                      ButtonSegment(value: false, icon: const Icon(Icons.tune), label: Text(tr.restFixed)),
+                    ],
+                    selected: {e.learnRest},
+                    onSelectionChanged: (v) => setState(() {
+                      e.learnRest = v.first;
+                      editing = null;
+                    }),
+                  ),
+                ),
+                if (e.learnRest) ...[
+                  const SizedBox(height: 4),
+                  restPulseSwitch(muted),
+                  // The sets as in the Sets card, each with the rest the timer gives before it.
+                  if (rs.length > 1) ...[
+                    const SizedBox(height: 8),
+                    Text(tr.restNow, style: muted.copyWith(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    LayoutBuilder(builder: (context, box) {
+                      final w = (box.maxWidth - 3 * 8) / 4;
+                      return Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (var i = 0; i < rs.length; i++)
+                          _RestTile(
+                            width: w,
+                            reps: rs[i],
+                            maxReps: maxReps,
+                            seconds: e.timed,
+                            weight: noWeight ? null : ws[i],
+                            rest: i == 0 ? null : e.setRests[i] ?? e.restSeconds,
+                            learned: i > 0 && e.setRests.containsKey(i),
+                            onTap: i > 0 && e.setRests.containsKey(i) ? () => resetRest(i) : null,
+                          ),
+                      ]);
+                    }),
+                    const SizedBox(height: 6),
+                    Text(e.setRests.isEmpty ? tr.restNowNone : tr.restNowHint, style: muted),
+                  ],
+                  const SizedBox(height: 14),
+                  Text(tr.restStartValue, style: muted.copyWith(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(tr.restStartHint, style: muted),
+                  const SizedBox(height: 8),
+                ],
+                if (!e.learnRest) const SizedBox(height: 12),
                 chips(
                   key: 'pause',
                   presets: const [30, 60, 90, 120, 180],
@@ -982,6 +1018,21 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
                   unitText: tr.minSecOrSec,
                   parse: parseDuration,
                 ),
+                if (!e.learnRest) ...[
+                  const SizedBox(height: 6),
+                  restPulseSwitch(muted),
+                ],
+                // A test accepted in the recap, still to run.
+                if (e.learnRest)
+                  if (pendingTrial(store.sessions, e) case final t?)
+                    Row(children: [
+                      Expanded(child: Text(tr.restTrialPending(clock(t.seconds), t.set + 1), style: muted)),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: tr.restTrialCancel,
+                        onPressed: () => setState(() => e.restTrial = null),
+                      ),
+                    ]),
               ]),
             ),
           ],
@@ -992,6 +1043,71 @@ class _ExerciseEditorState extends State<ExerciseEditor> {
       ),
     );
   }
+
+  /// "Use heart rate", with an info button explaining what it does.
+  Widget restPulseSwitch(TextStyle muted) => SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Row(children: [
+          Flexible(child: Text(tr.restPulse)),
+          infoButton(tr.restPulseInfoTitle, tr.restPulseInfo),
+        ]),
+        subtitle: Text(tr.restPulseHint, style: muted),
+        value: e.restPulse,
+        onChanged: (on) => setState(() => e.restPulse = on),
+      );
+
+  /// Back to the starting value for the rest before set [i], after asking.
+  Future<void> resetRest(int i) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.restBeforeSetRemove),
+        content: Text(tr.restResetBody(i + 1, clock(e.setRests[i]!), clock(e.restSeconds))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr.remove)),
+        ],
+      ),
+    );
+    if (ok == true && mounted) setState(() => e.setRests.remove(i));
+  }
+
+  /// ⓘ next to a title: opens a dialog with a hint and the rules.
+  Widget infoButton(String title, String hint, [List<(String, String)> rules = const []]) => IconButton(
+        icon: Icon(Icons.info_outline, size: 18, color: Theme.of(context).colorScheme.primary),
+        visualDensity: VisualDensity.compact,
+        tooltip: title,
+        onPressed: () => showDialog(
+          context: context,
+          builder: (context) {
+            final muted = TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant);
+            return AlertDialog(
+              title: Text(title),
+              content: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(hint),
+                  for (final (title, description) in rules) ...[
+                    const SizedBox(height: 14),
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(description, style: muted.copyWith(height: 1.4)),
+                  ],
+                ]),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(tr.ok))],
+            );
+          },
+        ),
+      );
+
+  List<(String, String)> get restRules => [
+        (tr.restRuleStartTitle, tr.restRuleStart),
+        (tr.restRuleMeasureTitle, tr.restRuleMeasure),
+        (tr.restRuleShorterTitle, tr.restRuleShorter),
+        (tr.restRuleLongerTitle, tr.restRuleLonger),
+        (tr.restRuleTestTitle, tr.restRuleTest),
+        (tr.restRuleStableTitle, tr.restRuleStable),
+      ];
 
   List<(String, String)> get autoRules => [
         if (maxReps != null) (tr.autoRangeTitle, tr.autoRuleRange),
@@ -1142,6 +1258,7 @@ Exercise knownExercise(String name, {int? sets, int? reps}) {
         ..increment = d.$4
         ..restSeconds = d.$5
         ..failRestSeconds = heavyLifts.contains(catalogueName(name)) ? 120 : null
+        ..learnRest = heavyLifts.contains(catalogueName(name))
         // Accessories start with a range: the weight goes up once every set reaches its top.
         ..maxReps = heavyLifts.contains(catalogueName(name)) ? null : rangeTop(d.$2, seconds: e.timed);
       if (unit.value == WeightUnit.lb) {
@@ -1302,6 +1419,75 @@ class _PlanTile extends StatelessWidget {
                   ),
                 ),
               ],
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A set as in the Sets card, with the rest before it underneath.
+class _RestTile extends StatelessWidget {
+  final double width;
+  final int reps;
+  final int? maxReps;
+  final bool seconds;
+  final double? weight;
+  final int? rest;
+  final bool learned;
+  final VoidCallback? onTap;
+  const _RestTile(
+      {required this.width,
+      required this.reps,
+      required this.maxReps,
+      required this.seconds,
+      required this.weight,
+      required this.rest,
+      required this.learned,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final w = weight;
+    const figures = [FontFeature.tabularFigures()];
+    final color = learned ? c.primary : c.onSurfaceVariant;
+    return SizedBox(
+      width: width,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Material(
+          color: c.surfaceContainer,
+          child: InkWell(
+            onTap: onTap,
+            child: Column(children: [
+              Container(
+                height: 44,
+                color: c.surfaceContainerHigh,
+                alignment: Alignment.center,
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: '$reps', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  if (maxReps case final top? when top > reps)
+                    TextSpan(text: '–$top', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                  if (seconds) TextSpan(text: ' s', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                  if (w != null) ...[
+                    TextSpan(text: ' × ', style: TextStyle(fontSize: 13, color: c.onSurfaceVariant)),
+                    TextSpan(text: weightNum(w), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  ],
+                ]), style: const TextStyle(fontFeatures: figures), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              SizedBox(
+                height: 40,
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(rest == null ? Icons.play_arrow_rounded : learned ? Icons.auto_awesome : Icons.timer_outlined,
+                      size: 15, color: color),
+                  const SizedBox(width: 4),
+                  Text(rest == null ? tr.restTileStart : clock(rest!),
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w600, color: rest == null ? c.onSurfaceVariant : learned ? c.primary : null, fontFeatures: figures)),
+                ]),
+              ),
             ]),
           ),
         ),

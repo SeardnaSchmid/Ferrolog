@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'language.dart';
 import 'loading.dart' show BarbellSetup, barbellSetupsFromJson, barbellSetupsToJson;
+import 'pulse_rest.dart';
+import 'rest_learning.dart';
 import 'units.dart';
 
 
@@ -50,7 +52,7 @@ List<(DateTime, int, int)> weeklySummary(List<Session> sessions, DateTime now, {
 /// Estimated one-rep max (Epley) from all sets: the average reps at the working weight, skipped
 /// sets counting 0. Missed reps lower it, so it shows how a training went, not just the plan.
 double estimated1rm(ExerciseLog log) {
-  if (log.cardio || log.timed || log.weight <= 0 || log.reps.isEmpty) return 0; // no 1RM with assistance
+  if (log.cardio || log.timed || log.weight <= 0 || log.reps.isEmpty || log.assisted) return 0;
   final avg = log.reps.fold(0, (n, r) => n + (r ?? 0)) / log.reps.length;
   return avg == 0 ? 0 : log.weight * (1 + avg / 30);
 }
@@ -66,7 +68,7 @@ Set<int> setbacks(List<(DateTime, ExerciseLog)> history) => {
             i,
     };
 
-enum Trend { up, flat, stuck }
+enum Trend { up, flat, stuck, down }
 
 /// What a training of an exercise achieved, for its trend: the 1RM; without one (bodyweight, holds) the
 /// reps or seconds of all sets, times the weight if any.
@@ -76,17 +78,27 @@ double progressOf(ExerciseLog log) {
   return log.reps.fold(0, (n, r) => n + (r ?? 0)) * max(1.0, log.weight);
 }
 
-/// How an exercise is going, with the change in percent over the last [days] ([progressOf]: the 1RM,
-/// or reps and seconds without one): up when it rose by more than 2 % (catching up after a deload
-/// counts, misses or not), else stuck when at least two of the last three trainings missed reps, else flat.
-/// Null with fewer than two trainings.
-(Trend, double)? trendOf(List<(DateTime, ExerciseLog)> history, DateTime now, {int days = 28}) {
-  if (history.length < 2) return null;
+/// Change over the last [days], excluding deliberately lighter comeback sessions. Assisted exercises
+/// compare effective load × reps, using the measured body weight from each comparison session.
+(Trend, double)? trendOf(List<(DateTime, ExerciseLog)> history, DateTime now,
+    {int days = 28, double? Function(ExerciseLog)? bodyWeightOf}) {
+  final regular = history.where((entry) => entry.$2.backoff == null).toList();
+  if (regular.length < 2) return null;
+  final assisted = history.any((entry) => entry.$2.assisted);
+  double? score(ExerciseLog log) {
+    if (!assisted || log.timed) return progressOf(log);
+    final kg = bodyWeightOf?.call(log);
+    if (kg == null || kg <= 0) return null;
+    return log.reps.indexed.fold<double>(0, (total, entry) =>
+        total + (entry.$2 ?? 0) * max(0.0, kg + log.weights[entry.$1]));
+  }
   final cutoff = now.subtract(Duration(days: days));
-  final before = progressOf(history.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => history.first).$2);
-  final change = before == 0 ? 0.0 : (progressOf(history.last.$2) / before - 1) * 100;
-  final misses = history.reversed.take(3).where((h) => !h.$2.succeeded).length;
-  return (change > 2 ? Trend.up : misses >= 2 ? Trend.stuck : Trend.flat, change);
+  final before = score(regular.lastWhere((h) => !h.$1.isAfter(cutoff), orElse: () => regular.first).$2);
+  final after = score(regular.last.$2);
+  if (before == null || after == null) return null;
+  final change = before == 0 ? 0.0 : (after / before - 1) * 100;
+  final misses = regular.reversed.take(3).where((h) => !h.$2.succeeded).length;
+  return (change > 2 ? Trend.up : misses >= 2 ? Trend.stuck : change < -2 ? Trend.down : Trend.flat, change);
 }
 
 int weekStreak(Iterable<DateTime> dates, DateTime now, {int perWeek = 1}) =>
@@ -150,6 +162,22 @@ class Exercise {
   /// Bar and available plates for this exercise, in each unit's own denominations.
   Map<WeightUnit, BarbellSetup> barbellSetups;
 
+  /// Smart rests (rest_learning.dart): the rests are starting values, the recap suggests tests of shorter
+  /// or longer rests before each set, and confirmed ones apply. Off: the fixed rests apply as set.
+  bool learnRest;
+
+  /// With a heart rate sensor, extend the rest while the pulse is high (pulse_rest.dart).
+  bool restPulse;
+
+  /// Learned rests: seconds before a set (by index) instead of [restSeconds], confirmed after tests.
+  Map<int, int> setRests;
+
+  /// A longer rest the user agreed to test once, see rest_learning.dart; null when none is pending.
+  RestTrial? restTrial;
+
+  /// When a rest suggestion was last turned down: the same one waits for newer trainings.
+  DateTime? restDeclined;
+
   Exercise({
     required this.name,
     this.weight = 20,
@@ -173,11 +201,19 @@ class Exercise {
     this.state,
     this.loadStep,
     this.barbellSetups = const {},
-  });
+    this.learnRest = false,
+    this.restPulse = true,
+    Map<int, int>? setRests,
+    this.restTrial,
+    this.restDeclined,
+  }) : setRests = setRests ?? {};
 
   /// A cardio exercise with a distance goal ([km]) or else a duration goal ([minutes]).
   Exercise.cardio({required this.name, required int minutes, this.km})
       : barbellSetups = const {},
+        learnRest = false,
+        restPulse = true,
+        setRests = {},
         weight = 0,
         sets = 1,
         reps = km == null ? minutes : 0,
@@ -203,51 +239,60 @@ class Exercise {
       for (final (i, r) in log.reps.indexed)
         if (r != null && i < planned.length && log.weights[i] < planned[i]) i,
     ].isNotEmpty;
-    // Fewer sets than planned (taken off or swapped during the training): the plan holds, no miss.
+    // Skipped, removed or swapped sets hold the plan just like lighter sets do.
     if (lighter) return auto ? Progression.lighter : null;
-    if (log.reps.length < sets) return auto ? Progression.fewer : null;
-    final step = validLoadStep(loadStep) ?? validLoadStep(grid) ?? 2.5;
+    if (log.reps.take(sets).whereType<int>().length < sets) return auto ? Progression.fewer : null;
+    final configuredStep = validLoadStep(loadStep) ?? validLoadStep(log.loadStep);
+    final step = configuredStep ?? validLoadStep(grid) ?? 2.5;
     var delta = 0.0;
     Progression? done;
+    final plannedReps = repsPerSet;
+    final completed = log.reps.indexed.where((entry) => entry.$2 != null);
+    int goal(int i) => i < plannedReps.length ? plannedReps[i] : log.targets[i];
+    final succeeded = completed.every((entry) => entry.$2! >= goal(entry.$1));
     final top = maxReps;
-    final reached = top == null ? log.succeeded : log.reps.every((r) => r != null && r >= top);
+    final reached = top == null ? succeeded : completed.every((entry) => entry.$2! >= top);
     if (auto) {
-      (delta, done) = _auto(log, reached, badDay: badDay, pain: pain, grid: step);
+      (delta, done) = _auto(log, reached, succeeded: succeeded, badDay: badDay, pain: pain, grid: step);
+      if (done == Progression.pain || (!reached && done != Progression.deload)) return done;
     } else if (reached) {
-      if (up && (loadStep == null || fitsLoadStep(increment, step))) delta = increment;
+      if (up && (configuredStep == null || fitsLoadStep(increment, step))) delta = increment;
       fails = 0;
-    } else if (log.succeeded) {
+    } else if (succeeded) {
       fails = 0; // within the range: same weight, go for more reps
     } else if (++fails >= failsToDeload && down) {
-      if (loadStep == null || fitsLoadStep(decrement, step)) delta = -decrement;
+      if (configuredStep == null || fitsLoadStep(decrement, step)) delta = -decrement;
       fails = 0;
     }
     double nextWeight(double kg) {
       if (done == Progression.deload) {
         return kg < 0 ? (kg - step >= minWeight ? kg - step : kg) : deloadTo(kg, step);
       }
-      if (loadStep != null && delta != 0) {
+      if (configuredStep != null && delta != 0) {
         if (kg > 0 && kg + delta <= 0) return kg;
         if (kg + delta < minWeight || kg + delta > 1000) return kg;
       }
       return _next(kg, delta);
     }
+    final useLifted = !auto || reached;
     if (setWeights != null) {
-      // Keep the per-set shape; take what was actually lifted when the set count still matches.
-      final base = log.weights.length == sets ? log.weights : setWeights!;
+      // Keep the per-set shape; take what was lifted when the set count still matches.
+      final base = log.reps.length == sets && useLifted ? log.weights : setWeights!;
       setWeights = [for (final w in base) nextWeight(w)];
       weight = setWeights!.reduce(max);
     } else {
-      weight = nextWeight(log.weight);
+      final lifted = completed.map((entry) => log.weights[entry.$1]).reduce(max);
+      weight = nextWeight(useLifted ? lifted : weight);
     }
     return done;
   }
 
   /// Advance one available step, using the last set’s reported reserve.
-  (double, Progression) _auto(ExerciseLog log, bool reached, {required bool badDay, required bool pain, required double grid}) {
+  (double, Progression) _auto(ExerciseLog log, bool reached,
+      {required bool succeeded, required bool badDay, required bool pain, required double grid}) {
     final a = state ??= AutoState();
     if (pain) return (0, Progression.pain);
-    if (!reached && log.succeeded) {
+    if (!reached && succeeded) {
       fails = a.excused = 0;
       return (0, Progression.range);
     }
@@ -278,7 +323,7 @@ class Exercise {
           : (0, Progression.limit);
     }
 
-    if (log.weights.every((w) => w < 0)) {
+    if (log.assisted) {
       // Assistance does not tell us the total load on the exercise.
       return log.weights.every((w) => w + grid <= 0) ? (grid, Progression.up) : (0, Progression.limit);
     }
@@ -288,16 +333,17 @@ class Exercise {
     final base = a.bridgeFrom ?? reps;
     final extra = reps - base;
     final targets = repsPerSet;
-    if (targets.indexed.any((entry) => log.reps[entry.$1]! < (maxReps ?? entry.$2))) {
-      return (0, Progression.limit);
-    }
     // For varied sets, check each recorded performance against its own next weight and base goal.
-    // The report comes from the last set and acts as a proxy for the reserve in the earlier sets.
+    // The report belongs to the last set. It also covers sets no harder than that one (same or less
+    // weight and target); a heavier set counts with no reserve, so only its own extra reps can carry
+    // the shared step (a heavy triple is not raised on the reserve of a light set of eight after it).
+    final last = targets.length - 1;
     final canRaise = targets.indexed.every((entry) {
       final (i, target) = entry;
       final kg = log.weights[i];
       final goal = maxReps ?? target - extra;
-      final estimated = kg * (30 + log.reps[i]! + reserve) / (30 + goal + 1);
+      final covered = kg <= log.weights[last] && target <= targets[last];
+      final estimated = kg * (30 + log.reps[i]! + (covered ? reserve : 0)) / (30 + goal + 1);
       return kg > 0 && kg + grid <= min(1000, estimated + 1e-8);
     });
     if (canRaise) {
@@ -363,6 +409,11 @@ class Exercise {
         if (auto && state != null) 'autoState': state!.toJson(),
         'loadStep': ?validLoadStep(loadStep),
         if (barbellSetups.isNotEmpty) 'barbellSetups': barbellSetupsToJson(barbellSetups),
+        if (learnRest) 'learnRest': true,
+        if (!restPulse) 'restPulse': false,
+        if (setRests.isNotEmpty) 'setRests': {for (final MapEntry(:key, :value) in setRests.entries) '$key': value},
+        if (restTrial case final t?) 'restTrial': restTrialToJson(t),
+        if (restDeclined case final d?) 'restDeclined': d.toIso8601String(),
       };
 
   factory Exercise.fromJson(Map<String, dynamic> j) => Exercise(
@@ -389,6 +440,14 @@ class Exercise {
         state: j['autoState'] == null ? null : AutoState.fromJson(j['autoState']),
         loadStep: validLoadStep((j['loadStep'] as num?)?.toDouble()),
         barbellSetups: barbellSetupsFromJson(j['barbellSetups']),
+        learnRest: j['learnRest'] == true,
+        restPulse: j['restPulse'] != false,
+        setRests: {
+          for (final MapEntry(:key, :value) in ((j['setRests'] as Map?) ?? const {}).entries)
+            int.parse(key as String): value as int,
+        },
+        restTrial: restTrialFromJson(j['restTrial']),
+        restDeclined: j['restDeclined'] == null ? null : DateTime.parse(j['restDeclined']),
       );
 }
 
@@ -442,6 +501,23 @@ double deloadTo(double kg, double grid, {double share = .9}) {
 enum LoadSource { set, plates, learned, guess }
 
 /// What the auto mode did with an exercise after a training, kept on its log for the recap and the export.
+/// A longer rest before [set] (index) the user agreed to test once, at the load and target it was
+/// suggested for; [since] is when, so the next training after it runs the test.
+typedef RestTrial = ({int set, int seconds, double kg, int target, DateTime since});
+
+Map<String, dynamic> restTrialToJson(RestTrial t) =>
+    {'set': t.set, 'seconds': t.seconds, 'kg': t.kg, 'target': t.target, 'since': t.since.toIso8601String()};
+
+RestTrial? restTrialFromJson(Object? j) => j is Map
+    ? (
+        set: j['set'] as int,
+        seconds: j['seconds'] as int,
+        kg: (j['kg'] as num).toDouble(),
+        target: j['target'] as int,
+        since: DateTime.parse(j['since']),
+      )
+    : null;
+
 enum Progression { up, up2, half, limit, bridge, range, miss, reset, badDay, pain, deload, lighter, fewer, reserveNeeded, stepTooLarge }
 
 /// For the recap, after next time's weight: "↑ 102,5 kg · viel Reserve". [e] is the plan after the training,
@@ -565,6 +641,9 @@ class ExerciseLog {
   /// What the auto mode did after this training; null for a plan without it.
   Progression? progression;
 
+  /// A rest test ran in this training: [trialSeconds] before set [trialSet] (index), see [RestTrial].
+  int? trialSet, trialSeconds;
+
   ExerciseLog({
     required this.name,
     required double weight,
@@ -589,6 +668,8 @@ class ExerciseLog {
     this.rir,
     this.backoff,
     this.progression,
+    this.trialSet,
+    this.trialSeconds,
   })  : weights = weights ?? List.filled(reps.length, weight),
         doneAt = doneAt ?? List.filled(reps.length, null),
         targets = targets ?? List.filled(reps.length, targetReps);
@@ -599,7 +680,7 @@ class ExerciseLog {
         weight: e.weight,
         weights: List.of(e.weights),
         targetReps: e.reps,
-        targets: e.repsPerSet,
+        targets: List.of(e.repsPerSet),
         maxReps: e.maxReps,
         reps: List.filled(e.sets, null, growable: true),
         cardio: e.cardio,
@@ -646,6 +727,8 @@ class ExerciseLog {
       added: added,
       rir: n == done.length ? rir : null, // asked after the last set: open sets again, the answer goes
       backoff: backoff,
+      trialSet: trialSet,
+      trialSeconds: trialSeconds,
     );
   }
 
@@ -679,6 +762,8 @@ class ExerciseLog {
         added: added,
         rir: reps.every((r) => r != null) ? rir : null, // asked after the last set
         backoff: backoff,
+        trialSet: trialSet,
+        trialSeconds: trialSeconds,
       );
 
   /// Target reps of the first set; for cardio the planned minutes.
@@ -686,6 +771,7 @@ class ExerciseLog {
 
   /// Working weight: the heaviest set. Progression and stats build on it.
   double get weight => weights.isEmpty ? 0 : weights.reduce(max); // negative: assistance
+  bool get assisted => reps.indexed.any((entry) => entry.$2 != null && weights[entry.$1] < 0);
 
   bool get succeeded => cardio && targetKm != null
       ? reps.first != null && (km ?? 0) >= targetKm!
@@ -714,6 +800,7 @@ class ExerciseLog {
         'backoff': ?backoff,
         'loadStep': ?validLoadStep(loadStep),
         'progression': ?progression?.name,
+        if ((trialSet, trialSeconds) case (final set?, final seconds?)) 'restTrial': {'set': set, 'seconds': seconds},
         if (barbellSetups.isNotEmpty) 'barbellSetups': barbellSetupsToJson(barbellSetups),
         // A planned exercise has these in the plan; one from outside it keeps them for the running training.
         if (replaces != null || added) ...{
@@ -748,6 +835,8 @@ class ExerciseLog {
         rir: j['rir'],
         backoff: j['backoff'],
         progression: Progression.values.asNameMap()[j['progression']],
+        trialSet: (j['restTrial'] as Map?)?['set'],
+        trialSeconds: (j['restTrial'] as Map?)?['seconds'],
       );
 }
 
@@ -826,6 +915,11 @@ class Session {
   /// or the app being killed doesn't lose it; cleared on finish, so never in the history.
   DateTime? restStartedAt, restPausedAt;
   int? restSeconds;
+  PulseRest? pulseRest; // Live Bluetooth state, kept only while this session is in memory.
+
+  /// Heart rate while training from a Bluetooth sensor: (seconds since [date], bpm), one about every
+  /// [pulseSampleSeconds]. Gaps where the sensor had no signal stay gaps. Empty without a sensor.
+  List<(int, int)> pulse;
 
   /// The plan of each exercise just before this training's progression, by name, so editing or deleting
   /// the training can undo and redo it. Only on the newest training of a workout (an older one's plan has
@@ -848,8 +942,10 @@ class Session {
     this.restSeconds,
     this.restPausedAt,
     this.planBefore,
+    List<(int, int)>? pulse,
   })  : id = id ?? newId(),
         tags = tags ?? [],
+        pulse = pulse ?? [],
         date = date ?? DateTime.now();
 
   int get setsDone => exercises.fold(0, (n, e) => n + e.setsDone);
@@ -902,8 +998,18 @@ class Session {
             for (final MapEntry(:key, :value) in p.entries)
               key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails, 'auto': ?value.auto},
           },
+        if (pulse.isNotEmpty) 'pulse': [for (final (t, bpm) in pulse) [t, bpm]],
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
+
+  /// Records [bpm] at [now] unless the last sample is younger than [pulseSampleSeconds].
+  /// Returns whether it was recorded.
+  bool recordPulse(int bpm, DateTime now) {
+    final t = now.difference(date).inSeconds;
+    if (t < 0 || (pulse.isNotEmpty && t - pulse.last.$1 < pulseSampleSeconds)) return false;
+    pulse.add((t, bpm));
+    return true;
+  }
 
   factory Session.fromJson(Map<String, dynamic> j) => Session(
         id: j['id'],
@@ -931,9 +1037,13 @@ class Session {
             },
           _ => null,
         },
+        pulse: [for (final p in j['pulse'] ?? const []) ((p[0] as num).toInt(), (p[1] as num).toInt())],
         exercises: [for (final e in j['exercises']) ExerciseLog.fromJson(e)],
       );
 }
+
+/// Seconds between two stored heart-rate samples: fine enough for the peak after a set, small in the export.
+const pulseSampleSeconds = 5;
 
 /// Version of the stored JSON (and of the export) this app writes and reads.
 const dataVersion = 1;
@@ -955,10 +1065,11 @@ Map<String, dynamic> migrate(Object? j) {
   return j;
 }
 
-/// The plan entry [log] trains in [w]: the n-th entry of its name for the n-th log of that name in
-/// [logs], so a name that is in the plan twice (only in older data) gives each entry its own result.
+/// The plan entry [log] trains in [w]. Replacements and additions have no plan entry. An exercise
+/// planned twice (only in older data) gets one result per entry, in the order of its planned logs.
 Exercise? planEntryOf(Workout? w, List<ExerciseLog> logs, ExerciseLog log) {
-  final n = logs.takeWhile((l) => !identical(l, log)).where((l) => l.name == log.name).length;
+  if (log.added || log.replaces != null) return null;
+  final n = logs.takeWhile((l) => !identical(l, log)).where((l) => l.name == log.name && !l.added && l.replaces == null).length;
   return w?.exercises.where((e) => e.name == log.name).elementAtOrNull(n);
 }
 
@@ -1059,24 +1170,27 @@ class Store extends ChangeNotifier {
             'after "failsToDeload" missed sessions in a row it drops by "decrement" if "down" is true; a set done lighter than '
             'planned holds the weight (no increase, no miss), an exercise skipped entirely changes nothing. "auto": true = auto mode '
             'instead of increment/up/down/failsToDeload. "loadStep" is the smallest available change in total weight '
-            'in kg for both modes. Fixed changes must be whole multiples of an explicitly configured step. Auto checks '
+            'in kg for both modes. A step set in the plan takes precedence. A step set only in the training applies '
+            'to that result when the plan has no step. Fixed changes must be whole multiples of an explicitly configured step. Auto checks '
             'whether recorded reps and the last set’s repetitions in reserve support the next available weight at the '
             'original rep goal with one rep in reserve. If the step is too large, it can add one rep per set at a time, '
             'up to three above the original goal (autoState.bridgeFrom). Two misses end a bridge, $autoFails in a row '
             'reduce the weight by about 10 percent in available steps. Tags '
             '${badDayTags.map((t) => '"$t"').join(', ')} excuse a miss (2 in a row at most), "$painTag" holds everything. '
             'After 14 days without the exercise a training starts 5 % lighter, 28 days 10 %, 56 days 20 % '
-            '(exercises[].backoff); exercises[].progression describes the outcome. '
+            '(exercises[].backoff), without reducing the plan or changing the rep targets; exercises[].progression describes the outcome. '
             'sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
             'they differ); "failRestSeconds" = rest after a missed set; exercises[].replaces = the planned exercise this '
             'one was swapped in for during the training, exercises[].added = added on top of the plan (both change '
-            'nothing in the plan; sets added or taken off during a training neither: fewer sets than planned hold the weight, '
-            'no increase, no miss); finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
+            'nothing in the plan); fewer completed sets than planned, including skipped sets, hold the weight '
+            '(no increase, no miss). finishedAt = end of the training; bodyWeight (kg), note, mood (1 bad, 2 okay, 3 good) and tags (circumstances like "Schlecht geschlafen", "Alkohol") as entered after it; exercises[].weights '
             'the weight per set, exercises[].weight the heaviest of them. type "cardio": one set whose reps are '
             'minutes (targetReps = planned minutes, 0 when the goal is targetKm), km/targetKm = distance in km, no weight. '
             'type "timed" (held or carried, e.g. plank, farmer\'s walk): reps and targets are seconds, weight optional. '
             'exercises[].doneAt = when each set was logged (null = not done or not recorded); date = start of the training. '
+            'pulse = heart rate from a Bluetooth sensor while training, [seconds since date, bpm] about every '
+            '$pulseSampleSeconds s, gaps = no signal; absent without a sensor. '
             'exercises[].rir = reps in reserve after the last set as the user answered (0 = at the limit, 4 = four or more; '
             'only asked if switched on, missing = not answered). '
             'muscles = muscle groups the user set for an exercise (primary; secondary count half); other exercises '
@@ -1157,6 +1271,7 @@ class Store extends ChangeNotifier {
   Future<void> finishSession(Session s, {DateTime? at}) {
     s.finishedAt = at ?? DateTime.now();
     s.restStartedAt = s.restPausedAt = s.restSeconds = null; // only for the running training
+    s.pulseRest = null;
     active = null;
     _prefs.remove('$_key.active');
     final w = _workoutOf(s);
@@ -1187,12 +1302,6 @@ class Store extends ChangeNotifier {
       log.progression = null;
       // Skipped entirely (no time, no bar): not a miss, the plan stays.
       if (e == null || log.setsDone == 0) continue;
-      if (log.backoff case final pct? when e.auto) {
-        // Back after a break: the lighter start becomes the plan.
-        final ws = comebackWeights(e, pct);
-        if (e.setWeights != null) e.setWeights = ws;
-        e.weight = ws.reduce(max);
-      }
       log.progression = e.applyResult(log, badDay: bad, pain: pain, grid: loadStepOf(e).$1);
     }
   }
@@ -1246,6 +1355,12 @@ class Store extends ChangeNotifier {
       if (comebackOf(e, now) case final pct?) {
         final log = s.exercises[i] = ExerciseLog.fromPlan(e, backoff: pct);
         log.weights.setAll(0, comebackWeights(e, pct));
+        continue; // a comeback is no training to test a rest on
+      }
+      if (pendingTrial(sessions, e) case final t?) {
+        s.exercises[i]
+          ..trialSet = t.set
+          ..trialSeconds = t.seconds;
       }
     }
     return s;
@@ -1384,6 +1499,11 @@ class Store extends ChangeNotifier {
           for (final e in s.exercises)
             if (e.name == exercise && e.setsDone > 0) (s.date, e),
       ];
+
+  (Trend, double)? exerciseTrend(List<(DateTime, ExerciseLog)> history, DateTime now) {
+    return trendOf(history, now,
+        bodyWeightOf: (log) => sessions.where((s) => s.exercises.contains(log)).firstOrNull?.bodyWeight);
+  }
 
   List<String> get loggedExercises => {for (final s in sessions) for (final e in s.exercises) e.name}.toList()..sort();
 }

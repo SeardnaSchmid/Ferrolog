@@ -124,7 +124,10 @@ Map<String, Object?> trainingNotice(Session s, DateTime now) {
         ? reps.replaceFirst('× ', '')
         : '${weightLabel(w)} $reps';
   }
-  final left = s.restLeft(now);
+  final minimum = s.restSeconds ?? 0;
+  final endAfter = s.pulseRest?.endAfter(minimum) ?? minimum;
+  final plannedLeft = s.restLeft(now);
+  final left = plannedLeft == null ? null : plannedLeft + endAfter - minimum;
   final resting = left != null && left > 0;
   return {
     'title': title,
@@ -132,7 +135,7 @@ Map<String, Object?> trainingNotice(Session s, DateTime now) {
     'sub': s.workoutName,
     'restEnd': resting && s.restPausedAt == null
         ? s.restStartedAt!
-              .add(Duration(seconds: s.restSeconds ?? 0))
+              .add(Duration(seconds: endAfter))
               .millisecondsSinceEpoch
         : null,
     'pausedText': resting && s.restPausedAt != null
@@ -144,7 +147,8 @@ Map<String, Object?> trainingNotice(Session s, DateTime now) {
     'alertText': next == null ? tr.notifyFinishHint : '$title · $text',
     'sound': prefs.getBool('rest.sound') ?? true,
     'vibrate': prefs.getBool('rest.vibrate') ?? true,
-    'warning': prefs.getBool('rest.warning') ?? true,
+    'warning': s.pulseRest?.pending != true &&
+        (prefs.getBool('rest.warning') ?? true),
     'channelName': tr.notifyChannelTraining,
     'alertChannelName': tr.notifyChannelRest,
     'alertSilentChannelName': tr.notifyChannelRestSilent,

@@ -7,11 +7,31 @@ import 'package:flutter/services.dart';
 import 'language.dart';
 import 'main.dart';
 import 'model.dart';
+import 'notify.dart';
+import 'pulse_rest.dart';
+import 'pulse_sensor.dart';
 import 'recap.dart';
 import 'timing.dart';
 import 'edit.dart';
 import 'loading.dart';
 import 'units.dart';
+
+const _pulseAfterSet = 150;
+const _secondsPerBeatDrop = 4;
+
+bool get simulatedPulseEnabled => prefs.getBool('demo.simulatedPulse') ?? false;
+
+int _simulatedBpm(int restElapsed) =>
+    max(78, _pulseAfterSet - max(0, restElapsed) ~/ _secondsPerBeatDrop);
+
+// The simulated pulse only falls, so the first second below the threshold can
+// be calculated from the active rest even after the page has been reopened.
+int simulatedRestLeft(int plannedLeft, int minimum) {
+  final belowThresholdAt =
+      (_pulseAfterSet - pulseRestThreshold + 1) * _secondsPerBeatDrop;
+  final endAt = belowThresholdAt.clamp(minimum, minimum * 2);
+  return plannedLeft + endAt - minimum;
+}
 
 /// Live training: tap a set circle to log it (first tap = target reps, each
 /// further tap one rep less, then back to empty). A rest timer runs after each set, in the live strip on top.
@@ -25,10 +45,15 @@ class SessionPage extends StatefulWidget {
 
 class _SessionPageState extends State<SessionPage> {
   Session get s => widget.session;
+  final pulse = PulseMonitor();
+  bool choosingPulse = false;
 
   // The rest lives in the session, so it survives leaving the page and the app being killed.
   DateTime? get lastSetAt => s.restStartedAt;
-  set lastSetAt(DateTime? t) => s.restStartedAt = t;
+  set lastSetAt(DateTime? t) {
+    s.restStartedAt = t;
+    if (t == null) s.pulseRest = null;
+  }
   DateTime? get pausedAt => s.restPausedAt;
   set pausedAt(DateTime? t) => s.restPausedAt = t;
   int get restTarget => s.restSeconds ?? 0;
@@ -82,6 +107,7 @@ class _SessionPageState extends State<SessionPage> {
 
   /// One key per exercise card, to scroll a card back into view.
   final cardKeys = <ExerciseLog, GlobalKey>{};
+
   /// Seconds of rest left at the last tick, to beep at each countdown mark once.
   int? beepLeft;
   late final Timer ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -116,21 +142,112 @@ class _SessionPageState extends State<SessionPage> {
     }
     // Rest countdown: double beep at 30 and 15 s, higher at 3, 2, 1, long at 0, each vibrating, as configured.
     if (lastSetAt != null && pausedAt == null) {
-      final left = restLeft;
-      if (restBeep(beepLeft ?? left, left) case final beep?) restAlert(beep, left);
+      updatePulseRest(pulse.bpm);
+      final left = signalRestLeft;
+      if (restBeep(beepLeft ?? left, left) case final beep?) {
+        if ((!simulatedPulseEnabled && s.pulseRest?.pending != true) ||
+            beep == Beep.end) {
+          restAlert(beep, left);
+        }
+      }
       beepLeft = left;
     }
+    recordPulse();
     setState(() {}); // rest timer and elapsed minutes
   });
 
+  /// The heart rate now: the sensor's, or the simulated one in the demo.
+  int? get currentBpm => simulatedPulseEnabled
+      ? switch (s.restLeft(DateTime.now())) {
+          final left? => _simulatedBpm(restTarget - left),
+          null => hold != null ? 128 : 78,
+        }
+      : pulse.bpm;
+
+  /// Keeps the heart rate for the curve on the recap; saved every few samples, not each one.
+  void recordPulse() {
+    final bpm = currentBpm;
+    if (bpm != null && s.recordPulse(bpm, DateTime.now()) && s.pulse.length % 6 == 0) {
+      store.saveActive(s);
+    }
+  }
+
   /// Seconds of rest left; negative once the rest is over.
   int get restLeft => s.restLeft(DateTime.now())!;
+
+  int get signalRestLeft => effectiveRestLeft(restLeft);
+
+  int effectiveRestLeft(int plannedLeft) => simulatedPulseEnabled
+      ? simulatedRestLeft(plannedLeft, restTarget)
+      : plannedLeft + (s.pulseRest?.endAfter(restTarget) ?? restTarget) - restTarget;
+
+  /// Whether the rest running now may wait for the pulse: the exercise of the last logged set allows it.
+  bool get restUsesPulse {
+    ExerciseLog? last;
+    DateTime? at;
+    for (final l in s.exercises) {
+      for (final t in l.doneAt.nonNulls) {
+        if (at == null || t.isAfter(at)) (at, last) = (t, l);
+      }
+    }
+    return last == null || (planOf(last)?.restPulse ?? true);
+  }
+
+  void resetPulseRest() {
+    s.pulseRest = null;
+    if (!simulatedPulseEnabled && pulse.bpm != null && restUsesPulse) {
+      s.pulseRest = PulseRest()
+        ..update(elapsed: 0, minimum: restTarget, bpm: pulse.bpm);
+    }
+    beepLeft = signalRestLeft;
+  }
+
+  void updatePulseRest(int? bpm) {
+    if (simulatedPulseEnabled || lastSetAt == null || pausedAt != null || !restUsesPulse) return;
+    final elapsed = restTarget - restLeft;
+    if (s.pulseRest == null && (bpm == null || elapsed >= restTarget)) return;
+    final rest = s.pulseRest ??= PulseRest();
+    final wasPending = rest.pending;
+    rest.update(elapsed: elapsed, minimum: restTarget, bpm: bpm);
+    if (wasPending == rest.pending) return;
+    beepLeft = signalRestLeft;
+    if (rest.endedAfter == restTarget * 2) {
+      // The native timer already has this deadline and handles its own alert.
+      unawaited(restAlert(Beep.end, signalRestLeft));
+    } else {
+      unawaited(syncTraining());
+      if (rest.endedAfter != null) unawaited(restAlert());
+    }
+  }
+
+  void pulseChanged() {
+    if (!mounted || store.active != s) return;
+    updatePulseRest(pulse.bpm);
+    setState(() {});
+  }
+
+  Future<void> choosePulse() async {
+    setState(() => choosingPulse = true);
+    try {
+      final selected = await pickPulseSensor(context);
+      if (!mounted || selected == null || store.active != s) return;
+      if (!await pulse.connect(selected) && mounted && store.active == s) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr.pulseConnectFailed)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr.pulseScanFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => choosingPulse = false);
+    }
+  }
 
   void restartRest() {
     setState(() {
       lastSetAt = DateTime.now();
       if (pausedAt != null) pausedAt = lastSetAt;
-      beepLeft = restTarget;
+      resetPulseRest();
     });
     store.saveActive(s);
   }
@@ -145,15 +262,17 @@ class _SessionPageState extends State<SessionPage> {
         pausedAt = null;
       }
     });
+    if (pausedAt == null) updatePulseRest(pulse.bpm);
     store.saveActive(s);
   }
 
   @override
   void initState() {
     super.initState();
+    pulse.addListener(pulseChanged);
     ticker; // start
     // Reopened: count on from here, no beep for marks passed while the app was away.
-    beepLeft = lastSetAt == null ? null : restLeft;
+    beepLeft = lastSetAt == null ? null : signalRestLeft;
     // A timed set running when the app was closed carries on.
     for (final log in s.exercises) {
       if (log.timed && log.startedAt != null) {
@@ -171,6 +290,16 @@ class _SessionPageState extends State<SessionPage> {
   @override
   void dispose() {
     ticker.cancel();
+    pulse.removeListener(pulseChanged);
+    if (store.active == s && s.pulseRest?.pending == true) {
+      if (pausedAt == null) {
+        updatePulseRest(null);
+      } else {
+        s.pulseRest = null;
+        unawaited(syncTraining());
+      }
+    }
+    pulse.dispose();
     keepScreenOn(false);
     showWhenLocked(false);
     super.dispose();
@@ -182,12 +311,16 @@ class _SessionPageState extends State<SessionPage> {
     log,
   );
 
-  /// Rest after a set of [log]: the plan's, else what came with a swapped-in or added exercise.
-  int restAfter(ExerciseLog log, {required bool missed}) {
+  /// Rest after set [set] of [log]: the plan's, else what came with a swapped-in or added exercise.
+  /// After a miss its own rest comes first; else a rest test or a rest learned for the next set.
+  int restAfter(ExerciseLog log, int set, {required bool missed}) {
     final plan = planOf(log);
     final rest = plan?.restSeconds ?? log.restSeconds ?? 120;
     final fail = plan != null ? plan.failRestSeconds : log.failRestSeconds;
-    return missed ? fail ?? rest : rest;
+    if (missed && fail != null) return fail;
+    if ((log.trialSet, log.trialSeconds) case (final t?, final seconds?) when t == set + 1) return seconds;
+    // Learned rests only with smart rests; fixed ones apply as set.
+    return (plan != null && plan.learnRest ? plan.setRests[set + 1] : null) ?? rest;
   }
 
   /// Puts [next] where [old] was. Logs are replaced, never resized in place, and the page keys its
@@ -301,10 +434,15 @@ class _SessionPageState extends State<SessionPage> {
   void swapExercise(ExerciseLog log, Exercise e) {
     if (log.setsDone > 0) {
       final left = max(1, e.sets - log.setsDone);
+      final remaining = e.sets == log.reps.length && log.setsDone < e.sets
+          ? [for (final (i, reps) in log.reps.indexed) if (reps == null) i]
+          : [for (var i = e.sets - left; i < e.sets; i++) i];
+      final weights = e.setWeights;
+      final targets = e.setReps;
       e = e.copy()
         ..sets = left
-        ..setWeights = e.setWeights?.sublist(e.sets - left)
-        ..setReps = e.setReps?.sublist(e.sets - left);
+        ..setWeights = weights == null ? null : [for (final i in remaining) weights[i]]
+        ..setReps = targets == null ? null : [for (final i in remaining) targets[i]];
     }
     final next = ExerciseLog.fromPlan(
       e,
@@ -430,8 +568,8 @@ class _SessionPageState extends State<SessionPage> {
     if (held < 1) return;
     lastSetAt = DateTime.now();
     pausedAt = null;
-    restTarget = restAfter(h.log, missed: held < target);
-    beepLeft = restTarget;
+    restTarget = restAfter(h.log, h.set, missed: held < target);
+    resetPulseRest();
   }
 
   void tapSet(ExerciseLog log, int i) {
@@ -498,8 +636,8 @@ class _SessionPageState extends State<SessionPage> {
       if (log.reps[i] case final done?) {
         lastSetAt = DateTime.now();
         pausedAt = null;
-        restTarget = restAfter(log, missed: done < target);
-        beepLeft = restTarget;
+        restTarget = restAfter(log, i, missed: done < target);
+        resetPulseRest();
         if (r == null && askRir(log)) {
           rirAsk = log;
         }
@@ -583,6 +721,8 @@ class _SessionPageState extends State<SessionPage> {
         touched ??
         s.exercises.where((e) => e.setsDone < e.reps.length).firstOrNull;
     final now = DateTime.now();
+    final simulatedBpm = simulatedPulseEnabled ? currentBpm : null;
+    final liveBpm = pulse.bpm;
     final left = sessionLeft(s, pace, now);
     // What's left of the training and when it'll be done, null when nothing is left.
     final (leftText, endText) = left <= Duration.zero
@@ -609,6 +749,16 @@ class _SessionPageState extends State<SessionPage> {
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
         ),
         actions: [
+          if (!simulatedPulseEnabled)
+            IconButton(
+              tooltip: pulse.device != null ? tr.pulseDisconnect : tr.pulseSensor,
+              onPressed: choosingPulse || pulse.busy
+                  ? null
+                  : pulse.device != null
+                  ? pulse.disconnect
+                  : choosePulse,
+              icon: Icon(pulse.device != null ? Icons.bluetooth_connected : Icons.bluetooth),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(onPressed: finish, child: Text(tr.finish)),
@@ -657,17 +807,29 @@ class _SessionPageState extends State<SessionPage> {
                             color: c.onSurfaceVariant,
                           ),
                         ),
-                        const Spacer(),
+                        if (simulatedBpm != null) ...[
+                          const SizedBox(width: 8),
+                          Text(tr.simulatedPulse(simulatedBpm), style: muted),
+                        ],
+                        if (pulse.device != null) ...[
+                          const SizedBox(width: 8),
+                          Text(liveBpm == null ? tr.pulseNoSignal : tr.livePulse(liveBpm), style: muted),
+                        ],
                         // While the line below is taken, what's left of the training moves up here.
-                        Text(
-                          [
-                            tr.setsDone(done, total),
-                            if (status != null && left > Duration.zero)
-                              aboutLabel(left),
-                          ].join(' · '),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: c.onSurfaceVariant,
+                        Expanded(
+                          child: Text(
+                            [
+                              tr.setsDone(done, total),
+                              if (simulatedBpm == null &&
+                                  pulse.device == null &&
+                                  status != null &&
+                                  left > Duration.zero)
+                                aboutLabel(left),
+                            ].join(' · '),
+                            textAlign: TextAlign.end,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: muted,
                           ),
                         ),
                       ],
@@ -687,15 +849,18 @@ class _SessionPageState extends State<SessionPage> {
                     child: status == null
                         ? Row(
                             children: [
-                              Text(
-                                leftText ?? '',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: c.onSurface,
+                              Expanded(
+                                child: Text(
+                                  leftText ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: c.onSurface,
+                                  ),
                                 ),
                               ),
-                              const Spacer(),
                               if (endText case final end?)
                                 Text(
                                   end,
@@ -842,11 +1007,18 @@ class _SessionPageState extends State<SessionPage> {
             );
     }
     if (lastSetAt == null) return null;
-    final left = restLeft;
+    final plannedLeft = restLeft;
+    final left = effectiveRestLeft(plannedLeft);
+    final pulseControlsRest = simulatedPulseEnabled || s.pulseRest?.pending == true;
+    final waitingForPulse = pulseControlsRest && plannedLeft <= 0 && left > 0;
     final fraction = restTarget == 0
         ? 0.0
-        : (left / restTarget).clamp(0.0, 1.0);
-    final time = left > 0 ? clock(left) : '+${clock(-left)}';
+        : (plannedLeft / restTarget).clamp(0.0, 1.0);
+    final time = waitingForPulse
+        ? clock(restTarget + plannedLeft)
+        : plannedLeft > 0
+        ? clock(plannedLeft)
+        : '+${clock(-left)}';
     final buttons = [
       pausedAt == null
           ? _roundButton(Icons.pause, tr.pause, toggleRestPause)
@@ -859,19 +1031,37 @@ class _SessionPageState extends State<SessionPage> {
       _roundButton(Icons.restart_alt, tr.restart, restartRest),
     ];
     final of = tr.restOf(clock(restTarget)),
-        goal = tr.restGoal(clock(restTarget));
+        goal = tr.restGoal(clock(restTarget + left - plannedLeft));
     if (pausedAt != null) {
       return (
         time: time,
         color: c.onSurfaceVariant,
         icon: Icons.pause,
         word: tr.stripPaused,
-        detail: left > 0 ? of : goal,
+        detail: waitingForPulse
+            ? tr.pulseRestTarget(pulseRestThreshold)
+            : left > 0
+            ? of
+            : goal,
         buttons: buttons,
         bar: RestBar(color: c.primary, fraction: fraction, dashed: true),
       );
     }
-    return switch (restZone(left, restTarget)) {
+    if (waitingForPulse) {
+      return (
+        time: time,
+        color: c.primary,
+        icon: Icons.favorite_border,
+        word: tr.stripWaitingForPulse,
+        detail: tr.pulseRestTarget(pulseRestThreshold),
+        buttons: buttons,
+        bar: RestBar(color: c.primary, empty: true),
+      );
+    }
+    final zone = pulseControlsRest && plannedLeft > 0
+        ? RestZone.rest
+        : restZone(left, restTarget);
+    return switch (zone) {
       RestZone.rest => (
         time: time,
         color: c.primary,

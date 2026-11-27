@@ -1,6 +1,7 @@
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
 import 'package:ferrolog/notify.dart';
+import 'package:ferrolog/pulse_rest.dart';
 import 'package:ferrolog/units.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -123,6 +124,27 @@ void main() {
   });
 
   group('training notification', () {
+    test('pulse rest schedules the time limit without an early warning', () {
+      final start = DateTime(2026, 11, 16, 18, 10);
+      final s = on(a, start)
+        ..restStartedAt = start
+        ..restSeconds = 30
+        ..pulseRest = (PulseRest()..update(elapsed: 0, minimum: 30, bpm: 140));
+      final pending = trainingNotice(s, start);
+      expect(
+        pending['restEnd'],
+        start.add(const Duration(seconds: 60)).millisecondsSinceEpoch,
+      );
+      expect(pending['warning'], isFalse);
+
+      s.pulseRest!.update(elapsed: 35, minimum: 30, bpm: 109);
+      final released = trainingNotice(
+        s,
+        start.add(const Duration(seconds: 35)),
+      );
+      expect(released['restEnd'], isNull);
+    });
+
     test(
       'the next set after the one logged last, its weight and reps; the rest as its end',
       () async {

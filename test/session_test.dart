@@ -345,6 +345,88 @@ void main() {
     expect(jsonEncode(paused.toJson()), isNot(contains('rest')), reason: 'never in the history or the export');
   });
 
+  testWidgets('simulated pulse extends rest without an early or repeated signal', (
+    tester,
+  ) async {
+    final calls = <String>[];
+    const alert = MethodChannel('ferrolog/alert');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(alert, (call) async {
+      if (call.method == 'restOver') calls.add(call.arguments['beep'] as String);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(alert, null));
+    await prefs.setBool('demo.simulatedPulse', true);
+    addTearDown(() => prefs.remove('demo.simulatedPulse'));
+    final w = Workout(
+      name: 'Pulse demo',
+      exercises: [
+        Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5, restSeconds: 90),
+      ],
+    );
+    await store.saveWorkout(w);
+    final s = Session.start(w);
+    await store.saveActive(s);
+    tester.view.physicalSize = const Size(500, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    expect(find.text('78 bpm (sim.)'), findsOneWidget);
+    await tester.tap(find.text('–/5', findRichText: true).first);
+    await tester.pump();
+    expect(find.text('150 bpm (sim.)'), findsOneWidget);
+
+    Future<void> at(int elapsed) async {
+      s.restStartedAt = DateTime.now().subtract(
+        Duration(seconds: elapsed, milliseconds: 100),
+      );
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    await at(89);
+    expect(find.text('WARTE AUF PULS'), findsNothing);
+    await at(90);
+    expect(find.text('WARTE AUF PULS'), findsOneWidget);
+    expect(find.text('128 bpm (sim.)'), findsOneWidget);
+    await at(163);
+    expect(find.text('110 bpm (sim.)'), findsOneWidget);
+    expect(calls, isEmpty);
+    await tester.tap(find.byTooltip('Anhalten'));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('ANGEHALTEN'), findsOneWidget);
+    expect(find.text('110 bpm (sim.)'), findsOneWidget);
+    expect(calls, isEmpty);
+    await tester.tap(find.byTooltip('Weiter'));
+    await at(164);
+    expect(find.text('109 bpm (sim.)'), findsOneWidget);
+    expect(find.text('LOS'), findsOneWidget);
+    await at(165);
+    expect(calls, ['end']);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MaterialApp(home: SessionPage(s)));
+    await at(166);
+    expect(calls, ['end'], reason: 'reopening does not replay the signal');
+
+    s.restSeconds = 30;
+    await tester.tap(find.byTooltip('Neu starten'));
+    await at(59);
+    expect(find.text('WARTE AUF PULS'), findsOneWidget);
+    await at(60);
+    expect(find.text('135 bpm (sim.)'), findsOneWidget);
+    expect(find.text('LOS'), findsOneWidget);
+    expect(calls, ['end', 'end'], reason: 'the cap overrides a high pulse');
+
+    s.restSeconds = 180;
+    await tester.tap(find.byTooltip('Neu starten'));
+    await at(164);
+    expect(find.text('LOS'), findsNothing);
+    await at(180);
+    expect(find.text('LOS'), findsOneWidget);
+    expect(calls, ['end', 'end', 'end'], reason: 'minimum rest still applies');
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('rest fields: JSON round trip, omitted when unset', () {
     final w = Workout(name: 'Push A', exercises: [Exercise(name: 'Bankdrücken', weight: 60, sets: 3, reps: 5)]);
     final s = Session.start(w);
@@ -363,8 +445,8 @@ void main() {
 
   testWidgets('change the training: swap, add, sets, order; saved each time, the plan stays', (tester) async {
     final w = Workout(name: 'Pull', exercises: [
-      Exercise(name: 'Rudern', weight: 50, sets: 3, reps: 8, restSeconds: 120),
-      Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 6, restSeconds: 150),
+      Exercise(name: 'Rudern', weight: 50, sets: 3, reps: 6, maxReps: 8, restSeconds: 120),
+      Exercise(name: 'Klimmzüge', weight: 0, sets: 3, reps: 6, setReps: [6, 7, 8], restSeconds: 150),
     ]);
     await store.saveWorkout(w);
     final s = Session.start(w);
@@ -393,9 +475,13 @@ void main() {
     }
 
     /// "Bearbeiten" with another name: the editor opens with the exercise as it is.
-    Future<void> rename(String name) async {
+    Future<void> rename(String name, {bool useSuggestion = false}) async {
       await tester.enterText(find.byType(TextField).first, name);
       await tester.pump();
+      if (useSuggestion) {
+        await tester.tap(find.widgetWithText(ChoiceChip, name));
+        await tester.pump();
+      }
       await tester.tap(find.text('Übernehmen'));
       await settle();
     }
@@ -406,11 +492,13 @@ void main() {
     await menu(0, 'Bearbeiten');
     expect(find.text('Automatisch'), findsNothing, reason: 'progression belongs to the plan');
     expect(find.text('Dieses Training · antippen zum Ändern'), findsOneWidget);
-    await rename('Kabelrudern');
+    await rename('Kabelrudern', useSuggestion: true);
     expect(names(), ['Kabelrudern 3', 'Klimmzüge 3']);
     expect(find.text('statt Rudern'), findsOneWidget);
     expect(s.exercises.first.replaces, 'Rudern');
-    expect(s.exercises.first.weight, 50, reason: 'from the exercise it replaces');
+    expect(s.exercises.first.weight, 40, reason: 'equipment defaults come from the replacement');
+    expect(s.exercises.first.targets, [6, 6, 6]);
+    expect(s.exercises.first.maxReps, 8);
 
     // Same name: a set more on the pull-ups; another exercise's name is refused.
     await menu(1, 'Bearbeiten');
@@ -443,13 +531,14 @@ void main() {
     expect(names(), hasLength(3));
 
     // One set of pull-ups done, then the rest swapped: the done set stays, the new one follows.
-    await tester.tap(find.text('–/6', findRichText: true).first);
+    await tester.tap(find.text('–/7', findRichText: true));
     await tester.pump();
     await menu(0, 'Bearbeiten');
     await rename('Latziehen');
     expect(names(), ['Klimmzüge 1', 'Latziehen 3', 'Kabelrudern 3', 'Facepulls 3']);
-    expect(s.exercises[0].reps, [6]);
+    expect(s.exercises[0].reps, [7]);
     expect(s.exercises[1].replaces, 'Klimmzüge');
+    expect(s.exercises[1].targets, [6, 8, 8]);
 
     // An added exercise can go again while nothing is logged; a planned one can't.
     await menu(3, 'Entfernen');

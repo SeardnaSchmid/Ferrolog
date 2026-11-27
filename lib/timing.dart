@@ -211,3 +211,80 @@ String? timeTaken(Session s, String name, {bool perSet = false}) {
   final avg = m.gaps.fold(0, (sum, g) => sum + g.inSeconds) ~/ m.gaps.length;
   return tr.everySet(takenLabel(m.total), '${avg ~/ 60}:${(avg % 60).toString().padLeft(2, '0')}');
 }
+
+/// Which rest the timer gave before a set: the normal one (or one learned for that set), the one
+/// after a missed set, or a rest test.
+enum RestKind { normal, afterMiss, trial }
+
+/// One rest and the set after it, for learning rests (docs/puls.md, "Lernende Pausen"). The rest is
+/// an estimate: from one logged tap to the next, minus the next set's work. Belongs to the set after it.
+typedef RestObservation = ({
+  DateTime date,
+  String name,
+  int set, // index of the set after the rest, ≥ 1
+  int target,
+  int reps,
+  double kg,
+  Duration rest,
+  RestKind kind,
+  int planned, // the rest the timer gave, seconds
+  bool priorMet, // every earlier set of the exercise reached its target
+  int? rir, // only on the last set, where it was asked
+  bool regular, // not swapped in or added, no comeback, pain, bad day, lighter or skipped sets
+});
+
+/// The rests between the sets of [log] in [s]. [plan] is the exercise as planned, for its rests; else
+/// what came with the log. Left out, so never guessed: the first set, a set after a skipped one, a
+/// missing or out-of-order timestamp, another exercise logged in between, a negative estimate and a
+/// gap longer than [_maxGap]. The reps of those sets still count for the progression.
+List<RestObservation> restObservations(Session s, ExerciseLog log, {Exercise? plan}) {
+  if (log.cardio) return const [];
+  final rest = plan?.restSeconds ?? log.restSeconds ?? 120;
+  final fail = plan != null ? plan.failRestSeconds : log.failRestSeconds;
+  final others = [
+    for (final e in s.exercises)
+      if (e != log) ...[...e.doneAt.nonNulls, ?e.startedAt],
+  ];
+  final last = log.reps.length - 1;
+  final regular = log.replaces == null &&
+      !log.added &&
+      log.backoff == null &&
+      !s.tags.contains(painTag) &&
+      !isBadDay(s) &&
+      log.progression != Progression.lighter &&
+      log.progression != Progression.fewer;
+  final out = <RestObservation>[];
+  for (var i = 1; i <= last; i++) {
+    final (before, after) = (log.doneAt[i - 1], log.doneAt[i]);
+    final (prev, reps) = (log.reps[i - 1], log.reps[i]);
+    if (before == null || after == null || prev == null || reps == null || !after.isAfter(before)) continue;
+    if (others.any((t) => t.isAfter(before) && t.isBefore(after))) continue;
+    final work = log.timed ? reps.toDouble() : reps * _perRep(log.name);
+    final estimated = after.difference(before) - Duration(milliseconds: (work * 1000).round());
+    if (estimated.isNegative || estimated > _maxGap) continue;
+    final missed = prev < log.targets[i - 1];
+    final trial = !(missed && fail != null) && log.trialSet == i ? log.trialSeconds : null;
+    out.add((
+      date: s.date,
+      name: log.name,
+      set: i,
+      target: log.targets[i],
+      reps: reps,
+      kg: log.weights[i],
+      rest: estimated,
+      kind: missed && fail != null ? RestKind.afterMiss : trial != null ? RestKind.trial : RestKind.normal,
+      planned: missed && fail != null ? fail : trial ?? (plan != null && plan.learnRest ? plan.setRests[i] : null) ?? rest,
+      priorMet: [for (var j = 0; j < i; j++) (log.reps[j] ?? -1) >= log.targets[j]].every((ok) => ok),
+      rir: i == last ? log.rir : null,
+      regular: regular,
+    ));
+  }
+  return out;
+}
+
+/// "rund 2 Min", "rund 2½ Min": an estimated rest to the nearest half minute, never to the second.
+String restAboutLabel(Duration d) {
+  final halves = max(1, (d.inSeconds / 30).round());
+  final whole = halves ~/ 2;
+  return tr.restAbout(halves.isOdd ? (whole == 0 ? '½' : '$whole½') : '$whole');
+}

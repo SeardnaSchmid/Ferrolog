@@ -260,10 +260,10 @@ List<(String, double)> exercisesFor(Muscle m, Iterable<Session> sessions) {
 /// object of a sentence), [aLabel] and [bLabel] name what's counted, [note] what counts half.
 enum Pair {
   pushPullFlat(1, 1.5),
-  pushPullOverhead(1, double.infinity),
-  rearDelts(.5, double.infinity),
-  quadsHamstrings(.6, double.infinity),
-  rotators(.5, double.infinity),
+  pushPullOverhead(1, 1.5),
+  rearDelts(.5, 1),
+  quadsHamstrings(.6, 1),
+  rotators(.5, 1),
   core(.75, 1.35);
 
   const Pair(this.low, this.high);
@@ -282,7 +282,7 @@ enum Pair {
         rotators => (a: tr.groupInternalRot, b: tr.groupExternalRot, aObject: tr.objInternalRot,
             bObject: tr.objExternalRot, aLabel: tr.sideInternalRot, bLabel: tr.sideExternalRot, note: tr.notePressHalf),
         core => (a: tr.groupAbs, b: tr.groupLowerBack, aObject: tr.objAbs, bObject: tr.objLowerBack,
-            aLabel: tr.sideAbs, bLabel: tr.sideLowerBack, note: tr.noteHingeSquatHalf),
+            aLabel: tr.sideAbs, bLabel: tr.sideLowerBack, note: null),
       };
   String get a => _texts.a;
   String get b => _texts.b;
@@ -302,13 +302,20 @@ void loadBalanceGuides() {
   final raw = prefs.getString('balance.guides');
   if (raw == null) return;
   final map = jsonDecode(raw) as Map<String, dynamic>;
-  balanceGuides.value = {
-    for (final MapEntry(:key, :value) in map.entries)
-      ?Pair.values.asNameMap()[key]: (
-        (value[0] as num).toDouble(),
-        value[1] == null ? double.infinity : (value[1] as num).toDouble(),
-      ),
-  };
+  final guides = <Pair, (double, double)>{};
+  for (final pair in Pair.values) {
+    if (map[pair.name] case final List<dynamic> values) {
+      guides[pair] = _readBalanceGuide(pair, values);
+    }
+  }
+  balanceGuides.value = guides;
+}
+
+(double, double) _readBalanceGuide(Pair pair, List<dynamic> values) {
+  final low = (values[0] as num).toDouble();
+  // Open guides saved by older versions keep their minimum and gain an upper bound.
+  final high = (values[1] as num?)?.toDouble() ?? max(pair.high, low + .05);
+  return (low, high);
 }
 
 /// Stores [p]'s guide values; the defaults again remove the own ones. Null: all back to the defaults.
@@ -397,8 +404,7 @@ bool _externalRotation(String k) =>
 /// How much one set of [name] counts on each side of [pair], as (side a, side b). Pressing: chest
 /// (flat), or shoulders with the triceps helping (overhead); both work the front delts and rotate
 /// inwards, there they count half. Pulling: rows train the middle back (flat, rear delts half),
-/// pull-ups and pulldowns the lats (from above). Legs and core by the muscles, helpers half; lower
-/// back in compound lifts (deadlift, squat) half too.
+/// pull-ups and pulldowns the lats (from above). Legs and core by assigned muscles, helpers half.
 (double, double) shareOf(Pair pair, String name) {
   final (p, sec) = musclesOf(name) ?? (0, 0);
   bool has(int bits, Muscle m) => bits & m.bit != 0;
@@ -428,16 +434,7 @@ bool _externalRotation(String k) =>
     ),
     Pair.quadsHamstrings => (muscle(Muscle.quadriceps), muscle(Muscle.hamstrings)),
     Pair.rotators => (flat || overhead ? .5 : 0, _externalRotation(k) ? 1 : 0),
-    Pair.core => (
-      muscle(Muscle.abdominals),
-      has(p, Muscle.lowerBack)
-          ? (has(p, Muscle.hamstrings) || has(p, Muscle.glutes) || has(p, Muscle.quadriceps) || has(p, Muscle.traps)
-                ? .5
-                : 1)
-          : has(sec, Muscle.lowerBack)
-          ? .5
-          : 0,
-    ),
+    Pair.core => (muscle(Muscle.abdominals), muscle(Muscle.lowerBack)),
   };
 }
 
@@ -456,14 +453,16 @@ const balanceDays = 28;
 
 /// The pairs from [sessions] (newest first) over [weeks]; a pair shows once either side was trained
 /// (nothing on one side is the clearest imbalance).
-List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
+List<Balance> balances(List<Session> sessions, {double weeks = 1}) => _balances(sessions, Pair.values, weeks);
+
+List<Balance> _balances(Iterable<Session> sessions, List<Pair> pairs, double weeks) {
   final sums = {
-    for (final p in Pair.values) p: [0.0, 0.0],
+    for (final p in pairs) p: [0.0, 0.0],
   };
   for (final s in sessions) {
     for (final e in s.exercises) {
       if (e.cardio || e.setsDone == 0) continue;
-      for (final p in Pair.values) {
+      for (final p in pairs) {
         final (a, b) = shareOf(p, e.name);
         sums[p]![0] += e.setsDone * a;
         sums[p]![1] += e.setsDone * b;
@@ -476,31 +475,62 @@ List<Balance> balances(List<Session> sessions, {double weeks = 1}) {
   ];
 }
 
+/// Weekly samples of the trailing four weeks, oldest first. Null marks a window in which neither
+/// side was trained. Sessions are newest first and can include workouts before [from].
+List<(DateTime, Balance?)> balanceHistory(Pair pair, List<Session> sessions, DateTime from, DateTime now) {
+  final samples = <(DateTime, Balance?)>[];
+  final pairs = [pair];
+  var newest = 0, oldest = 0;
+  var date = now;
+  while (true) {
+    while (newest < sessions.length && sessions[newest].date.isAfter(date)) {
+      newest++;
+    }
+    oldest = max(oldest, newest);
+    final cutoff = date.subtract(const Duration(days: balanceDays));
+    while (oldest < sessions.length && sessions[oldest].date.isAfter(cutoff)) {
+      oldest++;
+    }
+    final window = _balances(sessions.getRange(newest, oldest), pairs, balanceDays / 7);
+    samples.add((date, window.firstOrNull));
+    if (!date.isAfter(from)) break;
+    date = date.subtract(const Duration(days: 7));
+    if (date.isBefore(from)) date = from;
+  }
+  return samples.reversed.toList();
+}
+
 /// The two strength ratios of the barbell lifts over [sessions] (newest first, e.g. 90 days), as
 /// (name, at the start, now) in percent: rows to bench press, deadlift to squat. Each lift's level is
-/// its best 1RM of four trainings, the first four for the start, the latest four for now; the
-/// strongest lift of a family counts. Shown as a course, not against values from the literature.
+/// the earliest training of each lift family for the start and the best of the latest four
+/// trainings per lift for now. The strongest estimate counts within each sample.
 List<(String, double, double)> strengthTrends(List<Session> sessions) {
-  double? level(Iterable<Session> ordered, bool Function(String) family) {
-    final four = <String, List<double>>{};
-    for (final s in ordered) {
+  double? start(bool Function(String) family) {
+    for (final s in sessions.reversed) {
+      final estimates = s.exercises.where((e) => family(searchKey(e.name))).map(estimated1rm);
+      final best = estimates.fold(0.0, max);
+      if (best > 0) return best;
+    }
+    return null;
+  }
+
+  double? current(bool Function(String) family) {
+    final samples = <String, List<double>>{};
+    for (final s in sessions) {
       for (final e in s.exercises) {
-        if (e.cardio || e.weight <= 0 || e.setsDone == 0 || !family(searchKey(e.name))) continue;
-        final list = four.putIfAbsent(e.name, () => []);
-        if (list.length < 4) list.add(estimated1rm(e));
+        if (!family(searchKey(e.name))) continue;
+        final estimate = estimated1rm(e);
+        if (estimate <= 0) continue;
+        final list = samples.putIfAbsent(e.name, () => []);
+        if (list.length < 4) list.add(estimate);
       }
     }
-    return four.isEmpty ? null : four.values.map((v) => v.reduce(max)).reduce(max);
+    return samples.isEmpty ? null : samples.values.map((v) => v.reduce(max)).reduce(max);
   }
 
   final result = <(String, double, double)>[];
   for (final (name, b, a) in [(tr.ratioRowBench, _row, _press), (tr.ratioHingeSquat, _hinge, _squat)]) {
-    final (a0, b0, a1, b1) = (
-      level(sessions.reversed, a),
-      level(sessions.reversed, b),
-      level(sessions, a),
-      level(sessions, b),
-    );
+    final (a0, b0, a1, b1) = (start(a), start(b), current(a), current(b));
     if (a0 == null || b0 == null || a1 == null || b1 == null) continue;
     result.add((name, b0 / a0 * 100, b1 / a1 * 100));
   }

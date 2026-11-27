@@ -67,6 +67,22 @@ void main() {
     expect(e.repsPerSet, [10, 8]);
   });
 
+  test('the last set reserve does not raise a heavier set before it', () {
+    Exercise plan() => Exercise(
+        name: 'Bankdrücken', weight: 100, sets: 3, reps: 3, setWeights: [100, 70, 70], setReps: [3, 8, 8], auto: true);
+    ExerciseLog done(List<int> reps, int rir) => ExerciseLog(
+        name: 'Bankdrücken', weight: 100, targetReps: 3, targets: [3, 8, 8], reps: reps, rir: rir, weights: [100, 70, 70]);
+    final e = plan();
+    expect(e.applyResult(done([3, 8, 8], 4), grid: 2.5), Progression.bridge, reason: 'reserve 4 belongs to the light set');
+    expect(e.weights, [100, 70, 70]);
+    expect(plan().applyResult(done([5, 8, 8], 4), grid: 2.5), Progression.up, reason: 'extra reps on the heavy set count');
+
+    final ramp = Exercise(name: 'Kniebeuge', weight: 100, sets: 3, reps: 5, setWeights: [90, 95, 100], auto: true);
+    final rampLog = ExerciseLog(
+        name: 'Kniebeuge', weight: 100, targetReps: 5, reps: [5, 5, 5], rir: 3, weights: [90, 95, 100]);
+    expect(ramp.applyResult(rampLog, grid: 2.5), Progression.up, reason: 'lighter earlier sets share the reserve');
+  });
+
   test('a deliberate rep range stays in place, including at the top', () {
     final range = Exercise(name: 'Curls', weight: 12, sets: 3, reps: 8, maxReps: 12, auto: true);
     expect(range.applyResult(_log(12, [12, 11, 10], target: 8, maxReps: 12), grid: 2), Progression.range);
@@ -146,6 +162,26 @@ void main() {
       expect(ExerciseLog.fromJson(ExerciseLog.fromPlan(fixed).toJson()).loadStep, 5);
     });
 
+    test('a recorded equipment step governs progression when the plan has none', () async {
+      final squat = w.exercises[0]..weight = 122.5;
+      final bench = w.exercises[1];
+      final s = store.startSession(w);
+      s.exercises[0] = s.exercises[0].reshaped(squat.copy()..loadStep = 10)
+        ..weights.setAll(0, [130, 130, 130])
+        ..reps.setAll(0, [5, 5, 5])
+        ..rir = 2;
+      s.exercises[1] = s.exercises[1].reshaped(bench.copy()..loadStep = 5)
+        ..reps.setAll(0, [5, 5, 5]);
+      final saved = Session.fromJson(jsonDecode(jsonEncode(s.toJson())));
+      await store.finishSession(saved);
+      expect((squat.weight, squat.reps, squat.state?.bridgeFrom), (130, 6, 5));
+      expect(saved.exercises[0].progression, Progression.bridge);
+      expect(bench.weight, 60, reason: 'the fixed 2.5 kg increase does not fit');
+      expect(squat.loadStep, isNull, reason: 'a training-only edit stays local');
+      store.reapplyProgression(saved);
+      expect((squat.weight, squat.reps), (130, 6));
+    });
+
     test('a training: auto takes one step, curls bridge, fixed progression still works', () async {
       final s = await train(DateTime(2026, 11, 2, 18), [5, 5, 5], rir: 3);
       expect(w.exercises[0].weight, 102.5, reason: 'one available step');
@@ -159,7 +195,7 @@ void main() {
       expect(w.exercises[2].state, isNull);
     });
 
-    test('back after a break: 5/10/20 % lighter, then standard progression', () async {
+    test('back after a break: 5/10/20 % lighter for the session, same plan and targets', () async {
       await train(DateTime(2026, 10, 1, 18), [5, 5, 5], rir: 3);
       expect(w.exercises[0].weight, 102.5);
       for (final (now, pct) in [
@@ -175,11 +211,26 @@ void main() {
       final s = await train(DateTime(2026, 10, 20, 18), [5, 5, 5], rir: 2);
       expect(s.exercises[0].backoff, 5);
       expect(s.exercises[0].weights, [95, 95, 95], reason: 'three 2.5 kg steps below 102.5');
+      expect(s.exercises[0].targets, [5, 5, 5]);
+      expect(s.exercises[0].progression, Progression.lighter);
       expect(s.exercises[1].weights, [62.5, 62.5, 62.5], reason: 'fixed mode starts as planned');
-      expect(w.exercises[0].weight, 97.5);
+      expect((w.exercises[0].weight, w.exercises[0].fails), (102.5, 0));
+
+      store.reapplyProgression(s);
+      expect(w.exercises[0].weight, 102.5);
 
       await store.deleteSession(s);
       expect(w.exercises[0].weight, 102.5);
+    });
+
+    test('lighter and incomplete sets retain an earlier miss; lower targets cannot trigger a raise', () {
+      final press = _squat(kg: 50);
+      expect(press.applyResult(_log(50, [5, 5, 4])), Progression.miss);
+      expect(press.applyResult(_log(50, [5, null, 4])), Progression.fewer);
+      expect(press.applyResult(_log(50, [5, 4, 4], weights: [52.5, 52.5, 45]), badDay: true), Progression.lighter);
+      expect((press.weight, press.fails), (50, 1));
+      expect(press.applyResult(_log(52.5, [4, 4, 4], target: 4, rir: 4)), Progression.miss);
+      expect((press.weight, press.fails), (50, 2));
     });
 
     test('tags entered on the recap: a bad day excuses, pain holds, the mood doesn\'t count', () async {

@@ -5,6 +5,8 @@ import 'edit_session.dart';
 import 'language.dart';
 import 'main.dart';
 import 'model.dart';
+import 'pulse_chart.dart';
+import 'rest_learning.dart';
 import 'timing.dart';
 import 'units.dart';
 
@@ -65,6 +67,146 @@ class _RecapPageState extends State<RecapPage> {
                 ? base
                 : toKg(((shown(base) * 10).round() + dir) / 10);
       });
+
+  /// Smart rests for [e] after this training ([l] its log): how a rest test went, then what's next:
+  /// adopt it, test a shorter or longer rest once, the test already planned, or that other rests are missing.
+  Widget? restNote(ExerciseLog l, Exercise e, TextStyle small) {
+    final sessions = store.sessions;
+    final result = switch ((l.trialSet, l.trialSeconds)) {
+      (final set?, final seconds?) when set < l.reps.length && l.reps[set] != null => tr.restTrialOutcome(
+        set + 1,
+        restAboutLabel(
+          restObservations(s, l, plan: e).where((o) => o.set == set).firstOrNull?.rest ?? Duration(seconds: seconds),
+        ),
+        clock(restBefore(e, set)),
+        l.reps.fold(0, (sum, r) => sum + (r ?? 0)),
+        l.targets.fold(0, (sum, t) => sum + t),
+      ),
+      _ => null,
+    };
+    // Whether the test counts: compared only with trainings that had the same preload.
+    final judged = result == null ? null : trialOutcomeOf(sessions, l, e);
+    String after(PreloadInfo p) => p.by == null ? tr.restNoPreload : tr.restAfterSets(p.sets, p.by!);
+    final verdict = switch (judged) {
+      (TrialOutcome.worked, final p) when p.stage == Preload.loaded && p.by != null => tr.restTrialWorkedAfter(after(p)),
+      (TrialOutcome.worked, _) => tr.restTrialWorked,
+      (TrialOutcome.failed, _) => tr.restTrialFailed,
+      (TrialOutcome.noComparison, final p) when p.stage == Preload.unknown => tr.restTrialUnclear,
+      (TrialOutcome.noComparison, final p) =>
+        tr.restTrialNoComparison(p.stage == Preload.loaded ? after(p) : tr.restNoPreload),
+      null => null,
+    };
+    final adopt = restToAdopt(sessions, e);
+    final suggestion = restSuggestion(sessions, e);
+    final pending = pendingTrial(sessions, e);
+    final (String? text, List<(String, VoidCallback)> actions) = switch (adopt) {
+      final a? => (
+        tr.restAdoptAsk(a.worked, clock(a.seconds), a.set + 1),
+        [(tr.restAdopt, () => adoptRest(e, a.set, a.seconds)), (tr.restAdoptNo, () => e.restDeclined = s.date)],
+      ),
+      _ => switch (suggestion) {
+        final g? => (
+          [
+            ?switch (g.stage) {
+              Preload.loaded when g.by != null => tr.restStageAfter(g.by!),
+              Preload.none => tr.restStageFresh,
+              _ => null,
+            },
+            switch (g.change) {
+            RestChange.longer => tr.restSuggest(
+              g.set + 1,
+              restAboutLabel(Duration(seconds: g.before)),
+              g.beforeMet,
+              g.beforeN,
+              restAboutLabel(Duration(seconds: g.seconds)),
+              g.met,
+              g.n,
+              clock(g.seconds),
+            ),
+            RestChange.shorter => tr.restSuggestShorter(
+              g.set + 1,
+              g.n,
+              restAboutLabel(Duration(seconds: g.before)),
+              clock(g.seconds),
+              clock(g.current),
+            ),
+            RestChange.tryShorter => tr.restSuggestTryShorter(g.n, g.set + 1, clock(g.seconds), clock(g.current)),
+          },
+          ].join(' '),
+          [
+            (
+              tr.restTryOnce,
+              () => e.restTrial = (
+                set: g.set,
+                seconds: g.seconds,
+                kg: e.weights[g.set],
+                target: e.repsPerSet[g.set],
+                since: DateTime.now(),
+              ),
+            ),
+            (tr.restKeep, () => e.restDeclined = s.date),
+          ],
+        ),
+        _ when pending != null => (
+          tr.restTrialPending(clock(pending.seconds), pending.set + 1),
+          [(tr.restTrialCancel, () => e.restTrial = null)],
+        ),
+        _ => switch (restNeedsVariety(sessions, e)) {
+          final set? => (tr.restNeedsVariety(set + 1), const <(String, VoidCallback)>[]),
+          _ => (null, const <(String, VoidCallback)>[]),
+        },
+      },
+    };
+    if (result == null && text == null) return null;
+    final plan = store.workouts.where((w) => w.id == s.workoutId).firstOrNull;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.av_timer, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (result != null) Text(verdict == null ? result : '$result\n$verdict', style: small),
+            if (text != null) ...[if (result != null) const SizedBox(height: 4), Text(text)],
+            if (actions.isNotEmpty)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  children: [
+                    // The first action is the main one, on the right.
+                    for (final (i, (label, act)) in actions.indexed.toList().reversed)
+                      if (plan == null)
+                        TextButton(onPressed: null, child: Text(label))
+                      else if (i == 0)
+                        FilledButton.tonal(onPressed: () => apply(act, plan), child: Text(label))
+                      else
+                        TextButton(onPressed: () => apply(act, plan), child: Text(label)),
+                  ],
+                ),
+              ),
+            if (actions.isEmpty) const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> apply(VoidCallback act, Workout plan) async {
+    setState(act);
+    await store.saveWorkout(plan);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,12 +383,18 @@ class _RecapPageState extends State<RecapPage> {
             timed: {for (final l in s.exercises) if (l.timed) l.name},
             actions: const [],
           ),
+          for (final (l, e) in nextOf.values)
+            if (restNote(l, e, small) case final note?) ...[const SizedBox(height: 5), note],
           if (figures.isNotEmpty) ...[
             const SizedBox(height: 5),
             Card(
               margin: EdgeInsets.zero,
               child: Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Row(children: figures)),
             ),
+          ],
+          if (s.pulse.length >= 2) ...[
+            const SizedBox(height: 10),
+            PulseCard(s),
           ],
           const SizedBox(height: 10),
           Card(

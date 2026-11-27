@@ -225,7 +225,7 @@ PlanImport parsePlanImport(String text) {
 }
 
 /// Settings an exercise keeps when the AI leaves them out.
-const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 'autoState', 'loadStep', 'restSeconds', 'failRestSeconds', 'barbellSetups'];
+const _kept = ['increment', 'up', 'decrement', 'down', 'failsToDeload', 'auto', 'autoState', 'loadStep', 'restSeconds', 'failRestSeconds', 'barbellSetups', 'learnRest', 'restPulse', 'setRests', 'restTrial', 'restDeclined'];
 
 /// One exercise from the AI: what it left out from the plan's exercise of that name ([_kept]) or the app's
 /// defaults, and [Exercise.fails] kept. Its why and muscles go into [why] and [muscles].

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:ferrolog/main.dart';
 import 'package:ferrolog/model.dart';
+import 'package:ferrolog/pulse_chart.dart';
 import 'package:ferrolog/units.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -160,6 +161,35 @@ void main() {
     ExerciseLog pull(List<int?> reps) => ExerciseLog(name: 'Klimmzüge', weight: 0, targetReps: 5, reps: reps);
     final pullUps = [(now.subtract(const Duration(days: 30)), pull([5, 4, 3])), (now, pull([5, 5, 5]))];
     expect(trendOf(pullUps, now)?.$1, Trend.up, reason: 'bodyweight: more reps is progress');
+  });
+
+  test('assisted trend uses per-set help and measured body weight; backoff is excluded', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await Store.open();
+    final now = DateTime(2026, 11, 24);
+    Session train(int day, double? bodyWeight, List<double> weights, List<int> reps, {int? backoff}) => Session(
+      workoutId: 'w', workoutName: 'A', date: DateTime(2026, 11, day), bodyWeight: bodyWeight,
+      exercises: [ExerciseLog(name: 'Klimmzüge', weight: 0, weights: weights, targetReps: 5, reps: reps, backoff: backoff)],
+    );
+    final newest = train(24, 93, [-5, -10, -20], [5, 4, 3]);
+    final baseline = train(10, 91, [0, 0, 0], [5, 4, 3]);
+    store.sessions = [newest, baseline];
+    (Trend, double)? trend() => store.exerciseTrend(store.historyOf('Klimmzüge'), now);
+    expect(trend()!.$2, closeTo((991 / 1092 - 1) * 100, .001));
+    expect(newest.exercises.single.assisted, isTrue);
+
+    final earlier = train(22, 92, [0, -15, -20], [5, 4, 4]);
+    store.sessions = [train(24, 93, [-5, -10, -20], [5, 4, 3], backoff: 5), earlier, baseline];
+    expect(trend()!.$2, closeTo((1056 / 1092 - 1) * 100, .001));
+    earlier.bodyWeight = null;
+    expect(trend(), isNull);
+
+    ExerciseLog row(double weight, {int? backoff}) =>
+        ExerciseLog(name: 'Rudern', weight: weight, targetReps: 6, reps: [6, 6, 6], backoff: backoff);
+    final rowing = [(baseline.date, row(40)), (earlier.date, row(38)), (newest.date, row(35, backoff: 5))];
+    final (direction, change) = trendOf(rowing, now)!;
+    expect(direction, Trend.down);
+    expect(change, closeTo(-5, .001));
   });
 
   test('switching increase/decrease off keeps the step; old files with 0 read as off', () {
@@ -378,5 +408,25 @@ void main() {
     expect(log.reshaped(Exercise(name: 'Bankdrücken', weight: 70, sets: 4, reps: 5)).rir, isNull, reason: 'a set more to do');
     expect(rirLabel(0), 'am Limit');
     expect([1, 4].map(rirLabel), ['1 Wdh. Reserve', '4+ Wdh. Reserve']);
+  });
+
+  test('heart rate: sampled every few seconds, stored, summed up', () {
+    final start = DateTime(2026, 11, 26, 18);
+    final s = Session(workoutId: 'w', workoutName: 'A', date: start, exercises: []);
+    expect(s.recordPulse(90, start), isTrue);
+    expect(s.recordPulse(95, start.add(const Duration(seconds: 2))), isFalse, reason: 'too soon');
+    expect(s.recordPulse(120, start.add(const Duration(seconds: 5))), isTrue);
+    expect(s.recordPulse(80, start.subtract(const Duration(seconds: 5))), isFalse, reason: 'before the start');
+    s.recordPulse(130, start.add(const Duration(seconds: 10)));
+    expect(s.toJson()['pulse'], [[0, 90], [5, 120], [10, 130]]);
+    expect(Session.fromJson(jsonDecode(jsonEncode(s.toJson()))).pulse, s.pulse);
+    expect(Session(workoutId: 'w', workoutName: 'A', exercises: []).toJson().containsKey('pulse'), isFalse);
+
+    final sum = pulseSummary(s.pulse)!;
+    expect((sum.avg, sum.max), (113, 130));
+    expect(sum.above, const Duration(seconds: 5), reason: 'only from 120 on, above the threshold');
+    s.pulse.add((600, 140));
+    expect(pulseSummary(s.pulse)!.above, const Duration(seconds: 5), reason: 'a gap counts nothing');
+    expect(pulseSummary([(0, 90)]), isNull);
   });
 }

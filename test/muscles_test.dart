@@ -68,8 +68,14 @@ void main() {
         reason: 'helpers count half: squat and deadlift each help the other side');
     expect(b[Pair.quadsHamstrings]!.lagging, isNull, reason: '71 % is above 60 %');
     expect((b[Pair.rotators]!.aValue, b[Pair.rotators]!.lagging), (4.5, 'Außenrotation'), reason: 'nothing rotates outwards');
-    expect((b[Pair.core]!.aValue, b[Pair.core]!.bValue, b[Pair.core]!.lagging), (0, 3.5, 'Bauch'),
-        reason: 'lower back: squat and rows help, the deadlift counts half');
+    expect((b[Pair.core]!.aValue, b[Pair.core]!.bValue, b[Pair.core]!.lagging), (0, 4, 'Bauch'),
+        reason: 'squat and rows count half, deadlift counts as primary');
+    await setMuscles('Farmers Walk', (Muscle.forearms.bit, Muscle.lowerBack.bit));
+    final coreSessions = [...sessions, s([log('Farmers Walk', 44)])];
+    final core = balances(coreSessions).firstWhere((b) => b.pair == Pair.core);
+    expect(core.bValue, 5.5);
+    expect(core.bValue, setsPerSingleMuscle(coreSessions)[Muscle.lowerBack]);
+    await setMuscles('Farmers Walk', defaultMuscles('Farmers Walk')!);
     expect(b.containsKey(Pair.pushPullOverhead), isFalse, reason: 'nothing pressed overhead, no pull-ups');
 
     final overhead = balances([s([log('Schulterdrücken', 50, 5), log('Klimmzüge', 0)])]);
@@ -91,12 +97,62 @@ void main() {
     await setBalanceGuide(null);
     expect(guideOf(Pair.pushPullFlat), (1, 1.5));
 
-    // Strength: the first four trainings against the latest four.
+    // Strength: the first training against the best of the latest four.
     final trend = strengthTrends([
       for (var i = 0; i < 4; i++) s([log('Bankdrücken', 100), log('Langhantelrudern', 65)], i * 2),
       for (var i = 0; i < 4; i++) s([log('Bankdrücken', 80), log('Langhantelrudern', 60)], 60 + i * 2),
     ]);
     expect(trend.single.$1, 'Rudern : Bankdrücken');
     expect((trend.single.$2.round(), trend.single.$3.round()), (75, 65));
+    final short = strengthTrends([
+      s([log('Bankdrücken', 100), log('Langhantelrudern', 55)]),
+      s([log('Bankdrücken', 80), log('Langhantelrudern', 45)], 14),
+    ]);
+    expect((short.single.$2.round(), short.single.$3.round()), (56, 55));
+  });
+
+  test('balance guides have two inclusive limits and upgrade older minimum-only guides', () async {
+    expect(Pair.values.every((pair) => pair.high.isFinite && pair.low < pair.high), isTrue);
+    final pair = Pair.rotators;
+    for (final (sets, lagging) in [(0.0, 1), (2.0, null), (4.0, null), (5.0, 0)]) {
+      expect(Balance(pair, 4, sets).laggingSide, lagging);
+    }
+
+    addTearDown(() => setBalanceGuide(null));
+    await prefs.setString('balance.guides', '{"rotators":[0.7,null],"rearDelts":[2,null],"core":[0.8,1.4]}');
+    loadBalanceGuides();
+    expect(guideOf(pair), (.7, 1.0), reason: 'the custom minimum survives');
+    expect(guideOf(Pair.rearDelts), (2.0, 2.05), reason: 'a high custom minimum still has a usable range');
+    expect(guideOf(Pair.core), (.8, 1.4), reason: 'existing bounded guides stay as saved');
+  });
+
+  test('balance history uses trailing windows and leaves gaps when neither side trained', () {
+    final now = DateTime(2026, 11, 24, 12);
+    DateTime ago(int days) => now.subtract(Duration(days: days));
+    ExerciseLog log(String name, {bool cardio = false, bool skipped = false}) =>
+        ExerciseLog(name: name, weight: 60, targetReps: 5, reps: [5, 5, skipped ? null : 5], cardio: cardio);
+    Session session(int days, List<ExerciseLog> exercises) =>
+        Session(workoutId: 'w', workoutName: 'A', date: ago(days), exercises: exercises);
+    final sessions = [
+      session(-1, [log('Langhantelrudern')]),
+      session(0, [log('Bankdrücken', skipped: true), log('Langhantelrudern', cardio: true)]),
+      session(14, [log('Bankdrücken')]),
+      session(28, [log('Langhantelrudern')]),
+      session(70, [log('Langhantelrudern')]),
+    ];
+
+    final history = Map.fromEntries(
+      balanceHistory(Pair.pushPullFlat, sessions, ago(70), now).map((point) => MapEntry(point.$1, point.$2)),
+    );
+    expect(history.keys, [for (var days = 70; days >= 0; days -= 7) ago(days)]);
+    expect(history[ago(70)]!.laggingSide, 0, reason: 'only upper back trained');
+    expect(history[ago(42)], isNull, reason: 'exactly 28 days back is outside the window');
+    expect(history[ago(14)]!.ratio, 1);
+    expect(history[ago(14)]!.laggingSide, isNull);
+    expect(history[now]!.aValue, 1.25, reason: 'only five completed strength sets count over four weeks');
+    expect(history[now]!.laggingSide, 1, reason: 'cardio and future workouts stay outside the sample');
+    final short = balanceHistory(Pair.pushPullFlat, sessions, ago(3), now);
+    expect(short.map((point) => point.$1), [ago(3), now]);
+    expect(short.first.$2!.ratio, 1, reason: 'the window includes sessions before the displayed period');
   });
 }

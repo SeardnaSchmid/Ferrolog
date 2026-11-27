@@ -229,14 +229,72 @@ def demo_data():
                 s['mood'] = 1 if bad else random.choice([2, 3, 3])
             if tags:
                 s['tags'] = tags
+            # A Bluetooth heart-rate strap for the last three weeks (see pulse_samples).
+            if (end - day).days <= 21:
+                s['pulse'] = pulse_samples(date, finished, exercises, random.Random(7000 + n))
             sessions.append(s)
             n += 1
         day += dt.timedelta(days=1)
+
+    # Learning rests: the bench press stalls for its last eight A trainings at one weight. Before set 5 it
+    # rested about 3 min or about 4 min; after 3 min it reached 5 reps once in four, after 4 min three times,
+    # so the recap suggests testing 4:00 (with "Pausen lernen" on). Like the curl swap, close enough: the
+    # fixed steps would have raised the weight after a full success.
+    rests = [(180, 4), (240, 5), (180, 4), (240, 5), (180, 5), (240, 4), (180, 4), (240, 5)]
+    bench = [s for s in sessions if s['workoutId'] == 'wA'][-len(rests):]
+    stall = bench[0]['planBefore']['Bankdrücken']['weight']
+    rr = random.Random(9000)
+    for s, (rest, last) in zip(bench, rests):
+        e = next(e for e in s['exercises'] if e['name'] == 'Bankdrücken')
+        e.update({'weight': stall, 'weights': [stall] * 5, 'reps': [5, 5, 5, 5, last]})
+        e['rir'] = 0 if last < 5 else rr.choice([0, 1])
+        s['planBefore']['Bankdrücken'] = {'weight': stall, 'fails': 0}
+        times = [dt.datetime.fromisoformat(t) for t in e['doneAt']]
+        moved = times[3] + dt.timedelta(seconds=rest + rr.uniform(-8, 8) + last * 4.5)
+        shift = moved - times[4]
+        e['doneAt'][4] = moved.isoformat()
+        # What came after moves along, so nothing else lands between the sets.
+        for x in s['exercises'][s['exercises'].index(e) + 1:]:
+            x['doneAt'] = [None if t is None else (dt.datetime.fromisoformat(t) + shift).isoformat() for t in x.get('doneAt') or []] \
+                if x.get('doneAt') else x.get('doneAt')
+            if x.get('doneAt') is None:
+                x.pop('doneAt', None)
+        start_at = dt.datetime.fromisoformat(s['date'])
+        finished = dt.datetime.fromisoformat(s['finishedAt']) + shift
+        s['finishedAt'] = finished.isoformat()
+        if 'pulse' in s:
+            s['pulse'] = pulse_samples(start_at, finished, s['exercises'], random.Random(7000 + int(s['id'][4:])))
+    weight['Bankdrücken'], fails['Bankdrücken'] = stall, 0
+
+    # Machines taken: in every third B training of the last two months the deadlift came first, before the
+    # squats. Only the timestamps change, not the plan's order, like in the gym: the squats then come after
+    # a set sharing the glutes, the deadlift without the five squat sets before it (rest_learning.dart preload).
+    b_timed = [s for s in sessions if s['workoutId'] == 'wB' and all('doneAt' in e for e in s['exercises'])]
+    for s in b_timed[::3]:
+        ex = [e for e in s['exercises'] if e.get('doneAt') and None not in e['doneAt']]
+        if not any(e['name'] == 'Kreuzheben' for e in ex):
+            continue
+        ex.sort(key=lambda e: e['doneAt'][0])
+        when = lambda t: dt.datetime.fromisoformat(t)
+        # Each exercise keeps its own set times and the lead-in before it; only the order changes.
+        lead = {id(e): when(e['doneAt'][0]) - (when(ex[i - 1]['doneAt'][-1]) if i else dt.datetime.fromisoformat(s['date']))
+                for i, e in enumerate(ex)}
+        order = [e for e in ex if e['name'] == 'Kreuzheben'] + [e for e in ex if e['name'] != 'Kreuzheben']
+        clock = dt.datetime.fromisoformat(s['date'])
+        for e in order:
+            shift = clock + lead[id(e)] - when(e['doneAt'][0])
+            e['doneAt'] = [(when(t) + shift).isoformat() for t in e['doneAt']]
+            clock = when(e['doneAt'][-1])
+        if 'pulse' in s:
+            s['pulse'] = pulse_samples(dt.datetime.fromisoformat(s['date']), dt.datetime.fromisoformat(s['finishedAt']),
+                                       s['exercises'], random.Random(7000 + int(s['id'][4:])))
 
 
     def plan(name, sets, reps, w, step=2.5, cardio=False, timed=False, top=None):
         e = {'name': name, 'weight': w, 'sets': sets, 'reps': reps, 'increment': step, 'up': True, 'decrement': 10.0,
              'down': True, 'failsToDeload': 3, 'fails': fails.get(name, 0), 'restSeconds': 180 if sets == 5 else 90}
+        if sets == 5:
+            e['learnRest'] = True  # like heavy lifts in the app: the bench press recap shows a rest test
         if cardio:
             e.update({'type': 'cardio', 'up': False})
         if timed:
@@ -274,6 +332,34 @@ def demo_data():
     return {'app': 'ferrolog', 'version': 1, 'units': 'kg', 'workouts': workouts, 'sessions': sessions}
 
 
+def pulse_samples(start, finished, exercises, rnd):
+    """Heart rate every 5 s as [seconds since start, bpm]: it climbs during each set (steeper for heavy
+    lifts, flat out for cardio), falls back in the rest and drifts up over the training. Now and then the
+    strap loses contact for a minute, which leaves a gap."""
+    efforts = []  # (from, to, target bpm), seconds since start
+    for e in exercises:
+        for i, t in enumerate(e.get('doneAt') or []):
+            if t is None:
+                continue
+            done = (dt.datetime.fromisoformat(t) - start).total_seconds()
+            if e.get('type') == 'cardio':
+                efforts.append((done - e['reps'][0] * 60, done, rnd.uniform(140, 150)))
+            else:
+                work = e['reps'][i] if e.get('type') == 'timed' else 4 * (e['reps'][i] or 0)
+                heavy = e['weight'] > 60
+                efforts.append((done - work, done, rnd.uniform(150, 168) if heavy else rnd.uniform(122, 138)))
+    total = int((finished - start).total_seconds())
+    lost = rnd.uniform(.3, .8) * total if rnd.random() < .3 else None
+    bpm, out = rnd.uniform(78, 88), []
+    for sec in range(total + 1):
+        rest = 88 + 10 * sec / max(total, 1)
+        target = next((b for a, z, b in efforts if a <= sec <= z), rest)
+        bpm += (target - bpm) / (12 if target > bpm else 40)  # quick to rise, slower to fall
+        if sec % 5 == 0 and not (lost and lost <= sec < lost + 60):
+            out.append([sec, round(bpm + rnd.uniform(-1.5, 1.5))])
+    return out
+
+
 # The demo's exercises under the names the app's English catalogue gives them (exerciseNamesEn).
 ENGLISH = {
     'Kniebeuge': 'Squat', 'Bankdrücken': 'Bench Press', 'Langhantelrudern': 'Barbell Row',
@@ -306,15 +392,19 @@ def seed_script(english=False):
     value = json.dumps(json.dumps(data, ensure_ascii=False))
     return (
         '<script>(() => {\n'
-        "  const reset = new URLSearchParams(location.search).has('reset');\n"
+        "  const url = new URL(location.href);\n"
+        "  const reset = url.searchParams.has('reset');\n"
+        "  const pulse = url.searchParams.has('pulse');\n"
+        "  if (reset || !localStorage.getItem('flutter.ferrolog')) localStorage.clear();\n"
+        "  if (pulse) localStorage.setItem('flutter.demo.simulatedPulse', 'true');\n"
+        "  else localStorage.removeItem('flutter.demo.simulatedPulse');\n"
         "  if (!reset && localStorage.getItem('flutter.ferrolog')) return;\n"
-        '  localStorage.clear();\n'
         f"  localStorage.setItem('flutter.ferrolog', {json.dumps(value)});\n"
         "  localStorage.setItem('flutter.unit', '\"kg\"');\n"
         # The demo has answered reps in reserve, so it asks for them too.
         "  localStorage.setItem('flutter.session.askRir', 'true');\n"
         + ("  localStorage.setItem('flutter.language', '\"en\"');\n" if english else '') +
-        "  if (reset) history.replaceState(null, '', location.pathname);\n"
+        "  if (reset) history.replaceState(null, '', location.pathname + (pulse ? '?pulse' : ''));\n"
         '})();</script>\n'
     )
 

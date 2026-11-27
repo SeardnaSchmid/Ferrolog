@@ -1080,9 +1080,6 @@ class L10nEn extends L10n {
   String get notePressHalf => 'presses count half';
 
   @override
-  String get noteHingeSquatHalf => 'deadlifts and squats count half';
-
-  @override
   String get ratioRowBench => 'Row : bench press';
 
   @override
@@ -1758,6 +1755,51 @@ class L10nEn extends L10n {
   String get stripRest => 'REST';
 
   @override
+  String get stripWaitingForPulse => 'WAITING FOR HEART RATE';
+
+  @override
+  String simulatedPulse(int bpm) {
+    return '$bpm bpm (sim.)';
+  }
+
+  @override
+  String pulseRestTarget(int bpm) {
+    return 'Below $bpm bpm or at 0:00';
+  }
+
+  @override
+  String get pulseSensor => 'Connect heart rate sensor';
+
+  @override
+  String get pulseDisconnect => 'Disconnect heart rate sensor';
+
+  @override
+  String get pulseSearching => 'Searching for heart rate sensors…';
+
+  @override
+  String get pulseChooseSensor => 'Select your heart rate sensor.';
+
+  @override
+  String get pulseNoDevices =>
+      'No sensor found. Enable heart rate broadcast on your sensor.';
+
+  @override
+  String get pulseScanFailed =>
+      'Bluetooth scan failed. Check Bluetooth and app permissions.';
+
+  @override
+  String get pulseConnectFailed =>
+      'Could not connect to the heart rate sensor.';
+
+  @override
+  String get pulseNoSignal => 'Heart rate: no signal';
+
+  @override
+  String livePulse(int bpm) {
+    return '$bpm bpm';
+  }
+
+  @override
   String get stripSoon => 'ALMOST';
 
   @override
@@ -1851,7 +1893,28 @@ class L10nEn extends L10n {
 
   @override
   String get balanceScaleHint =>
-      'The dot points to the side with more sets. In the light field it\'s balanced. Tap a pair for advice and numbers.';
+      'In the shaded area the pair is balanced. Tap a pair for its history and details.';
+
+  @override
+  String get balanceHistory => 'Balance history';
+
+  @override
+  String balanceHistoryGuide(Object range) {
+    return 'Target range · $range';
+  }
+
+  @override
+  String balanceHistoryHint(Object days) {
+    return 'Weekly snapshots of the previous $days days. Tap a point to see its ratio.';
+  }
+
+  @override
+  String get balanceHistoryNoSets => 'No sets for either group';
+
+  @override
+  String balanceImbalance(Object group) {
+    return 'Imbalance · $group below guide';
+  }
 
   @override
   String get strengthTrend => 'Strength over time';
@@ -1885,16 +1948,6 @@ class L10nEn extends L10n {
 
   @override
   String get balanced => '✓ Balanced';
-
-  @override
-  String verdictSlightly(Object strong, Object weak) {
-    return '$strong trained slightly more than $weak';
-  }
-
-  @override
-  String verdictClearly(Object strong, Object weak) {
-    return '$strong trained clearly more than $weak';
-  }
 
   @override
   String get balanceInfoTitle => 'Balance: what\'s behind it';
@@ -1949,6 +2002,10 @@ class L10nEn extends L10n {
       'For abs and lower back, studies disagree on which side is weaker with back pain [8, 9]. The guide is therefore wide and symmetrical.';
 
   @override
+  String get infoGuideRanges =>
+      'FerroLog uses adjustable target ranges for the ratio of completed sets.';
+
+  @override
   String get infoMath => 'How FerroLog calculates';
 
   @override
@@ -1971,7 +2028,7 @@ class L10nEn extends L10n {
 
   @override
   String get infoScale1 =>
-      'The dot points to the side that gets more sets. In the light field in the middle the pair is within its guide.';
+      'The shaded band marks the target range. Outside the band, the dot points toward the side with more sets relative to the guide.';
 
   @override
   String get infoScale2 =>
@@ -2320,8 +2377,50 @@ class L10nEn extends L10n {
   String get over20 => 'over 20';
 
   @override
+  String musclesBelowReference(Object names) {
+    return 'Under 10 sets per week · $names';
+  }
+
+  @override
   String get muscleBarsHint =>
-      'Bars: sets per week. Band 10–20: the usual range for muscle growth. Orange: under 10.';
+      'Green marks the muscle growth reference range of 10–20 sets per week.';
+
+  @override
+  String get muscleVolumeInfoTitle => 'Why 10–20 sets?';
+
+  @override
+  String get muscleVolumeInfoEvidence =>
+      'Research finds more muscle growth on average with more weekly sets, with diminishing returns at higher volumes. Fewer sets can still work. In one study with trained men, biceps thickness increased with nine sets per week.';
+
+  @override
+  String get muscleVolumeInfoRange =>
+      '10–20 sets per muscle per week is a rough reference. A review suggested 12–20 sets for young, trained men, with different results by muscle group. The volume that suits you also depends on training experience, effort, and recovery.';
+
+  @override
+  String get muscleGoal => 'Personal weekly goal';
+
+  @override
+  String get muscleGoalInput => 'Sets per week';
+
+  @override
+  String get muscleGoalHelp => 'Leave blank to remove the goal.';
+
+  @override
+  String get muscleGoalInvalid => 'Enter a whole number greater than zero.';
+
+  @override
+  String muscleGoalValue(num n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n sets',
+      one: '1 set',
+    );
+    return 'Weekly goal · $_temp0';
+  }
+
+  @override
+  String get muscleGoalReached => '✓ Weekly goal reached';
 
   @override
   String get musclesNote =>
@@ -2382,6 +2481,9 @@ class L10nEn extends L10n {
 
   @override
   String get trendRising => 'rising';
+
+  @override
+  String get trendDeclining => 'falling';
 
   @override
   String get trendSteady => 'steady';
@@ -2600,5 +2702,232 @@ class L10nEn extends L10n {
   @override
   String progDeloadNoChange(Object fails) {
     return 'Goal not reached in $fails consecutive workouts';
+  }
+
+  @override
+  String get recapPulse => 'Heart rate';
+
+  @override
+  String recapPulseSummary(int avg, int max) {
+    return 'avg $avg · max $max bpm';
+  }
+
+  @override
+  String get recapPulseRest => 'rest';
+
+  @override
+  String recapPulseAbove(int minutes, int bpm) {
+    return '$minutes min above $bpm bpm';
+  }
+
+  @override
+  String restAbout(String n) {
+    return 'about $n min';
+  }
+
+  @override
+  String restSuggest(
+    int set,
+    String short,
+    int shortMet,
+    int shortN,
+    String long,
+    int longMet,
+    int longN,
+    String time,
+  ) {
+    return 'Before set $set you reached the target $shortMet of $shortN times after $short, $longMet of $longN times after $long. Test $time next time?';
+  }
+
+  @override
+  String get restTryOnce => 'Test once';
+
+  @override
+  String get restKeep => 'Keep as is';
+
+  @override
+  String restTrialPending(String time, int set) {
+    return 'Next training: $time rest before set $set as a test';
+  }
+
+  @override
+  String get restTrialCancel => 'Don\'t test';
+
+  @override
+  String restAdoptAsk(int worked, String time, int set) {
+    return '$worked tests with $time before set $set worked. Keep it for good?';
+  }
+
+  @override
+  String get restAdopt => 'Adopt';
+
+  @override
+  String get restAdoptNo => 'Don\'t adopt';
+
+  @override
+  String restNeedsVariety(int set) {
+    return 'Set $set still needs trainings with rests of different lengths';
+  }
+
+  @override
+  String get restBeforeSetRemove => 'Remove learned rest';
+
+  @override
+  String get restSmart => 'Smart';
+
+  @override
+  String get restFixed => 'Fixed';
+
+  @override
+  String get restSmartHelp => 'How smart rests work';
+
+  @override
+  String get restSmartHint =>
+      'Learns from your set taps and suggests tests in the recap.';
+
+  @override
+  String get restRuleStartTitle => 'Starting values';
+
+  @override
+  String get restRuleStart =>
+      'The times below apply until your trainings show otherwise. Each rest before a set learns on its own. The rest after a missed set stays as you set it.';
+
+  @override
+  String get restRuleMeasureTitle => 'Measured from your taps';
+
+  @override
+  String get restRuleMeasure =>
+      'Rest = time between two set taps minus the estimated set duration. No extra tap needed. Breaks, other exercises in between and skipped sets don\'t count.';
+
+  @override
+  String get restRuleShorterTitle => 'Shorter';
+
+  @override
+  String get restRuleShorter =>
+      'If you make the whole exercise several times with reps to spare, the recap suggests testing one rest shorter once. Never below 2:00 for heavy sets (up to 5 reps), else 1:00.';
+
+  @override
+  String get restRuleLongerTitle => 'Longer';
+
+  @override
+  String get restRuleLonger =>
+      'If a set fails more often after short rests than after long ones, the recap suggests testing the longer rest, at most 5:00.';
+
+  @override
+  String get restRuleTestTitle => 'Test first, then adopt';
+
+  @override
+  String get restRuleTest =>
+      'A test covers one training and one rest. The whole exercise counts: after two successful tests the app asks whether to keep the time.';
+
+  @override
+  String get restRuleStableTitle => 'New weight first';
+
+  @override
+  String get restRuleStable =>
+      'When the weight goes up or a deload is due, the proven times apply first.';
+
+  @override
+  String get restPulse => 'Use heart rate';
+
+  @override
+  String get restPulseHint =>
+      'With a heart rate sensor: extends the rest while your pulse is above 110, at most to double.';
+
+  @override
+  String restSuggestShorter(
+    int set,
+    int n,
+    String rest,
+    String time,
+    String current,
+  ) {
+    return 'Before set $set you went on after $rest $n times and made the whole exercise. Test $time instead of $current once next time?';
+  }
+
+  @override
+  String restSuggestTryShorter(int n, int set, String time, String current) {
+    return '$n trainings in a row all made, with reps to spare. Test $time instead of $current before set $set once?';
+  }
+
+  @override
+  String restTrialOutcome(
+    int set,
+    String rest,
+    String usual,
+    int done,
+    int total,
+  ) {
+    return 'Test before set $set: $rest instead of $usual · $done of $total reps';
+  }
+
+  @override
+  String get restTrialWorked =>
+      'Worked: the whole exercise made, as many reps as usual.';
+
+  @override
+  String restTrialWorkedAfter(String context) {
+    return 'Worked: the whole exercise made, as many reps as usual $context.';
+  }
+
+  @override
+  String get restTrialFailed => 'Didn\'t work.';
+
+  @override
+  String restTrialNoComparison(String context) {
+    return 'All made, but nothing to compare with $context yet. Doesn\'t count for keeping it.';
+  }
+
+  @override
+  String get restTrialUnclear =>
+      'All made, but what came before is unclear. Doesn\'t count for keeping it.';
+
+  @override
+  String restAfterSets(int sets, String name) {
+    return 'after $sets sets of $name';
+  }
+
+  @override
+  String get restNoPreload => 'without related sets before';
+
+  @override
+  String restStageAfter(String name) {
+    return 'In trainings after $name:';
+  }
+
+  @override
+  String get restStageFresh => 'In trainings without related sets before:';
+
+  @override
+  String get restNow => 'Now before each set';
+
+  @override
+  String get restNowHint =>
+      '✦ learned from tests. Tap to go back to the starting value.';
+
+  @override
+  String get restStartValue => 'Starting value';
+
+  @override
+  String get restStartHint =>
+      'Applies before every set until tests confirm a better rest.';
+
+  @override
+  String get restNowNone =>
+      'Nothing learned yet: the starting value applies before every set.';
+
+  @override
+  String get restTileStart => 'Start';
+
+  @override
+  String get restPulseInfoTitle => 'Heart rate during the rest';
+
+  @override
+  String get restPulseInfo =>
+      'Only with a connected heart rate sensor.\n\nThe planned rest is the minimum. If your pulse is still above 110 at the end, the rest keeps going until it drops below, at most to double the rest. If it drops below 110 earlier, the rest still ends at the planned time. Heart rate never shortens it.\n\nA rest only gets shorter through Smart: if you make a set reliably several times, the recap suggests testing a shorter rest.\n\nThe two are linked indirectly: Smart measures the rest you actually took. If the pulse often extends it and the sets go well afterwards, that can back a longer rest.\n\nWhy not shorter when your pulse drops fast? A low pulse doesn\'t mean your muscles have recovered. Especially for heavy sets, muscle recovery is what counts.\n\nWithout a sensor or a reading, the planned rest stays.';
+
+  @override
+  String restResetBody(int set, String learned, String start) {
+    return 'Set $set goes back to the starting value $start instead of $learned.';
   }
 }

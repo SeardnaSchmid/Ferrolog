@@ -14,6 +14,8 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
+    // universal_ble configures Kotlin but relies on built-in Kotlin in newer AGP.
+    if (name == "universal_ble") pluginManager.apply("org.jetbrains.kotlin.android")
 }
 subprojects {
     project.evaluationDependsOn(":app")

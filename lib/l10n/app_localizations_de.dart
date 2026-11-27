@@ -1079,9 +1079,6 @@ class L10nDe extends L10n {
   String get notePressHalf => 'Drückübungen zählen halb';
 
   @override
-  String get noteHingeSquatHalf => 'Kreuzheben und Kniebeuge zählen halb';
-
-  @override
   String get ratioRowBench => 'Rudern : Bankdrücken';
 
   @override
@@ -1759,6 +1756,50 @@ class L10nDe extends L10n {
   String get stripRest => 'PAUSE';
 
   @override
+  String get stripWaitingForPulse => 'WARTE AUF PULS';
+
+  @override
+  String simulatedPulse(int bpm) {
+    return '$bpm bpm (sim.)';
+  }
+
+  @override
+  String pulseRestTarget(int bpm) {
+    return 'Unter $bpm bpm oder bei 0:00';
+  }
+
+  @override
+  String get pulseSensor => 'Pulssensor verbinden';
+
+  @override
+  String get pulseDisconnect => 'Pulssensor trennen';
+
+  @override
+  String get pulseSearching => 'Suche nach Pulssensoren …';
+
+  @override
+  String get pulseChooseSensor => 'Wähle deinen Pulssensor aus.';
+
+  @override
+  String get pulseNoDevices =>
+      'Kein Sensor gefunden. Aktiviere die Pulsübertragung am Sensor.';
+
+  @override
+  String get pulseScanFailed =>
+      'Bluetooth-Suche fehlgeschlagen. Prüfe Bluetooth und die App-Berechtigungen.';
+
+  @override
+  String get pulseConnectFailed => 'Verbindung zum Pulssensor fehlgeschlagen.';
+
+  @override
+  String get pulseNoSignal => 'Puls: kein Signal';
+
+  @override
+  String livePulse(int bpm) {
+    return '$bpm bpm';
+  }
+
+  @override
   String get stripSoon => 'GLEICH WEITER';
 
   @override
@@ -1852,7 +1893,28 @@ class L10nDe extends L10n {
 
   @override
   String get balanceScaleHint =>
-      'Der Punkt zeigt zur Seite mit mehr Sätzen. Im hellen Feld ist es ausgewogen. Tippe auf ein Paar für Empfehlung und Zahlen.';
+      'Im markierten Bereich ist das Paar ausgewogen. Tippe auf ein Paar für Verlauf und Details.';
+
+  @override
+  String get balanceHistory => 'Balanceverlauf';
+
+  @override
+  String balanceHistoryGuide(Object range) {
+    return 'Zielbereich · $range';
+  }
+
+  @override
+  String balanceHistoryHint(Object days) {
+    return 'Jeder Wochenpunkt umfasst die letzten $days Tage. Tippe auf einen Punkt für das Verhältnis.';
+  }
+
+  @override
+  String get balanceHistoryNoSets => 'Keine Sätze in diesem Zeitraum';
+
+  @override
+  String balanceImbalance(Object group) {
+    return 'Ungleichgewicht · $group kommt zu kurz';
+  }
 
   @override
   String get strengthTrend => 'Kraft im Verlauf';
@@ -1886,16 +1948,6 @@ class L10nDe extends L10n {
 
   @override
   String get balanced => '✓ Ausgewogen';
-
-  @override
-  String verdictSlightly(Object strong, Object weak) {
-    return '$strong etwas mehr trainiert als $weak';
-  }
-
-  @override
-  String verdictClearly(Object strong, Object weak) {
-    return '$strong deutlich mehr trainiert als $weak';
-  }
 
   @override
   String get balanceInfoTitle => 'Balance: was dahintersteckt';
@@ -1950,6 +2002,10 @@ class L10nDe extends L10n {
       'Bei Bauch und unterem Rücken widersprechen sich die Studien, welche Seite bei Rückenschmerzen schwächer ist [8, 9]. Der Richtwert ist deshalb breit und symmetrisch.';
 
   @override
+  String get infoGuideRanges =>
+      'FerroLog verwendet einstellbare Zielbereiche für das Verhältnis der abgeschlossenen Sätze.';
+
+  @override
   String get infoMath => 'Wie FerroLog rechnet';
 
   @override
@@ -1972,7 +2028,7 @@ class L10nDe extends L10n {
 
   @override
   String get infoScale1 =>
-      'Der Punkt zeigt zur Seite, die mehr Sätze bekommt. Im hellen Feld in der Mitte liegt das Paar im Richtwert.';
+      'Im markierten Band liegt das Paar im Richtwert. Außerhalb zeigt der Punkt zur Seite mit mehr Sätzen relativ zum Richtwert.';
 
   @override
   String get infoScale2 =>
@@ -2321,8 +2377,50 @@ class L10nDe extends L10n {
   String get over20 => 'über 20';
 
   @override
+  String musclesBelowReference(Object names) {
+    return 'Unter 10 Sätzen pro Woche · $names';
+  }
+
+  @override
   String get muscleBarsHint =>
-      'Balken: Sätze pro Woche. Band 10–20: der übliche Bereich für Muskelaufbau. Orange: unter 10.';
+      'Grün markiert den Orientierungsbereich für Muskelaufbau · 10–20 Sätze pro Woche.';
+
+  @override
+  String get muscleVolumeInfoTitle => 'Warum 10–20 Sätze?';
+
+  @override
+  String get muscleVolumeInfoEvidence =>
+      'Die Forschung zeigt im Durchschnitt mehr Muskelwachstum mit mehr wöchentlichen Sätzen. Mit steigendem Volumen wird der Zusatznutzen kleiner. Auch weniger Sätze können reichen: In einer Studie mit trainierten Männern nahm die Bizepsdicke bereits mit neun Sätzen pro Woche zu.';
+
+  @override
+  String get muscleVolumeInfoRange =>
+      '10–20 Sätze pro Muskel und Woche sind eine grobe Orientierung. Eine Übersichtsarbeit fand 12–20 Sätze für junge, trainierte Männer plausibel, mit Unterschieden je nach Muskelgruppe. Welches Volumen zu dir passt, hängt auch von Trainingsstand, Anstrengung und Erholung ab.';
+
+  @override
+  String get muscleGoal => 'Persönliches Wochenziel';
+
+  @override
+  String get muscleGoalInput => 'Sätze pro Woche';
+
+  @override
+  String get muscleGoalHelp => 'Leer lassen, um das Ziel zu entfernen.';
+
+  @override
+  String get muscleGoalInvalid => 'Gib eine ganze Zahl größer als null ein.';
+
+  @override
+  String muscleGoalValue(num n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n Sätze',
+      one: '1 Satz',
+    );
+    return 'Wochenziel · $_temp0';
+  }
+
+  @override
+  String get muscleGoalReached => '✓ Wochenziel erreicht';
 
   @override
   String get musclesNote =>
@@ -2383,6 +2481,9 @@ class L10nDe extends L10n {
 
   @override
   String get trendRising => 'steigt';
+
+  @override
+  String get trendDeclining => 'sinkt';
 
   @override
   String get trendSteady => 'stabil';
@@ -2602,5 +2703,232 @@ class L10nDe extends L10n {
   @override
   String progDeloadNoChange(Object fails) {
     return '$fails Trainings in Folge Ziel nicht erreicht';
+  }
+
+  @override
+  String get recapPulse => 'Puls';
+
+  @override
+  String recapPulseSummary(int avg, int max) {
+    return 'Ø $avg · max $max bpm';
+  }
+
+  @override
+  String get recapPulseRest => 'Pause';
+
+  @override
+  String recapPulseAbove(int minutes, int bpm) {
+    return '$minutes min über $bpm bpm';
+  }
+
+  @override
+  String restAbout(String n) {
+    return 'rund $n Min';
+  }
+
+  @override
+  String restSuggest(
+    int set,
+    String short,
+    int shortMet,
+    int shortN,
+    String long,
+    int longMet,
+    int longN,
+    String time,
+  ) {
+    return 'Vor Satz $set hast du nach $short $shortMet von $shortN Mal das Ziel geschafft, nach $long $longMet von $longN Mal. Nächstes Mal $time testen?';
+  }
+
+  @override
+  String get restTryOnce => 'Einmal testen';
+
+  @override
+  String get restKeep => 'Beibehalten';
+
+  @override
+  String restTrialPending(String time, int set) {
+    return 'Nächstes Training: $time Pause vor Satz $set als Test';
+  }
+
+  @override
+  String get restTrialCancel => 'Nicht testen';
+
+  @override
+  String restAdoptAsk(int worked, String time, int set) {
+    return '$worked Tests mit $time vor Satz $set geschafft. Dauerhaft übernehmen?';
+  }
+
+  @override
+  String get restAdopt => 'Übernehmen';
+
+  @override
+  String get restAdoptNo => 'Nicht übernehmen';
+
+  @override
+  String restNeedsVariety(int set) {
+    return 'Für Satz $set fehlen noch Trainings mit unterschiedlich langen Pausen';
+  }
+
+  @override
+  String get restBeforeSetRemove => 'Gelernte Pause entfernen';
+
+  @override
+  String get restSmart => 'Intelligent';
+
+  @override
+  String get restFixed => 'Fest';
+
+  @override
+  String get restSmartHelp => 'So funktionieren intelligente Pausen';
+
+  @override
+  String get restSmartHint =>
+      'Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.';
+
+  @override
+  String get restRuleStartTitle => 'Startwerte';
+
+  @override
+  String get restRuleStart =>
+      'Die Zeiten unten gelten, bis deine Trainings etwas anderes zeigen. Jede Pause vor einem Satz lernt für sich. Die Pause nach einem nicht geschafften Satz bleibt, wie eingestellt.';
+
+  @override
+  String get restRuleMeasureTitle => 'Gemessen an deinen Tipps';
+
+  @override
+  String get restRuleMeasure =>
+      'Pause = Zeit zwischen zwei Satz-Tipps minus geschätzte Satzdauer. Kein Extra-Tipp nötig. Unterbrechungen, andere Übungen dazwischen und ausgelassene Sätze zählen nicht.';
+
+  @override
+  String get restRuleShorterTitle => 'Kürzer';
+
+  @override
+  String get restRuleShorter =>
+      'Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.';
+
+  @override
+  String get restRuleLongerTitle => 'Länger';
+
+  @override
+  String get restRuleLonger =>
+      'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.';
+
+  @override
+  String get restRuleTestTitle => 'Erst testen, dann übernehmen';
+
+  @override
+  String get restRuleTest =>
+      'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.';
+
+  @override
+  String get restRuleStableTitle => 'Neues Gewicht zuerst';
+
+  @override
+  String get restRuleStable =>
+      'Steigt das Gewicht oder steht ein Deload an, gelten erst die bewährten Zeiten.';
+
+  @override
+  String get restPulse => 'Herzfrequenz berücksichtigen';
+
+  @override
+  String get restPulseHint =>
+      'Mit Pulssensor: verlängert die Pause, solange der Puls über 110 liegt, höchstens auf das Doppelte.';
+
+  @override
+  String restSuggestShorter(
+    int set,
+    int n,
+    String rest,
+    String time,
+    String current,
+  ) {
+    return 'Vor Satz $set hast du $n Mal schon nach $rest weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal $time statt $current testen?';
+  }
+
+  @override
+  String restSuggestTryShorter(int n, int set, String time, String current) {
+    return '$n Trainings in Folge alles geschafft, mit Reserve. Vor Satz $set einmal $time statt $current testen?';
+  }
+
+  @override
+  String restTrialOutcome(
+    int set,
+    String rest,
+    String usual,
+    int done,
+    int total,
+  ) {
+    return 'Test vor Satz $set: $rest statt $usual · $done von $total Wdh.';
+  }
+
+  @override
+  String get restTrialWorked =>
+      'Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst.';
+
+  @override
+  String restTrialWorkedAfter(String context) {
+    return 'Gelungen: ganze Übung geschafft, so viele Wdh. wie sonst $context.';
+  }
+
+  @override
+  String get restTrialFailed => 'Nicht gelungen.';
+
+  @override
+  String restTrialNoComparison(String context) {
+    return 'Alles geschafft, aber noch kein Vergleich $context. Zählt nicht für die Übernahme.';
+  }
+
+  @override
+  String get restTrialUnclear =>
+      'Alles geschafft, aber die Vorbelastung ist unklar. Zählt nicht für die Übernahme.';
+
+  @override
+  String restAfterSets(int sets, String name) {
+    return 'nach $sets Sätzen $name';
+  }
+
+  @override
+  String get restNoPreload => 'ohne Vorbelastung';
+
+  @override
+  String restStageAfter(String name) {
+    return 'In Trainings nach $name:';
+  }
+
+  @override
+  String get restStageFresh => 'In Trainings ohne Vorbelastung:';
+
+  @override
+  String get restNow => 'Aktuell vor jedem Satz';
+
+  @override
+  String get restNowHint =>
+      '✦ gelernt aus Tests. Tippen setzt auf den Startwert zurück.';
+
+  @override
+  String get restStartValue => 'Startwert';
+
+  @override
+  String get restStartHint =>
+      'Gilt vor jedem Satz, bis Tests eine bessere Pause bestätigen.';
+
+  @override
+  String get restNowNone =>
+      'Noch nichts gelernt: vor jedem Satz gilt der Startwert.';
+
+  @override
+  String get restTileStart => 'Start';
+
+  @override
+  String get restPulseInfoTitle => 'Herzfrequenz in der Pause';
+
+  @override
+  String get restPulseInfo =>
+      'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.';
+
+  @override
+  String restResetBody(int set, String learned, String start) {
+    return 'Vor Satz $set gilt dann wieder der Startwert $start statt $learned.';
   }
 }

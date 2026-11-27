@@ -176,6 +176,7 @@ After every workout the app writes `ferrolog.json` to the GitHub repo
   "sessions": [{                       // completed workouts, newest first
     "id": "…", "workoutId": "…", "workoutName": "Push/Pull A",
     "date": "2026-10-30T18:12:00.000",
+    "pulse": [[0, 82], [5, 84], [10, 87]],  // heart rate from a Bluetooth strap: [seconds since date, bpm], every 5 s
     "exercises": [{ "name": "Bankdrücken", "weight": 77.5, "targetReps": 5,
                     "reps": [5, 5, 3], "rir": 0,    // null = set not done; rir = reps left after the last set (if asked)
                     "backoff": 10, "progression": "miss" },  // auto mode: started 10 % lighter after a break; outcome

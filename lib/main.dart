@@ -418,6 +418,12 @@ class RestLeft extends StatelessWidget {
           final left = session.restLeft(DateTime.now());
           if (left == null) return const SizedBox();
           if (session.restPausedAt != null) return Text(tr.restPaused, style: style);
+          final minimum = session.restSeconds ?? 0;
+          final extra = (session.pulseRest?.endAfter(minimum) ?? minimum) - minimum;
+          if (left <= 0 && (left + extra > 0 ||
+              simulatedPulseEnabled && simulatedRestLeft(left, minimum) > 0)) {
+            return Text(' · ${tr.stripWaitingForPulse}', style: style);
+          }
           if (left <= 0) return const SizedBox();
           return Text(tr.restLeft(clock(left)), style: style);
         },

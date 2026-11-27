@@ -17,6 +17,7 @@ dependencies:
   path_drawing: ^1.0.1
   share_plus: ^13.3.1
   shared_preferences: ^2.5.5
+  universal_ble: ^3.4.1
   url_launcher: ^6.3.2
 
 dev_dependencies:

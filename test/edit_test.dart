@@ -35,14 +35,14 @@ void main() {
     await tester.tap(find.text('Bankdrücken'));
     await tester.pump();
     expect(find.text('Standardwerte für Bankdrücken übernommen'), findsOneWidget);
-    expect(find.text('So funktioniert Auto'), findsOneWidget, reason: 'new ones start in auto mode');
+    expect(find.byTooltip('So funktioniert Auto'), findsOneWidget, reason: 'new ones start in auto mode');
     expect(find.textContaining('Reserve im letzten Satz'), findsNothing);
-    await tester.tap(find.text('So funktioniert Auto'));
+    await tester.tap(find.byTooltip('So funktioniert Auto'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Reserve im letzten Satz'), findsOneWidget);
     expect(find.text('Mehr Wiederholungen bei gleichem Gewicht'), findsOneWidget);
     expect(find.text('Gewicht senken'), findsOneWidget);
-    await tester.tap(find.text('So funktioniert Auto'));
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
     expect(tester.getTopLeft(find.text('Sätze')).dy, lessThan(tester.getTopLeft(find.text('Gewicht und Steigerung')).dy));
@@ -55,7 +55,7 @@ void main() {
     await tester.tap(find.text('Kleinster Gewichtsschritt'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Fest'));
+    await tester.tap(find.text('Fest').first); // weight, not the rest
     await tester.pump();
     expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '+0,5 kg')).onSelected, isNull);
     expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '+5 kg')).onSelected, isNotNull);
@@ -120,7 +120,7 @@ void main() {
     e.applyResult(ExerciseLog(name: 'Schulterdrücken', weight: 50, targetReps: 5, reps: [5, 5, 4], weights: [50, 50, 40]));
     expect((e.weight, e.fails), (50, 0), reason: 'a missed rep on the lighter set does not deload either');
     e.applyResult(ExerciseLog(name: 'Schulterdrücken', weight: 50, targetReps: 5, reps: [5, 5, null], weights: [50, 50, 40]));
-    expect(e.fails, 1, reason: 'the lighter set was skipped: an ordinary miss');
+    expect(e.fails, 0, reason: 'the skipped set leaves the plan alone');
 
     final backOff = Exercise(name: 'Bankdrücken', sets: 3, reps: 5, setWeights: [80, 80, 70]);
     backOff.applyResult(ExerciseLog(name: 'Bankdrücken', weight: 0, targetReps: 5, reps: [5, 5, 5], weights: [80, 70, 70]));
