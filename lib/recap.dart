@@ -30,8 +30,8 @@ class _RecapPageState extends State<RecapPage> {
   late final tags = {...s.tags};
   late bool noteOpen = s.tags.isNotEmpty || s.note != null;
 
-  /// What smart rests did on their own after this training, by exercise (only while it's the latest of
-  /// its workout); shown with an undo.
+  /// The rests smart rests changed on their own after this training, by exercise (only while it's the
+  /// latest of its workout); shown with an undo.
   final restSteps = <String, RestStep>{};
 
   @override
@@ -39,11 +39,17 @@ class _RecapPageState extends State<RecapPage> {
     super.initState();
     final plan = store.workouts.where((w) => w.id == s.workoutId).firstOrNull;
     if (plan == null || store.lastSessionOf(plan) != s) return;
+    var changed = false;
     for (final e in plan.exercises) {
+      // A test planned by an earlier version: rests change right away now.
+      if (e.restTrial != null) {
+        e.restTrial = null;
+        changed = true;
+      }
       if (!s.exercises.any((l) => l.name == e.name && !l.cardio)) continue;
-      if (autoRestStep(store.sessions, e, DateTime.now()) case final step?) restSteps[e.name] = step;
+      if (autoRestStep(store.sessions, e, s.date) case final step?) restSteps[e.name] = step;
     }
-    if (restSteps.isNotEmpty) store.saveWorkout(plan);
+    if (changed || restSteps.isNotEmpty) store.saveWorkout(plan);
   }
 
   @override
@@ -114,13 +120,9 @@ class _RecapPageState extends State<RecapPage> {
       null => null,
     };
     final step = restSteps[e.name];
-    final pending = pendingTrial(sessions, e);
     final (String? text, List<(String, VoidCallback)> actions) = switch (step) {
-      (adopted: final a?, test: _, before: _) => (
-        tr.restAdopted(a.worked, clock(a.seconds), a.set + 1),
-        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!, s.date))],
-      ),
-      (test: final g?, adopted: _, before: _) => (
+      null => (null, const <(String, VoidCallback)>[]),
+      (why: final g?, set: _, seconds: _, before: _, worked: _) => (
         [
           ?switch (g.stage) {
             Preload.loaded when g.by != null => tr.restStageAfter(g.by!),
@@ -148,23 +150,12 @@ class _RecapPageState extends State<RecapPage> {
             RestChange.tryShorter => tr.restSuggestTryShorter(g.n, g.set + 1, clock(g.seconds), clock(g.current)),
           },
         ].join(' '),
-        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!, s.date))],
+        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!))],
       ),
-      _ when pending != null => (
-        tr.restTrialPending(clock(pending.seconds), pending.set + 1),
-        [
-          (
-            tr.restTrialCancel,
-            () => e
-              ..restTrial = null
-              ..restDeclined = s.date,
-          ),
-        ],
+      final a => (
+        tr.restAdopted(a.worked ?? 2, clock(a.seconds), a.set + 1),
+        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!))],
       ),
-      _ => switch (restNeedsVariety(sessions, e)) {
-        final set? => (tr.restNeedsVariety(set + 1), const <(String, VoidCallback)>[]),
-        _ => (null, const <(String, VoidCallback)>[]),
-      },
     };
     if (result == null && text == null) return null;
     final plan = store.workouts.where((w) => w.id == s.workoutId).firstOrNull;

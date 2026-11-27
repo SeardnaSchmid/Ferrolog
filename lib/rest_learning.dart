@@ -274,36 +274,38 @@ List<(RestUnit, TrialOutcome)> trialResults(List<Session> sessions, Exercise e, 
 void adoptRest(Exercise e, int set, int seconds) =>
     seconds == e.restSeconds ? e.setRests.remove(set) : e.setRests[set] = seconds;
 
-/// What smart rests did on their own after a training: planned [test], or [adopted] a test for good
-/// ([before] the rest it replaced before that set, null = the exercise's rest).
-typedef RestStep = ({RestSuggestion? test, ({int set, int seconds, int worked})? adopted, int? before});
+/// What smart rests changed on their own after a training: the rest before [set] is [seconds] now,
+/// [before] the rest it replaced (null = the exercise's rest); [why] the evidence, null when an earlier
+/// test is adopted ([worked] times made).
+typedef RestStep = ({int set, int seconds, int? before, RestSuggestion? why, int? worked});
 
-/// Smart rests run on their own: a test that worked [restAdoptAfter] times is adopted, else the
-/// suggested test is planned for the next training ([now] its start). Changes [e]; null when nothing did.
-RestStep? autoRestStep(List<Session> sessions, Exercise e, DateTime now) {
+/// Smart rests run on their own, no test first: the suggested rest applies right away (a test still
+/// pending from before is adopted once it worked [restAdoptAfter] times). A change that turns out worse
+/// is turned back by the same rules with the trainings after it. At most one change per training: the
+/// date of [training] blocks the next until a newer one. Changes [e]; null when nothing changed.
+RestStep? autoRestStep(List<Session> sessions, Exercise e, DateTime training) {
+  final RestStep step;
   if (restToAdopt(sessions, e) case final a?) {
-    final before = e.setRests[a.set];
-    adoptRest(e, a.set, a.seconds);
-    return (test: null, adopted: a, before: before);
+    step = (set: a.set, seconds: a.seconds, before: e.setRests[a.set], why: null, worked: a.worked);
+  } else if (restSuggestion(sessions, e) case final g?) {
+    step = (set: g.set, seconds: g.seconds, before: e.setRests[g.set], why: g, worked: null);
+  } else {
+    return null;
   }
-  if (restSuggestion(sessions, e) case final g?) {
-    e.restTrial = (set: g.set, seconds: g.seconds, kg: e.weights[g.set], target: e.repsPerSet[g.set], since: now);
-    return (test: g, adopted: null, before: null);
-  }
-  return null;
+  adoptRest(e, step.set, step.seconds);
+  e
+    ..restTrial = null
+    ..restDeclined = training;
+  return step;
 }
 
-/// Undoes [step] on [e]; [date] the training it came after, so the same step isn't taken again.
-void undoRestStep(Exercise e, RestStep step, DateTime date) {
-  if (step.adopted case final a?) {
-    if (step.before case final b?) {
-      e.setRests[a.set] = b;
-    } else {
-      e.setRests.remove(a.set);
-    }
+/// Undoes [step] on [e]: the rest before it again.
+void undoRestStep(Exercise e, RestStep step) {
+  if (step.before case final b?) {
+    e.setRests[step.set] = b;
+  } else {
+    e.setRests.remove(step.set);
   }
-  if (step.test != null) e.restTrial = null;
-  e.restDeclined = date;
 }
 
 /// A test to suggest for [e], or null: none while a test is pending or one is to adopt, after a deload,

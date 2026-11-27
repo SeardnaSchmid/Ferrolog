@@ -2737,7 +2737,7 @@ class L10nDe extends L10n {
     int longN,
     String time,
   ) {
-    return 'Vor Satz $set hast du nach $short $shortMet von $shortN Mal das Ziel geschafft, nach $long $longMet von $longN Mal. Nächstes Mal testet die App einmal $time.';
+    return 'Vor Satz $set hast du nach $short $shortMet von $shortN Mal das Ziel geschafft, nach $long $longMet von $longN Mal. Ab jetzt $time.';
   }
 
   @override
@@ -2772,7 +2772,7 @@ class L10nDe extends L10n {
 
   @override
   String get restSmartHint =>
-      'Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.';
+      'Lernt aus deinen Satz-Tipps und stellt die Pausen von selbst ein. Der Rückblick sagt, was sich geändert hat.';
 
   @override
   String get restRuleStartTitle => 'Startwerte';
@@ -2793,21 +2793,21 @@ class L10nDe extends L10n {
 
   @override
   String get restRuleShorter =>
-      'Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.';
+      'Schaffst du die ganze Übung mehrmals sicher, wird eine Pause eine Stufe kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.';
 
   @override
   String get restRuleLongerTitle => 'Länger';
 
   @override
   String get restRuleLonger =>
-      'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.';
+      'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, wird die Pause davor länger, höchstens 5:00.';
 
   @override
-  String get restRuleTestTitle => 'Erst testen, dann übernehmen';
+  String get restRuleTestTitle => 'Stellt sich selbst nach';
 
   @override
   String get restRuleTest =>
-      'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.';
+      'Jede Änderung gilt sofort, höchstens eine pro Training. Klappt ein Satz danach schlechter, korrigiert die App die Pause mit denselben Regeln wieder. Im Rückblick kannst du jede Änderung rückgängig machen.';
 
   @override
   String get restRuleStableTitle => 'Neues Gewicht zuerst';
@@ -2831,12 +2831,12 @@ class L10nDe extends L10n {
     String time,
     String current,
   ) {
-    return 'Vor Satz $set hast du $n Mal schon nach $rest weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal $time statt $current.';
+    return 'Vor Satz $set hast du $n Mal schon nach $rest weitergemacht und die ganze Übung geschafft. Ab jetzt $time statt $current.';
   }
 
   @override
   String restSuggestTryShorter(int n, int set, String time, String current) {
-    return '$n Trainings in Folge alles geschafft, mit Reserve. Vor Satz $set testet die App einmal $time statt $current.';
+    return '$n Trainings in Folge alles geschafft, mit Reserve. Vor Satz $set ab jetzt $time statt $current.';
   }
 
   @override
@@ -2913,7 +2913,7 @@ class L10nDe extends L10n {
 
   @override
   String get restPulseInfo =>
-      'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.';
+      'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, wird die Pause davor von selbst kürzer.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.';
 
   @override
   String restResetBody(int set, String learned, String start) {

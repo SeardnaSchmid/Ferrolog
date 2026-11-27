@@ -2361,7 +2361,7 @@
       }
     }
   },
-  "restSuggest": "Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal testet die App einmal {time}.",
+  "restSuggest": "Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Ab jetzt {time}.",
   "@restSuggest": {
     "placeholders": {
       "set": {
@@ -2428,22 +2428,22 @@
   "restSmart": "Intelligent",
   "restFixed": "Fest",
   "restSmartHelp": "So funktionieren intelligente Pausen",
-  "restSmartHint": "Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.",
+  "restSmartHint": "Lernt aus deinen Satz-Tipps und stellt die Pausen von selbst ein. Der Rückblick sagt, was sich geändert hat.",
   "restRuleStartTitle": "Startwerte",
   "restRuleStart": "Die Zeiten unten gelten, bis deine Trainings etwas anderes zeigen. Jede Pause vor einem Satz lernt für sich. Die Pause nach einem nicht geschafften Satz bleibt, wie eingestellt.",
   "restRuleMeasureTitle": "Gemessen an deinen Tipps",
   "restRuleMeasure": "Pause = Zeit zwischen zwei Satz-Tipps minus geschätzte Satzdauer. Kein Extra-Tipp nötig. Unterbrechungen, andere Übungen dazwischen und ausgelassene Sätze zählen nicht.",
   "restRuleShorterTitle": "Kürzer",
-  "restRuleShorter": "Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.",
+  "restRuleShorter": "Schaffst du die ganze Übung mehrmals sicher, wird eine Pause eine Stufe kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.",
   "restRuleLongerTitle": "Länger",
-  "restRuleLonger": "Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.",
-  "restRuleTestTitle": "Erst testen, dann übernehmen",
-  "restRuleTest": "Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.",
+  "restRuleLonger": "Scheitert ein Satz nach kurzen Pausen öfter als nach langen, wird die Pause davor länger, höchstens 5:00.",
+  "restRuleTestTitle": "Stellt sich selbst nach",
+  "restRuleTest": "Jede Änderung gilt sofort, höchstens eine pro Training. Klappt ein Satz danach schlechter, korrigiert die App die Pause mit denselben Regeln wieder. Im Rückblick kannst du jede Änderung rückgängig machen.",
   "restRuleStableTitle": "Neues Gewicht zuerst",
   "restRuleStable": "Steigt das Gewicht oder steht ein Deload an, gelten erst die bewährten Zeiten.",
   "restPulse": "Herzfrequenz berücksichtigen",
   "restPulseHint": "Mit Pulssensor: verlängert die Pause, solange der Puls über 110 liegt, höchstens auf das Doppelte.",
-  "restSuggestShorter": "Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal {time} statt {current}.",
+  "restSuggestShorter": "Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Ab jetzt {time} statt {current}.",
   "@restSuggestShorter": {
     "placeholders": {
       "set": {
@@ -2463,7 +2463,7 @@
       }
     }
   },
-  "restSuggestTryShorter": "{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} testet die App einmal {time} statt {current}.",
+  "restSuggestTryShorter": "{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} ab jetzt {time} statt {current}.",
   "@restSuggestTryShorter": {
     "placeholders": {
       "n": {
@@ -2547,7 +2547,7 @@
   "restNowNone": "Noch nichts gelernt: vor jedem Satz gilt der Startwert.",
   "restTileStart": "Start",
   "restPulseInfoTitle": "Herzfrequenz in der Pause",
-  "restPulseInfo": "Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.",
+  "restPulseInfo": "Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, wird die Pause davor von selbst kürzer.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.",
   "restResetBody": "Vor Satz {set} gilt dann wieder der Startwert {start} statt {learned}.",
   "@restResetBody": {"placeholders": {"set": {"type": "int"}, "learned": {"type": "String"}, "start": {"type": "String"}}},
   "measurePulse": "Max. Puls",

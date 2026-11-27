@@ -2736,7 +2736,7 @@ class L10nEn extends L10n {
     int longN,
     String time,
   ) {
-    return 'Before set $set you reached the target $shortMet of $shortN times after $short, $longMet of $longN times after $long. Next time the app tests $time once.';
+    return 'Before set $set you reached the target $shortMet of $shortN times after $short, $longMet of $longN times after $long. $time from now on.';
   }
 
   @override
@@ -2771,7 +2771,7 @@ class L10nEn extends L10n {
 
   @override
   String get restSmartHint =>
-      'Learns from your set taps, tests new rests on its own and tells you in the recap.';
+      'Learns from your set taps and sets the rests on its own. The recap tells you what changed.';
 
   @override
   String get restRuleStartTitle => 'Starting values';
@@ -2792,21 +2792,21 @@ class L10nEn extends L10n {
 
   @override
   String get restRuleShorter =>
-      'If you make the whole exercise several times with reps to spare, the app tests one rest shorter once. Never below 2:00 for heavy sets (up to 5 reps), else 1:00.';
+      'If you make the whole exercise several times with reps to spare, a rest gets one step shorter. Never below 2:00 for heavy sets (up to 5 reps), else 1:00.';
 
   @override
   String get restRuleLongerTitle => 'Longer';
 
   @override
   String get restRuleLonger =>
-      'If a set fails more often after short rests than after long ones, it tests the longer rest, at most 5:00.';
+      'If a set fails more often after short rests than after long ones, the rest before it gets longer, at most 5:00.';
 
   @override
-  String get restRuleTestTitle => 'Test first, then adopt';
+  String get restRuleTestTitle => 'Adjusts itself';
 
   @override
   String get restRuleTest =>
-      'A test covers one training and one rest. The whole exercise counts: after two successful tests the time stays. The recap lets you undo each step.';
+      'Every change applies right away, at most one per training. If a set goes worse afterwards, the app corrects the rest by the same rules. The recap lets you undo any change.';
 
   @override
   String get restRuleStableTitle => 'New weight first';
@@ -2830,12 +2830,12 @@ class L10nEn extends L10n {
     String time,
     String current,
   ) {
-    return 'Before set $set you went on after $rest $n times and made the whole exercise. Next time the app tests $time instead of $current once.';
+    return 'Before set $set you went on after $rest $n times and made the whole exercise. $time instead of $current from now on.';
   }
 
   @override
   String restSuggestTryShorter(int n, int set, String time, String current) {
-    return '$n trainings in a row all made, with reps to spare. Before set $set the app tests $time instead of $current once.';
+    return '$n trainings in a row all made, with reps to spare. Before set $set $time instead of $current from now on.';
   }
 
   @override
@@ -2912,7 +2912,7 @@ class L10nEn extends L10n {
 
   @override
   String get restPulseInfo =>
-      'Only with a connected heart rate sensor.\n\nThe planned rest is the minimum. If your pulse is still above 110 at the end, the rest keeps going until it drops below, at most to double the rest. If it drops below 110 earlier, the rest still ends at the planned time. Heart rate never shortens it.\n\nA rest only gets shorter through Smart: if you make a set reliably several times, the recap suggests testing a shorter rest.\n\nThe two are linked indirectly: Smart measures the rest you actually took. If the pulse often extends it and the sets go well afterwards, that can back a longer rest.\n\nWhy not shorter when your pulse drops fast? A low pulse doesn\'t mean your muscles have recovered. Especially for heavy sets, muscle recovery is what counts.\n\nWithout a sensor or a reading, the planned rest stays.';
+      'Only with a connected heart rate sensor.\n\nThe planned rest is the minimum. If your pulse is still above 110 at the end, the rest keeps going until it drops below, at most to double the rest. If it drops below 110 earlier, the rest still ends at the planned time. Heart rate never shortens it.\n\nA rest only gets shorter through Smart: if you make a set reliably several times, the rest before it gets shorter on its own.\n\nThe two are linked indirectly: Smart measures the rest you actually took. If the pulse often extends it and the sets go well afterwards, that can back a longer rest.\n\nWhy not shorter when your pulse drops fast? A low pulse doesn\'t mean your muscles have recovered. Especially for heavy sets, muscle recovery is what counts.\n\nWithout a sensor or a reading, the planned rest stays.';
 
   @override
   String restResetBody(int set, String learned, String start) {

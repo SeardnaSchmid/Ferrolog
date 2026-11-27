@@ -4417,7 +4417,7 @@ abstract class L10n {
   /// No description provided for @restSuggest.
   ///
   /// In de, this message translates to:
-  /// **'Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal testet die App einmal {time}.'**
+  /// **'Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Ab jetzt {time}.'**
   String restSuggest(
     int set,
     String short,
@@ -4480,7 +4480,7 @@ abstract class L10n {
   /// No description provided for @restSmartHint.
   ///
   /// In de, this message translates to:
-  /// **'Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.'**
+  /// **'Lernt aus deinen Satz-Tipps und stellt die Pausen von selbst ein. Der Rückblick sagt, was sich geändert hat.'**
   String get restSmartHint;
 
   /// No description provided for @restRuleStartTitle.
@@ -4516,7 +4516,7 @@ abstract class L10n {
   /// No description provided for @restRuleShorter.
   ///
   /// In de, this message translates to:
-  /// **'Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.'**
+  /// **'Schaffst du die ganze Übung mehrmals sicher, wird eine Pause eine Stufe kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.'**
   String get restRuleShorter;
 
   /// No description provided for @restRuleLongerTitle.
@@ -4528,19 +4528,19 @@ abstract class L10n {
   /// No description provided for @restRuleLonger.
   ///
   /// In de, this message translates to:
-  /// **'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.'**
+  /// **'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, wird die Pause davor länger, höchstens 5:00.'**
   String get restRuleLonger;
 
   /// No description provided for @restRuleTestTitle.
   ///
   /// In de, this message translates to:
-  /// **'Erst testen, dann übernehmen'**
+  /// **'Stellt sich selbst nach'**
   String get restRuleTestTitle;
 
   /// No description provided for @restRuleTest.
   ///
   /// In de, this message translates to:
-  /// **'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.'**
+  /// **'Jede Änderung gilt sofort, höchstens eine pro Training. Klappt ein Satz danach schlechter, korrigiert die App die Pause mit denselben Regeln wieder. Im Rückblick kannst du jede Änderung rückgängig machen.'**
   String get restRuleTest;
 
   /// No description provided for @restRuleStableTitle.
@@ -4570,7 +4570,7 @@ abstract class L10n {
   /// No description provided for @restSuggestShorter.
   ///
   /// In de, this message translates to:
-  /// **'Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal {time} statt {current}.'**
+  /// **'Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Ab jetzt {time} statt {current}.'**
   String restSuggestShorter(
     int set,
     int n,
@@ -4582,7 +4582,7 @@ abstract class L10n {
   /// No description provided for @restSuggestTryShorter.
   ///
   /// In de, this message translates to:
-  /// **'{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} testet die App einmal {time} statt {current}.'**
+  /// **'{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} ab jetzt {time} statt {current}.'**
   String restSuggestTryShorter(int n, int set, String time, String current);
 
   /// No description provided for @restTrialOutcome.
@@ -4696,7 +4696,7 @@ abstract class L10n {
   /// No description provided for @restPulseInfo.
   ///
   /// In de, this message translates to:
-  /// **'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.'**
+  /// **'Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, wird die Pause davor von selbst kürzer.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.'**
   String get restPulseInfo;
 
   /// No description provided for @restResetBody.
