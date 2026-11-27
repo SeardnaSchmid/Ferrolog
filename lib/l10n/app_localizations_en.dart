@@ -2736,14 +2736,8 @@ class L10nEn extends L10n {
     int longN,
     String time,
   ) {
-    return 'Before set $set you reached the target $shortMet of $shortN times after $short, $longMet of $longN times after $long. Test $time next time?';
+    return 'Before set $set you reached the target $shortMet of $shortN times after $short, $longMet of $longN times after $long. Next time the app tests $time once.';
   }
-
-  @override
-  String get restTryOnce => 'Test once';
-
-  @override
-  String get restKeep => 'Keep as is';
 
   @override
   String restTrialPending(String time, int set) {
@@ -2754,15 +2748,9 @@ class L10nEn extends L10n {
   String get restTrialCancel => 'Don\'t test';
 
   @override
-  String restAdoptAsk(int worked, String time, int set) {
-    return '$worked tests with $time before set $set worked. Keep it for good?';
+  String restAdopted(int worked, String time, int set) {
+    return '$worked tests with $time before set $set worked. $time from now on.';
   }
-
-  @override
-  String get restAdopt => 'Adopt';
-
-  @override
-  String get restAdoptNo => 'Don\'t adopt';
 
   @override
   String restNeedsVariety(int set) {
@@ -2783,7 +2771,7 @@ class L10nEn extends L10n {
 
   @override
   String get restSmartHint =>
-      'Learns from your set taps and suggests tests in the recap.';
+      'Learns from your set taps, tests new rests on its own and tells you in the recap.';
 
   @override
   String get restRuleStartTitle => 'Starting values';
@@ -2804,21 +2792,21 @@ class L10nEn extends L10n {
 
   @override
   String get restRuleShorter =>
-      'If you make the whole exercise several times with reps to spare, the recap suggests testing one rest shorter once. Never below 2:00 for heavy sets (up to 5 reps), else 1:00.';
+      'If you make the whole exercise several times with reps to spare, the app tests one rest shorter once. Never below 2:00 for heavy sets (up to 5 reps), else 1:00.';
 
   @override
   String get restRuleLongerTitle => 'Longer';
 
   @override
   String get restRuleLonger =>
-      'If a set fails more often after short rests than after long ones, the recap suggests testing the longer rest, at most 5:00.';
+      'If a set fails more often after short rests than after long ones, it tests the longer rest, at most 5:00.';
 
   @override
   String get restRuleTestTitle => 'Test first, then adopt';
 
   @override
   String get restRuleTest =>
-      'A test covers one training and one rest. The whole exercise counts: after two successful tests the app asks whether to keep the time.';
+      'A test covers one training and one rest. The whole exercise counts: after two successful tests the time stays. The recap lets you undo each step.';
 
   @override
   String get restRuleStableTitle => 'New weight first';
@@ -2842,12 +2830,12 @@ class L10nEn extends L10n {
     String time,
     String current,
   ) {
-    return 'Before set $set you went on after $rest $n times and made the whole exercise. Test $time instead of $current once next time?';
+    return 'Before set $set you went on after $rest $n times and made the whole exercise. Next time the app tests $time instead of $current once.';
   }
 
   @override
   String restSuggestTryShorter(int n, int set, String time, String current) {
-    return '$n trainings in a row all made, with reps to spare. Test $time instead of $current before set $set once?';
+    return '$n trainings in a row all made, with reps to spare. Before set $set the app tests $time instead of $current once.';
   }
 
   @override
@@ -2929,5 +2917,108 @@ class L10nEn extends L10n {
   @override
   String restResetBody(int set, String learned, String start) {
     return 'Set $set goes back to the starting value $start instead of $learned.';
+  }
+
+  @override
+  String get measurePulse => 'Max. pulse';
+
+  @override
+  String get measurePulseHint =>
+      'Highest pulse while the sets of this exercise ran. Walking and rests in between don\'t count.';
+
+  @override
+  String get pulseNone => 'No heart rate';
+
+  @override
+  String get pulseNoneInPeriod =>
+      'No heart rate values for this exercise in the selected period.';
+
+  @override
+  String pulseBpm(int bpm) {
+    return '$bpm bpm';
+  }
+
+  @override
+  String pulseBpmSpoken(int bpm) {
+    return '$bpm beats per minute';
+  }
+
+  @override
+  String pulseCoverage(int covered, int sets) {
+    return 'Heart rate for $covered of $sets sets';
+  }
+
+  @override
+  String pulseWorkKg(String sets, String weight) {
+    return '$sets at $weight';
+  }
+
+  @override
+  String get pulseToday => 'Today';
+
+  @override
+  String pulseOn(String date) {
+    return 'On $date';
+  }
+
+  @override
+  String pulseSame(String when, String work) {
+    return '$when: $work again.';
+  }
+
+  @override
+  String pulseSameDone(String when, String work) {
+    return '$when: made $work again.';
+  }
+
+  @override
+  String pulseHeavier(String when, String work, int refs, String from) {
+    return '$when: $work, before that $refs times at $from.';
+  }
+
+  @override
+  String pulseLower(int bpm, int refs, int median) {
+    return 'Your peak heart rate was $bpm bpm, typically $median bpm in $refs comparable trainings.';
+  }
+
+  @override
+  String pulseHigher(int bpm, int refs) {
+    return 'Your peak heart rate of $bpm bpm was above your last $refs comparable trainings.';
+  }
+
+  @override
+  String pulseSimilar(int bpm) {
+    return 'Your peak heart rate stayed in your usual range at $bpm bpm.';
+  }
+
+  @override
+  String cmpPulseMax(int bpm) {
+    return 'max $bpm';
+  }
+
+  @override
+  String get cmpPulseUsual => 'as usual';
+
+  @override
+  String cmpPulseAbove(int bpm) {
+    return '$bpm above usual';
+  }
+
+  @override
+  String cmpPulseBelow(int bpm) {
+    return '$bpm below usual';
+  }
+
+  @override
+  String get cmpPulseHeavier => 'more load, usual pulse';
+
+  @override
+  String recapTrend(String trend, String pct) {
+    return '$trend $pct in 4 wks';
+  }
+
+  @override
+  String recapSetPulse(int bpm) {
+    return 'peak pulse $bpm';
   }
 }

@@ -40,6 +40,9 @@ double _perRep(String name) {
   return isBarbell(name) ? 4.5 : 3;
 }
 
+/// Estimated seconds one set of [log] with [reps] took: the held seconds, or reps × tempo.
+double setWorkSeconds(ExerciseLog log, int reps) => log.timed ? reps.toDouble() : reps * _perRep(log.name);
+
 /// Time to set up the station before the first set.
 int _setupSeconds(double kg) => kg > 0 ? 60 : 30;
 

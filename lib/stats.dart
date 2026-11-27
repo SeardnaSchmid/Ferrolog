@@ -13,6 +13,8 @@ import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'muscles.dart';
+import 'pulse_compare.dart';
+import 'rest_learning.dart' show preloadOf;
 import 'stats_colors.dart';
 import 'units.dart';
 
@@ -992,7 +994,7 @@ class ExerciseStats extends StatefulWidget {
   State<ExerciseStats> createState() => _ExerciseStatsState();
 }
 
-enum _Measure { weight, e1rm, volume }
+enum _Measure { weight, e1rm, volume, pulse }
 
 class _ExerciseStatsState extends State<ExerciseStats> {
   late String name = widget.name;
@@ -1048,7 +1050,32 @@ class _ExerciseStatsState extends State<ExerciseStats> {
           _Measure.weight => shown(l.weight),
           _Measure.e1rm => shown(estimated1rm(l)),
           _Measure.volume => shown(l.volume),
+          _Measure.pulse => 0,
         };
+    // Heart rate: offered once any training has a curve; per training of the period, its pulse.
+    final hasPulse = store.sessions.any((s) => s.pulse.isNotEmpty);
+    if (!hasPulse && measure == _Measure.pulse) measure = _Measure.e1rm;
+    final pulseView = measure == _Measure.pulse;
+    final entries = <PulseEntry>[];
+    if (pulseView) {
+      final sessionOf = Map<ExerciseLog, Session>.identity();
+      for (final s in store.sessions) {
+        for (final l in s.exercises) {
+          sessionOf[l] = s;
+        }
+      }
+      for (final (_, (d, l)) in shownHistory) {
+        final s = sessionOf[l]!;
+        entries.add((
+          date: d,
+          log: l,
+          pulse: s.pulse.isEmpty ? null : exercisePulses(s)[l],
+          preload: preloadOf(s, l).stage,
+        ));
+      }
+    }
+    final pulsePoints = [for (final e in entries) e.pulse?.peak];
+    final note = pulseView ? pulseNote(entries) : null;
     final names = strengthExercises();
     final colorIndex = max(0, names.indexOf(name)) % 6;
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -1098,18 +1125,44 @@ class _ExerciseStatsState extends State<ExerciseStats> {
               ButtonSegment(value: _Measure.weight, label: Text(tr.weight)),
               const ButtonSegment(value: _Measure.e1rm, label: Text('1RM')),
               ButtonSegment(value: _Measure.volume, label: Text(tr.recapVolume)),
+              if (hasPulse) ButtonSegment(value: _Measure.pulse, label: Text(tr.measurePulse)),
             ],
             selected: {measure},
             onSelectionChanged: (v) => setState(() => measure = v.single),
           ),
           const SizedBox(height: 16),
-          Row(children: [
+          if (!pulseView) Row(children: [
             Expanded(child: Text(tr.bestE1rm(weightLabel(roundedKg(best))), style: const TextStyle(fontWeight: FontWeight.w600))),
             if (trend != null || (history.length == 1 && history.single.$2.weight > 0)) TrendChip(trend),
           ]),
           const SizedBox(height: 12),
           if (shownHistory.isEmpty)
             Text(tr.noTrainingInPeriod, style: small)
+          else if (pulseView && pulsePoints.every((p) => p == null))
+            Text(tr.pulseNoneInPeriod, style: small)
+          else if (pulseView)
+            Semantics(
+              label: '${tr.measurePulse}: ${tr.pulseBpmSpoken(pulsePoints.lastWhere((p) => p != null)!)}',
+              child: SizedBox(
+                height: 220,
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: ProgressChart(
+                    [
+                      // Broken where a training has no value: one line per run of measured ones.
+                      for (final run in _runs(entries))
+                        ChartSeries(name, (dark ? _seriesDark : _seriesLight)[colorIndex], const [], run, const {}, dots: true),
+                    ],
+                    from ?? shownHistory.first.$2.$1,
+                    DateTime.now(),
+                    minSpan: 20,
+                    grid: c.outlineVariant.withValues(alpha: .5),
+                    label: c.onSurfaceVariant,
+                    surface: c.surface,
+                  ),
+                ),
+              ),
+            )
           else
             SizedBox(
               height: 220,
@@ -1140,10 +1193,23 @@ class _ExerciseStatsState extends State<ExerciseStats> {
               _Measure.weight => tr.measureWeightHint(unitLabel),
               _Measure.e1rm => tr.measureE1rmHint(unitLabel),
               _Measure.volume => tr.measureVolumeHint(unitLabel),
+              _Measure.pulse => tr.measurePulseHint,
             },
             style: TextStyle(fontSize: 11, color: c.onSurfaceVariant),
           ),
+          if (note != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: c.secondaryContainer.withValues(alpha: .5), borderRadius: BorderRadius.circular(12)),
+              child: Text(pulseNoteText(note, DateTime.now())),
+            ),
+          ],
           const Divider(height: 32),
+          if (pulseView)
+            for (final e in entries.reversed) _pulseRow(e, c)
+          else
           for (final (i, (date, log)) in shownHistory.reversed)
             ListTile(
               dense: true,
@@ -1161,6 +1227,41 @@ class _ExerciseStatsState extends State<ExerciseStats> {
       ),
     );
   }
+}
+
+/// The measured trainings in runs without a gap, for a line broken where one has no pulse.
+List<List<(DateTime, double)>> _runs(List<PulseEntry> entries) {
+  final out = <List<(DateTime, double)>>[[]];
+  for (final e in entries) {
+    if (e.pulse?.peak case final p?) {
+      out.last.add((e.date, p.toDouble()));
+    } else if (out.last.isNotEmpty) {
+      out.add([]);
+    }
+  }
+  return [for (final r in out) if (r.isNotEmpty) r];
+}
+
+/// A training in the heart rate view: "163 bpm · 3×8 mit 80 kg", the coverage when not every set was
+/// measured, no record marks.
+Widget _pulseRow(PulseEntry e, ColorScheme c) {
+  final p = e.pulse;
+  final work = pulseWorkLabel(e.log);
+  final (title, spoken) = switch (p?.peak) {
+    final bpm? => ('${tr.pulseBpm(bpm)} · $work', '${tr.pulseBpmSpoken(bpm)} · $work'),
+    _ => ('${tr.pulseNone} · $work', null),
+  };
+  return ListTile(
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    title: Text(title, semanticsLabel: spoken),
+    subtitle: Text([
+      dateLabel(e.date),
+      if (p != null && p.peak != null && !p.complete) tr.pulseCoverage(p.covered, p.sets),
+    ].join(' · ')),
+    trailing: Icon(e.log.succeeded ? Icons.check_circle : Icons.remove_circle_outline,
+        color: e.log.succeeded ? c.primary : c.outline),
+  );
 }
 
 /// One line of a [ProgressChart]: (date, value) oldest first; [setbacks] are point indexes drawn as
@@ -1185,9 +1286,12 @@ class ProgressChart extends CustomPainter {
 
   /// Changes around a baseline: ticks with a sign and a stronger zero line.
   final bool signed;
+
+  /// The least the y-axis spans, so small differences don't look large (heart rate).
+  final double minSpan;
   final Color grid, label, surface;
   ProgressChart(this.series, this.from, this.to,
-      {this.unit = '', this.signed = false, required this.grid, required this.label, required this.surface});
+      {this.unit = '', this.signed = false, this.minSpan = 1, required this.grid, required this.label, required this.surface});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1195,7 +1299,7 @@ class ProgressChart extends CustomPainter {
     final values = [for (final s in visible) for (final p in s.points) p.$2, if (signed) 0.0];
     if (values.isEmpty) return;
     var lo = values.reduce(min), hi = values.reduce(max);
-    if (hi - lo < 1) (lo, hi) = (lo - 1, hi + 1);
+    if (hi - lo < minSpan) (lo, hi) = ((lo + hi - minSpan) / 2, (lo + hi + minSpan) / 2);
     // Round step giving about four ticks.
     final raw = (hi - lo) / 4;
     final mag = pow(10, (log(raw) / ln10).floor()).toDouble();

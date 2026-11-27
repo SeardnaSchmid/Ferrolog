@@ -229,8 +229,9 @@ def demo_data():
                 s['mood'] = 1 if bad else random.choice([2, 3, 3])
             if tags:
                 s['tags'] = tags
-            # A Bluetooth heart-rate strap for the last three weeks (see pulse_samples).
-            if (end - day).days <= 21:
+            # A Bluetooth heart-rate strap for the last eight weeks (see pulse_samples), forgotten once four
+            # weeks ago: the max. pulse history has a gap.
+            if (end - day).days <= 56 and not 27 <= (end - day).days <= 29:
                 s['pulse'] = pulse_samples(date, finished, exercises, random.Random(7000 + n))
             sessions.append(s)
             n += 1

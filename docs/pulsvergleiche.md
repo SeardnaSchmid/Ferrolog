@@ -1,5 +1,16 @@
 # Arbeitsanweisung für Pulsvergleiche im Übungsverlauf
 
+**Umsetzungsstand 27.11.2026:** umgesetzt in [pulse_compare.dart](../lib/pulse_compare.dart) (Zuordnung, Vergleich, Text) und [stats.dart](../lib/stats.dart) (Kennzahl „Max. Puls“), Tests in [pulse_compare_test.dart](../test/pulse_compare_test.dart).
+
+- **Anzeige:** Segment „Max. Puls“ erscheint, sobald irgendein Training eine Pulskurve hat. Punkte pro Training, Linie bricht bei Trainings ohne Wert, y-Achse mindestens 20 bpm hoch (kleine Unterschiede wirken sonst groß). Zeile „163 bpm · 3×8 mit 80 kg“ oder „Kein Pulswert · …“, bei Teilabdeckung darunter „Puls für 2 von 4 Sätzen“. Keine Bestleistungs- oder Rückschritt-Markierung, die 1RM-Zeile ist in dieser Ansicht ausgeblendet. Screenreader: Diagramm und Zeilen mit „Schläge pro Minute“.
+- **Fenster:** Satzbeginn = Tipp minus geschätzte Satzdauer (`setWorkSeconds`: Wdh. × Tempo, Haltesätze ihre Sekunden), Nachlauf 30 s (`pulseTail`), gekappt am geschätzten Beginn des nächsten Satzes irgendeiner Übung (nach Loggzeit sortiert). Cardio mit Start und Ende zählt als Fenster mit, damit nichts doppelt zugeordnet wird. Sample in Fenstern zweier Übungen → verworfen.
+- **Verwertbar:** ≥ 2 Samples im Fenster, keine Lücke über `pulseGap` (wie die Pulskurve, 20 s), erstes Sample höchstens `pulseGap` nach Satzbeginn, letztes höchstens `pulseGap` vor dem Tipp. Ohne Zeitstempel keine Zuordnung. Maximum nur aus verwertbaren Fenstern; alle Sätze verwertbar = vollständig.
+- **Hinweis:** Ziel = jüngstes vollständig gemessenes Training im Zeitraum, ohne ausgelassene Sätze, Backoff, Deload, leichtere/weniger Sätze, Schmerz. Ist es nicht sauber, kein Hinweis. Vergleich: bis 5 frühere saubere, vollständig gemessene Trainings mit gleicher Satzzahl, gleichen ausgeführten Wdh. und gleichen Gewichten, Vorbelastung gleich oder unbekannt; mindestens 3 (`pulseMinRefs`). Sonst „mehr Last“: dieselben Wdh., vorher einheitlich ein niedrigeres Gewicht (das jüngste), mindestens 3, nur „ähnlich“ wird gesagt. Ähnlich = in der Spannweite und ≤ 5 bpm vom Median (`pulseSimilarBpm`), niedriger/höher = außerhalb und ≥ 5 bpm; dazwischen kein Hinweis.
+- **Text:** zwei ganze lokalisierte Sätze, „Heute:“ oder „Am {Datum}:“ vorneweg. Zusätzlich zur Tabelle: gleiche Arbeit und ähnlicher Puls („…blieb mit 152 bpm im üblichen Bereich“).
+- **Abweichungen:** Die Kurzform für das erste vollständig gemessene Training entfällt, weil die Listenzeile darunter dasselbe sagt. Ähnliche tatsächliche Pausen werden noch nicht abgeglichen, nur die Vorbelastung. Reserve wird nicht geprüft, keine Aussage setzt sie voraus.
+- **Demo:** Pulskurven in den letzten acht Wochen (Zeitstempel gibt es nur in den letzten zwei Monaten), vor 27–29 Tagen ohne Gurt: Kniebeugen-Linie mit Lücke. Bankdrücken (Plateau) zeigt den Hinweis. Geprüft auf 375 px in Deutsch und Englisch.
+
+
 Wer „Rumänisches Kreuzheben“ öffnet, soll sehen, welchen höchsten Puls FerroLog bei dieser Übung in jedem Training gemessen hat. Dazu soll die App bei ausreichenden Daten einen kurzen Hinweis geben, etwa „Heute 85 kg für 3×8. Bei deinen letzten drei vergleichbaren Trainings waren es 80 kg. Dein Spitzenpuls lag dabei in einem ähnlichen Bereich.“
 
 ## 1. Den Maximalpuls im Verlauf anzeigen
@@ -45,3 +56,10 @@ Für „mehr Last“ darf gezielt **eine** Vergleichsgröße wechseln. Vergleich
 - Ein Training ohne Sensor liegt zwischen zwei gemessenen Trainings. Die Linie hat eine Lücke. Eine nur teilweise erfasste Übung zeigt ihre Abdeckung und liefert keine Vergleichsaussage.
 - Bei Referenzwerten von 158, 160 und 162 bpm sowie gleichen 3×8 mit 80 kg liefert ein heutiger Wert von 151 bpm den ersten Vergleichstext. Bei heute 85 kg und 158 bpm passt der zweite. Bei verändertem Satzschema oder nur einem früheren Vergleichstraining entfällt der Vergleich.
 - Prüfe den exakten Bildschirm „Übungsverlauf → Max. Puls“ auf schmalem Display in Deutsch und Englisch, einschließlich Datumsfilter und Einheiten. Verwende realistische Beispieldaten ausschließlich in der Web-Demo auf Port 8091 und prüfe die Zuordnung und Textauswahl gezielt mit automatisierten Tests.
+
+## Erweiterung 27.11.2026: Zusammenfassung nach dem Training (A + B)
+
+- **A – Puls pro Satz:** Die Satzkacheln in der Zusammenfassung haben eine dritte Zeile mit dem Spitzenpuls des Satzes (`setPulses`, gleiche Fenster wie oben; „–“ = nicht messbar). Rot mit ↑ / blau mit ↓ nur, wenn der Satz außerhalb der Spanne und ≥ 5 bpm vom Median desselben Satzes in ≥ 3 früheren Trainings mit gleicher Arbeit liegt (`setPulseDirs`: gleiche Wdh., Gewichte, Vorbelastung; kein Backoff/Deload). Mehr Last = andere Arbeit, kein Pfeil.
+- **B – Vergleichszeile** unter „a set every …“: „♥ max 152 · wie üblich / 6 über üblich / 4 unter üblich / mehr Last, Puls wie üblich“ (Hinweis aus `pulseNote`, nur wenn er dieses Training betrifft), dann der 4-Wochen-Trend bis zu diesem Training (`exerciseTrend`, wie in der Statistik: steigt/stabil/sinkt/hängt fest ±x %).
+- Nur in der Zusammenfassung (`RecapPage`), nicht in den Verlaufskarten; tippen auf eine Verlaufskarte öffnet sie.
+- Tests: `setPulses` pro Satz, `setPulseDirs` (Pfeile, < 3 Refs, mehr Last, fehlender Satz).

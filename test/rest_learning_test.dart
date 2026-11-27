@@ -314,4 +314,25 @@ void main() {
     final covered = history([run(17, dips: true, trial: 150), ...fresh]);
     expect(restToAdopt(covered, bench(rest: 180)), (set: 1, seconds: 150, worked: 3));
   });
+
+  test('on its own: plans the suggested test, adopts after two that worked, and undoes either', () {
+    final now = DateTime(2026, 11, 20, 18);
+    final e = bench();
+    final planned = autoRestStep(pattern(), e, now)!;
+    expect((planned.test?.set, planned.test?.seconds, planned.adopted), (4, 150, null));
+    expect(pendingTrial(pattern(), e)?.seconds, 150, reason: 'no button: the test is planned');
+    expect(autoRestStep(pattern(), e, now), isNull, reason: 'one test at a time');
+    undoRestStep(e, planned, DateTime(2026, 11, 15, 18));
+    expect(e.restTrial, isNull);
+    expect(restSuggestion(pattern(), e), isNull, reason: 'undone: not again before newer trainings');
+
+    final ran = history([training(17, 150, 5, trialSeconds: 150), training(19, 150, 5, trialSeconds: 150), ...pattern()]);
+    final f = bench()..setRests[4] = 120;
+    final adopted = autoRestStep(ran, f, now)!;
+    expect((adopted.adopted, adopted.before), ((set: 4, seconds: 150, worked: 2), 120));
+    expect(f.setRests[4], 150);
+    undoRestStep(f, adopted, DateTime(2026, 11, 19, 18));
+    expect(f.setRests[4], 120);
+    expect(restToAdopt(ran, f), isNull, reason: 'undone: not adopted again');
+  });
 }

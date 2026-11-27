@@ -2737,14 +2737,8 @@ class L10nDe extends L10n {
     int longN,
     String time,
   ) {
-    return 'Vor Satz $set hast du nach $short $shortMet von $shortN Mal das Ziel geschafft, nach $long $longMet von $longN Mal. Nächstes Mal $time testen?';
+    return 'Vor Satz $set hast du nach $short $shortMet von $shortN Mal das Ziel geschafft, nach $long $longMet von $longN Mal. Nächstes Mal testet die App einmal $time.';
   }
-
-  @override
-  String get restTryOnce => 'Einmal testen';
-
-  @override
-  String get restKeep => 'Beibehalten';
 
   @override
   String restTrialPending(String time, int set) {
@@ -2755,15 +2749,9 @@ class L10nDe extends L10n {
   String get restTrialCancel => 'Nicht testen';
 
   @override
-  String restAdoptAsk(int worked, String time, int set) {
-    return '$worked Tests mit $time vor Satz $set geschafft. Dauerhaft übernehmen?';
+  String restAdopted(int worked, String time, int set) {
+    return '$worked Tests mit $time vor Satz $set geschafft. Ab jetzt gilt $time.';
   }
-
-  @override
-  String get restAdopt => 'Übernehmen';
-
-  @override
-  String get restAdoptNo => 'Nicht übernehmen';
 
   @override
   String restNeedsVariety(int set) {
@@ -2784,7 +2772,7 @@ class L10nDe extends L10n {
 
   @override
   String get restSmartHint =>
-      'Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.';
+      'Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.';
 
   @override
   String get restRuleStartTitle => 'Startwerte';
@@ -2805,21 +2793,21 @@ class L10nDe extends L10n {
 
   @override
   String get restRuleShorter =>
-      'Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.';
+      'Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.';
 
   @override
   String get restRuleLongerTitle => 'Länger';
 
   @override
   String get restRuleLonger =>
-      'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.';
+      'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.';
 
   @override
   String get restRuleTestTitle => 'Erst testen, dann übernehmen';
 
   @override
   String get restRuleTest =>
-      'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.';
+      'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.';
 
   @override
   String get restRuleStableTitle => 'Neues Gewicht zuerst';
@@ -2843,12 +2831,12 @@ class L10nDe extends L10n {
     String time,
     String current,
   ) {
-    return 'Vor Satz $set hast du $n Mal schon nach $rest weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal $time statt $current testen?';
+    return 'Vor Satz $set hast du $n Mal schon nach $rest weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal $time statt $current.';
   }
 
   @override
   String restSuggestTryShorter(int n, int set, String time, String current) {
-    return '$n Trainings in Folge alles geschafft, mit Reserve. Vor Satz $set einmal $time statt $current testen?';
+    return '$n Trainings in Folge alles geschafft, mit Reserve. Vor Satz $set testet die App einmal $time statt $current.';
   }
 
   @override
@@ -2930,5 +2918,108 @@ class L10nDe extends L10n {
   @override
   String restResetBody(int set, String learned, String start) {
     return 'Vor Satz $set gilt dann wieder der Startwert $start statt $learned.';
+  }
+
+  @override
+  String get measurePulse => 'Max. Puls';
+
+  @override
+  String get measurePulseHint =>
+      'Höchster Puls während der Sätze dieser Übung. Wege und Pausen dazwischen zählen nicht.';
+
+  @override
+  String get pulseNone => 'Kein Pulswert';
+
+  @override
+  String get pulseNoneInPeriod =>
+      'Für diese Übung liegen im gewählten Zeitraum keine Pulswerte vor.';
+
+  @override
+  String pulseBpm(int bpm) {
+    return '$bpm bpm';
+  }
+
+  @override
+  String pulseBpmSpoken(int bpm) {
+    return '$bpm Schläge pro Minute';
+  }
+
+  @override
+  String pulseCoverage(int covered, int sets) {
+    return 'Puls für $covered von $sets Sätzen';
+  }
+
+  @override
+  String pulseWorkKg(String sets, String weight) {
+    return '$sets mit $weight';
+  }
+
+  @override
+  String get pulseToday => 'Heute';
+
+  @override
+  String pulseOn(String date) {
+    return 'Am $date';
+  }
+
+  @override
+  String pulseSame(String when, String work) {
+    return '$when: wieder $work.';
+  }
+
+  @override
+  String pulseSameDone(String when, String work) {
+    return '$when: wieder $work geschafft.';
+  }
+
+  @override
+  String pulseHeavier(String when, String work, int refs, String from) {
+    return '$when: $work, zuvor $refs-mal mit $from.';
+  }
+
+  @override
+  String pulseLower(int bpm, int refs, int median) {
+    return 'Dein Spitzenpuls lag bei $bpm bpm, in $refs vergleichbaren Trainings typischerweise bei $median bpm.';
+  }
+
+  @override
+  String pulseHigher(int bpm, int refs) {
+    return 'Dein Spitzenpuls lag mit $bpm bpm über deinen letzten $refs vergleichbaren Trainings.';
+  }
+
+  @override
+  String pulseSimilar(int bpm) {
+    return 'Dein Spitzenpuls blieb mit $bpm bpm im üblichen Bereich.';
+  }
+
+  @override
+  String cmpPulseMax(int bpm) {
+    return 'max $bpm';
+  }
+
+  @override
+  String get cmpPulseUsual => 'wie üblich';
+
+  @override
+  String cmpPulseAbove(int bpm) {
+    return '$bpm über üblich';
+  }
+
+  @override
+  String cmpPulseBelow(int bpm) {
+    return '$bpm unter üblich';
+  }
+
+  @override
+  String get cmpPulseHeavier => 'mehr Last, Puls wie üblich';
+
+  @override
+  String recapTrend(String trend, String pct) {
+    return '$trend $pct in 4 Wo.';
+  }
+
+  @override
+  String recapSetPulse(int bpm) {
+    return 'Spitzenpuls $bpm';
   }
 }

@@ -6,6 +6,7 @@ import 'language.dart';
 import 'main.dart';
 import 'model.dart';
 import 'pulse_chart.dart';
+import 'pulse_compare.dart';
 import 'rest_learning.dart';
 import 'timing.dart';
 import 'units.dart';
@@ -28,6 +29,22 @@ class _RecapPageState extends State<RecapPage> {
   late int? mood = s.mood;
   late final tags = {...s.tags};
   late bool noteOpen = s.tags.isNotEmpty || s.note != null;
+
+  /// What smart rests did on their own after this training, by exercise (only while it's the latest of
+  /// its workout); shown with an undo.
+  final restSteps = <String, RestStep>{};
+
+  @override
+  void initState() {
+    super.initState();
+    final plan = store.workouts.where((w) => w.id == s.workoutId).firstOrNull;
+    if (plan == null || store.lastSessionOf(plan) != s) return;
+    for (final e in plan.exercises) {
+      if (!s.exercises.any((l) => l.name == e.name && !l.cardio)) continue;
+      if (autoRestStep(store.sessions, e, DateTime.now()) case final step?) restSteps[e.name] = step;
+    }
+    if (restSteps.isNotEmpty) store.saveWorkout(plan);
+  }
 
   @override
   void dispose() {
@@ -96,23 +113,21 @@ class _RecapPageState extends State<RecapPage> {
         tr.restTrialNoComparison(p.stage == Preload.loaded ? after(p) : tr.restNoPreload),
       null => null,
     };
-    final adopt = restToAdopt(sessions, e);
-    final suggestion = restSuggestion(sessions, e);
+    final step = restSteps[e.name];
     final pending = pendingTrial(sessions, e);
-    final (String? text, List<(String, VoidCallback)> actions) = switch (adopt) {
-      final a? => (
-        tr.restAdoptAsk(a.worked, clock(a.seconds), a.set + 1),
-        [(tr.restAdopt, () => adoptRest(e, a.set, a.seconds)), (tr.restAdoptNo, () => e.restDeclined = s.date)],
+    final (String? text, List<(String, VoidCallback)> actions) = switch (step) {
+      (adopted: final a?, test: _, before: _) => (
+        tr.restAdopted(a.worked, clock(a.seconds), a.set + 1),
+        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!, s.date))],
       ),
-      _ => switch (suggestion) {
-        final g? => (
-          [
-            ?switch (g.stage) {
-              Preload.loaded when g.by != null => tr.restStageAfter(g.by!),
-              Preload.none => tr.restStageFresh,
-              _ => null,
-            },
-            switch (g.change) {
+      (test: final g?, adopted: _, before: _) => (
+        [
+          ?switch (g.stage) {
+            Preload.loaded when g.by != null => tr.restStageAfter(g.by!),
+            Preload.none => tr.restStageFresh,
+            _ => null,
+          },
+          switch (g.change) {
             RestChange.longer => tr.restSuggest(
               g.set + 1,
               restAboutLabel(Duration(seconds: g.before)),
@@ -132,29 +147,23 @@ class _RecapPageState extends State<RecapPage> {
             ),
             RestChange.tryShorter => tr.restSuggestTryShorter(g.n, g.set + 1, clock(g.seconds), clock(g.current)),
           },
-          ].join(' '),
-          [
-            (
-              tr.restTryOnce,
-              () => e.restTrial = (
-                set: g.set,
-                seconds: g.seconds,
-                kg: e.weights[g.set],
-                target: e.repsPerSet[g.set],
-                since: DateTime.now(),
-              ),
-            ),
-            (tr.restKeep, () => e.restDeclined = s.date),
-          ],
-        ),
-        _ when pending != null => (
-          tr.restTrialPending(clock(pending.seconds), pending.set + 1),
-          [(tr.restTrialCancel, () => e.restTrial = null)],
-        ),
-        _ => switch (restNeedsVariety(sessions, e)) {
-          final set? => (tr.restNeedsVariety(set + 1), const <(String, VoidCallback)>[]),
-          _ => (null, const <(String, VoidCallback)>[]),
-        },
+        ].join(' '),
+        [(tr.undo, () => undoRestStep(e, restSteps.remove(e.name)!, s.date))],
+      ),
+      _ when pending != null => (
+        tr.restTrialPending(clock(pending.seconds), pending.set + 1),
+        [
+          (
+            tr.restTrialCancel,
+            () => e
+              ..restTrial = null
+              ..restDeclined = s.date,
+          ),
+        ],
+      ),
+      _ => switch (restNeedsVariety(sessions, e)) {
+        final set? => (tr.restNeedsVariety(set + 1), const <(String, VoidCallback)>[]),
+        _ => (null, const <(String, VoidCallback)>[]),
       },
     };
     if (result == null && text == null) return null;
@@ -234,6 +243,49 @@ class _RecapPageState extends State<RecapPage> {
     final heaviest = strength.fold(0.0, (m, e) => e.setsDone > 0 && e.weight > m ? e.weight : m);
     final small = TextStyle(fontSize: 12, color: c.onSurfaceVariant);
     const title = TextStyle(fontSize: 16, fontWeight: FontWeight.w600);
+    final pulses = recapPulses(s, store.sessions);
+
+    // How the exercise compares: its peak pulse against usual, then its trend over four weeks up to this training.
+    Widget? compareLine(String name) {
+      final log = s.exercises.where((l) => l.name == name).firstOrNull;
+      if (log == null || log.cardio) return null;
+      final spans = <InlineSpan>[];
+      if (pulses[name] case (:final peak?, :final note, sets: _, dirs: _)) {
+        spans.addAll([
+          WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Icon(Icons.favorite, size: 11, color: c.onSurfaceVariant)),
+          TextSpan(text: ' ${tr.cmpPulseMax(peak)}'),
+        ]);
+        if (note != null) {
+          final d = note.bpm - note.median;
+          final (text, color) = switch (note.kind) {
+            PulseNoteKind.higher => (tr.cmpPulseAbove(d), c.tertiary),
+            PulseNoteKind.lower => (tr.cmpPulseBelow(-d), c.primary),
+            PulseNoteKind.similar => (tr.cmpPulseUsual, null),
+            PulseNoteKind.heavierSimilar => (tr.cmpPulseHeavier, c.primary),
+          };
+          spans.add(TextSpan(
+              text: ' · $text',
+              style: color == null ? null : TextStyle(color: color, fontWeight: FontWeight.w600)));
+        }
+      }
+      final history = [for (final h in store.historyOf(name)) if (!h.$1.isAfter(s.date)) h];
+      if (store.exerciseTrend(history, s.date) case (final t, final change)) {
+        final (label, color) = switch (t) {
+          Trend.up => (tr.trendRising, c.primary),
+          Trend.down => (tr.trendDeclining, null),
+          Trend.flat => (tr.trendSteady, null),
+          Trend.stuck => (tr.trendStuck, c.tertiary),
+        };
+        final pct = change.round();
+        if (spans.isNotEmpty) spans.add(const TextSpan(text: ' · '));
+        spans.add(TextSpan(
+            text: tr.recapTrend(label, '${pct >= 0 ? '+' : '−'}${pct.abs()} %'),
+            style: color == null ? null : TextStyle(color: color, fontWeight: FontWeight.w600)));
+      }
+      return spans.isEmpty ? null : Text.rich(TextSpan(children: spans), style: small);
+    }
 
     // Under each exercise's name: 🏆 for a record (the headline says so), then its weight next time
     // (explained once above the card, so long names stay short).
@@ -245,7 +297,8 @@ class _RecapPageState extends State<RecapPage> {
         ?timeTaken(s, name, perSet: true),
         if (log?.rir case final r?) rirLabel(r, timed: log!.timed),
       ].join(' · ');
-      if (!record && next == null && time.isEmpty) return null;
+      final compare = compareLine(name);
+      if (!record && next == null && time.isEmpty && compare == null) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
       if (next case (final l, final e)) {
         final kg = e.weight;
@@ -296,6 +349,7 @@ class _RecapPageState extends State<RecapPage> {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (parts.isNotEmpty) Text.rich(TextSpan(children: parts), style: small),
         if (time.isNotEmpty) Text(time, style: small),
+        ?compare,
       ]);
     }
 
@@ -381,6 +435,7 @@ class _RecapPageState extends State<RecapPage> {
             detail: detail,
             perSet: true,
             timed: {for (final l in s.exercises) if (l.timed) l.name},
+            setPulse: (name) => switch (pulses[name]) { final p? => (sets: p.sets, dirs: p.dirs), null => null },
             actions: const [],
           ),
           for (final (l, e) in nextOf.values)

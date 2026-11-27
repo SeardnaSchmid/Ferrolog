@@ -2361,7 +2361,7 @@
       }
     }
   },
-  "restSuggest": "Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal {time} testen?",
+  "restSuggest": "Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal testet die App einmal {time}.",
   "@restSuggest": {
     "placeholders": {
       "set": {
@@ -2390,8 +2390,6 @@
       }
     }
   },
-  "restTryOnce": "Einmal testen",
-  "restKeep": "Beibehalten",
   "restTrialPending": "Nächstes Training: {time} Pause vor Satz {set} als Test",
   "@restTrialPending": {
     "placeholders": {
@@ -2404,8 +2402,8 @@
     }
   },
   "restTrialCancel": "Nicht testen",
-  "restAdoptAsk": "{worked} Tests mit {time} vor Satz {set} geschafft. Dauerhaft übernehmen?",
-  "@restAdoptAsk": {
+  "restAdopted": "{worked} Tests mit {time} vor Satz {set} geschafft. Ab jetzt gilt {time}.",
+  "@restAdopted": {
     "placeholders": {
       "worked": {
         "type": "int"
@@ -2418,8 +2416,6 @@
       }
     }
   },
-  "restAdopt": "Übernehmen",
-  "restAdoptNo": "Nicht übernehmen",
   "restNeedsVariety": "Für Satz {set} fehlen noch Trainings mit unterschiedlich langen Pausen",
   "@restNeedsVariety": {
     "placeholders": {
@@ -2432,22 +2428,22 @@
   "restSmart": "Intelligent",
   "restFixed": "Fest",
   "restSmartHelp": "So funktionieren intelligente Pausen",
-  "restSmartHint": "Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.",
+  "restSmartHint": "Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.",
   "restRuleStartTitle": "Startwerte",
   "restRuleStart": "Die Zeiten unten gelten, bis deine Trainings etwas anderes zeigen. Jede Pause vor einem Satz lernt für sich. Die Pause nach einem nicht geschafften Satz bleibt, wie eingestellt.",
   "restRuleMeasureTitle": "Gemessen an deinen Tipps",
   "restRuleMeasure": "Pause = Zeit zwischen zwei Satz-Tipps minus geschätzte Satzdauer. Kein Extra-Tipp nötig. Unterbrechungen, andere Übungen dazwischen und ausgelassene Sätze zählen nicht.",
   "restRuleShorterTitle": "Kürzer",
-  "restRuleShorter": "Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.",
+  "restRuleShorter": "Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.",
   "restRuleLongerTitle": "Länger",
-  "restRuleLonger": "Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.",
+  "restRuleLonger": "Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.",
   "restRuleTestTitle": "Erst testen, dann übernehmen",
-  "restRuleTest": "Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.",
+  "restRuleTest": "Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.",
   "restRuleStableTitle": "Neues Gewicht zuerst",
   "restRuleStable": "Steigt das Gewicht oder steht ein Deload an, gelten erst die bewährten Zeiten.",
   "restPulse": "Herzfrequenz berücksichtigen",
   "restPulseHint": "Mit Pulssensor: verlängert die Pause, solange der Puls über 110 liegt, höchstens auf das Doppelte.",
-  "restSuggestShorter": "Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal {time} statt {current} testen?",
+  "restSuggestShorter": "Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal {time} statt {current}.",
   "@restSuggestShorter": {
     "placeholders": {
       "set": {
@@ -2467,7 +2463,7 @@
       }
     }
   },
-  "restSuggestTryShorter": "{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} einmal {time} statt {current} testen?",
+  "restSuggestTryShorter": "{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} testet die App einmal {time} statt {current}.",
   "@restSuggestTryShorter": {
     "placeholders": {
       "n": {
@@ -2553,5 +2549,173 @@
   "restPulseInfoTitle": "Herzfrequenz in der Pause",
   "restPulseInfo": "Nur mit verbundenem Pulssensor.\n\nDie geplante Pause ist das Minimum. Ist dein Puls am Ende noch über 110, läuft sie weiter, bis er darunter fällt, höchstens bis zur doppelten Pause. Fällt er früher unter 110, endet die Pause trotzdem erst zur geplanten Zeit. Der Puls verkürzt nie.\n\nKürzer wird eine Pause nur über Smart: Schaffst du einen Satz mehrmals sicher, schlägt der Rückblick einen Test mit kürzerer Pause vor.\n\nIndirekt hängt beides zusammen: Smart misst die Pause, die du wirklich gemacht hast. Verlängert der Puls oft und gelingen die Sätze danach, kann das eine längere Pause stützen.\n\nWarum nicht kürzer bei schnellem Puls? Ein niedriger Puls heißt nicht, dass die Muskeln erholt sind. Gerade bei schweren Sätzen zählt vor allem die Muskel-Erholung.\n\nOhne Sensor oder Messung bleibt es bei der geplanten Pause.",
   "restResetBody": "Vor Satz {set} gilt dann wieder der Startwert {start} statt {learned}.",
-  "@restResetBody": {"placeholders": {"set": {"type": "int"}, "learned": {"type": "String"}, "start": {"type": "String"}}}
+  "@restResetBody": {"placeholders": {"set": {"type": "int"}, "learned": {"type": "String"}, "start": {"type": "String"}}},
+  "measurePulse": "Max. Puls",
+  "measurePulseHint": "Höchster Puls während der Sätze dieser Übung. Wege und Pausen dazwischen zählen nicht.",
+  "pulseNone": "Kein Pulswert",
+  "pulseNoneInPeriod": "Für diese Übung liegen im gewählten Zeitraum keine Pulswerte vor.",
+  "pulseBpm": "{bpm} bpm",
+  "@pulseBpm": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseBpmSpoken": "{bpm} Schläge pro Minute",
+  "@pulseBpmSpoken": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseCoverage": "Puls für {covered} von {sets} Sätzen",
+  "@pulseCoverage": {
+    "placeholders": {
+      "covered": {
+        "type": "int"
+      },
+      "sets": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseWorkKg": "{sets} mit {weight}",
+  "@pulseWorkKg": {
+    "placeholders": {
+      "sets": {
+        "type": "String"
+      },
+      "weight": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseToday": "Heute",
+  "pulseOn": "Am {date}",
+  "@pulseOn": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseSame": "{when}: wieder {work}.",
+  "@pulseSame": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "work": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseSameDone": "{when}: wieder {work} geschafft.",
+  "@pulseSameDone": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "work": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseHeavier": "{when}: {work}, zuvor {refs}-mal mit {from}.",
+  "@pulseHeavier": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "work": {
+        "type": "String"
+      },
+      "refs": {
+        "type": "int"
+      },
+      "from": {
+        "type": "String"
+      }
+    }
+  },
+  "pulseLower": "Dein Spitzenpuls lag bei {bpm} bpm, in {refs} vergleichbaren Trainings typischerweise bei {median} bpm.",
+  "@pulseLower": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      },
+      "refs": {
+        "type": "int"
+      },
+      "median": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseHigher": "Dein Spitzenpuls lag mit {bpm} bpm über deinen letzten {refs} vergleichbaren Trainings.",
+  "@pulseHigher": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      },
+      "refs": {
+        "type": "int"
+      }
+    }
+  },
+  "pulseSimilar": "Dein Spitzenpuls blieb mit {bpm} bpm im üblichen Bereich.",
+  "@pulseSimilar": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "cmpPulseMax": "max {bpm}",
+  "@cmpPulseMax": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "cmpPulseUsual": "wie üblich",
+  "cmpPulseAbove": "{bpm} über üblich",
+  "@cmpPulseAbove": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "cmpPulseBelow": "{bpm} unter üblich",
+  "@cmpPulseBelow": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  },
+  "cmpPulseHeavier": "mehr Last, Puls wie üblich",
+  "recapTrend": "{trend} {pct} in 4 Wo.",
+  "@recapTrend": {
+    "placeholders": {
+      "trend": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "recapSetPulse": "Spitzenpuls {bpm}",
+  "@recapSetPulse": {
+    "placeholders": {
+      "bpm": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -4417,7 +4417,7 @@ abstract class L10n {
   /// No description provided for @restSuggest.
   ///
   /// In de, this message translates to:
-  /// **'Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal {time} testen?'**
+  /// **'Vor Satz {set} hast du nach {short} {shortMet} von {shortN} Mal das Ziel geschafft, nach {long} {longMet} von {longN} Mal. Nächstes Mal testet die App einmal {time}.'**
   String restSuggest(
     int set,
     String short,
@@ -4428,18 +4428,6 @@ abstract class L10n {
     int longN,
     String time,
   );
-
-  /// No description provided for @restTryOnce.
-  ///
-  /// In de, this message translates to:
-  /// **'Einmal testen'**
-  String get restTryOnce;
-
-  /// No description provided for @restKeep.
-  ///
-  /// In de, this message translates to:
-  /// **'Beibehalten'**
-  String get restKeep;
 
   /// No description provided for @restTrialPending.
   ///
@@ -4453,23 +4441,11 @@ abstract class L10n {
   /// **'Nicht testen'**
   String get restTrialCancel;
 
-  /// No description provided for @restAdoptAsk.
+  /// No description provided for @restAdopted.
   ///
   /// In de, this message translates to:
-  /// **'{worked} Tests mit {time} vor Satz {set} geschafft. Dauerhaft übernehmen?'**
-  String restAdoptAsk(int worked, String time, int set);
-
-  /// No description provided for @restAdopt.
-  ///
-  /// In de, this message translates to:
-  /// **'Übernehmen'**
-  String get restAdopt;
-
-  /// No description provided for @restAdoptNo.
-  ///
-  /// In de, this message translates to:
-  /// **'Nicht übernehmen'**
-  String get restAdoptNo;
+  /// **'{worked} Tests mit {time} vor Satz {set} geschafft. Ab jetzt gilt {time}.'**
+  String restAdopted(int worked, String time, int set);
 
   /// No description provided for @restNeedsVariety.
   ///
@@ -4504,7 +4480,7 @@ abstract class L10n {
   /// No description provided for @restSmartHint.
   ///
   /// In de, this message translates to:
-  /// **'Lernt aus deinen Satz-Tipps und schlägt Tests im Rückblick vor.'**
+  /// **'Lernt aus deinen Satz-Tipps, testet neue Pausen von selbst und sagt es dir im Rückblick.'**
   String get restSmartHint;
 
   /// No description provided for @restRuleStartTitle.
@@ -4540,7 +4516,7 @@ abstract class L10n {
   /// No description provided for @restRuleShorter.
   ///
   /// In de, this message translates to:
-  /// **'Schaffst du die ganze Übung mehrmals sicher, schlägt der Rückblick vor, eine Pause einmal kürzer zu testen. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.'**
+  /// **'Schaffst du die ganze Übung mehrmals sicher, testet die App eine Pause einmal kürzer. Nie unter 2:00 bei schweren Sätzen (bis 5 Wdh.), sonst 1:00.'**
   String get restRuleShorter;
 
   /// No description provided for @restRuleLongerTitle.
@@ -4552,7 +4528,7 @@ abstract class L10n {
   /// No description provided for @restRuleLonger.
   ///
   /// In de, this message translates to:
-  /// **'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, schlägt er die längere Pause zum Test vor, höchstens 5:00.'**
+  /// **'Scheitert ein Satz nach kurzen Pausen öfter als nach langen, testet sie die längere Pause, höchstens 5:00.'**
   String get restRuleLonger;
 
   /// No description provided for @restRuleTestTitle.
@@ -4564,7 +4540,7 @@ abstract class L10n {
   /// No description provided for @restRuleTest.
   ///
   /// In de, this message translates to:
-  /// **'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests fragt die App, ob die Zeit bleibt.'**
+  /// **'Ein Test gilt für ein Training und eine Pause. Zählt die ganze Übung: Nach zwei gelungenen Tests bleibt die Zeit. Im Rückblick kannst du jeden Schritt rückgängig machen.'**
   String get restRuleTest;
 
   /// No description provided for @restRuleStableTitle.
@@ -4594,7 +4570,7 @@ abstract class L10n {
   /// No description provided for @restSuggestShorter.
   ///
   /// In de, this message translates to:
-  /// **'Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal einmal {time} statt {current} testen?'**
+  /// **'Vor Satz {set} hast du {n} Mal schon nach {rest} weitergemacht und die ganze Übung geschafft. Nächstes Mal testet die App einmal {time} statt {current}.'**
   String restSuggestShorter(
     int set,
     int n,
@@ -4606,7 +4582,7 @@ abstract class L10n {
   /// No description provided for @restSuggestTryShorter.
   ///
   /// In de, this message translates to:
-  /// **'{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} einmal {time} statt {current} testen?'**
+  /// **'{n} Trainings in Folge alles geschafft, mit Reserve. Vor Satz {set} testet die App einmal {time} statt {current}.'**
   String restSuggestTryShorter(int n, int set, String time, String current);
 
   /// No description provided for @restTrialOutcome.
@@ -4728,6 +4704,144 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Vor Satz {set} gilt dann wieder der Startwert {start} statt {learned}.'**
   String restResetBody(int set, String learned, String start);
+
+  /// No description provided for @measurePulse.
+  ///
+  /// In de, this message translates to:
+  /// **'Max. Puls'**
+  String get measurePulse;
+
+  /// No description provided for @measurePulseHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Höchster Puls während der Sätze dieser Übung. Wege und Pausen dazwischen zählen nicht.'**
+  String get measurePulseHint;
+
+  /// No description provided for @pulseNone.
+  ///
+  /// In de, this message translates to:
+  /// **'Kein Pulswert'**
+  String get pulseNone;
+
+  /// No description provided for @pulseNoneInPeriod.
+  ///
+  /// In de, this message translates to:
+  /// **'Für diese Übung liegen im gewählten Zeitraum keine Pulswerte vor.'**
+  String get pulseNoneInPeriod;
+
+  /// No description provided for @pulseBpm.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} bpm'**
+  String pulseBpm(int bpm);
+
+  /// No description provided for @pulseBpmSpoken.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} Schläge pro Minute'**
+  String pulseBpmSpoken(int bpm);
+
+  /// No description provided for @pulseCoverage.
+  ///
+  /// In de, this message translates to:
+  /// **'Puls für {covered} von {sets} Sätzen'**
+  String pulseCoverage(int covered, int sets);
+
+  /// No description provided for @pulseWorkKg.
+  ///
+  /// In de, this message translates to:
+  /// **'{sets} mit {weight}'**
+  String pulseWorkKg(String sets, String weight);
+
+  /// No description provided for @pulseToday.
+  ///
+  /// In de, this message translates to:
+  /// **'Heute'**
+  String get pulseToday;
+
+  /// No description provided for @pulseOn.
+  ///
+  /// In de, this message translates to:
+  /// **'Am {date}'**
+  String pulseOn(String date);
+
+  /// No description provided for @pulseSame.
+  ///
+  /// In de, this message translates to:
+  /// **'{when}: wieder {work}.'**
+  String pulseSame(String when, String work);
+
+  /// No description provided for @pulseSameDone.
+  ///
+  /// In de, this message translates to:
+  /// **'{when}: wieder {work} geschafft.'**
+  String pulseSameDone(String when, String work);
+
+  /// No description provided for @pulseHeavier.
+  ///
+  /// In de, this message translates to:
+  /// **'{when}: {work}, zuvor {refs}-mal mit {from}.'**
+  String pulseHeavier(String when, String work, int refs, String from);
+
+  /// No description provided for @pulseLower.
+  ///
+  /// In de, this message translates to:
+  /// **'Dein Spitzenpuls lag bei {bpm} bpm, in {refs} vergleichbaren Trainings typischerweise bei {median} bpm.'**
+  String pulseLower(int bpm, int refs, int median);
+
+  /// No description provided for @pulseHigher.
+  ///
+  /// In de, this message translates to:
+  /// **'Dein Spitzenpuls lag mit {bpm} bpm über deinen letzten {refs} vergleichbaren Trainings.'**
+  String pulseHigher(int bpm, int refs);
+
+  /// No description provided for @pulseSimilar.
+  ///
+  /// In de, this message translates to:
+  /// **'Dein Spitzenpuls blieb mit {bpm} bpm im üblichen Bereich.'**
+  String pulseSimilar(int bpm);
+
+  /// No description provided for @cmpPulseMax.
+  ///
+  /// In de, this message translates to:
+  /// **'max {bpm}'**
+  String cmpPulseMax(int bpm);
+
+  /// No description provided for @cmpPulseUsual.
+  ///
+  /// In de, this message translates to:
+  /// **'wie üblich'**
+  String get cmpPulseUsual;
+
+  /// No description provided for @cmpPulseAbove.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} über üblich'**
+  String cmpPulseAbove(int bpm);
+
+  /// No description provided for @cmpPulseBelow.
+  ///
+  /// In de, this message translates to:
+  /// **'{bpm} unter üblich'**
+  String cmpPulseBelow(int bpm);
+
+  /// No description provided for @cmpPulseHeavier.
+  ///
+  /// In de, this message translates to:
+  /// **'mehr Last, Puls wie üblich'**
+  String get cmpPulseHeavier;
+
+  /// No description provided for @recapTrend.
+  ///
+  /// In de, this message translates to:
+  /// **'{trend} {pct} in 4 Wo.'**
+  String recapTrend(String trend, String pct);
+
+  /// No description provided for @recapSetPulse.
+  ///
+  /// In de, this message translates to:
+  /// **'Spitzenpuls {bpm}'**
+  String recapSetPulse(int bpm);
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

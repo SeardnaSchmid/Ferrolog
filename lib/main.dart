@@ -728,6 +728,10 @@ class OverviewCard extends StatelessWidget {
 
   /// Exercises held for a time: their sets show seconds ("30s").
   final Set<String> timed;
+
+  /// With [perSet]: an exercise's peak pulse per set and 1 / -1 where it is clearly above / below usual,
+  /// as a third line in its set tiles; null for none.
+  final ({List<int?> sets, List<int> dirs})? Function(String name)? setPulse;
   const OverviewCard({
     super.key,
     required this.title,
@@ -740,6 +744,7 @@ class OverviewCard extends StatelessWidget {
     this.detail,
     this.perSet = false,
     this.timed = const {},
+    this.setPulse,
   });
 
   @override
@@ -806,6 +811,7 @@ class OverviewCard extends StatelessWidget {
                   if (perSet && !cardio)
                     // Name (and detail) left, wrapping if long; sets always right, in two rows when there are many.
                     LayoutBuilder(builder: (context, box) {
+                      final pulse = setPulse?.call(name);
                       return Row(children: [
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -818,7 +824,9 @@ class OverviewCard extends StatelessWidget {
                           constraints: BoxConstraints(maxWidth: box.maxWidth * .7),
                           child: Wrap(alignment: WrapAlignment.end, spacing: 3, runSpacing: 3, children: [
                             for (final (i, r) in reps.indexed)
-                              MiniSetTile(r, targets[i], weights[i], unit: timed.contains(name) ? tr.secondsUnit : ''),
+                              MiniSetTile(r, targets[i], weights[i],
+                                  unit: timed.contains(name) ? tr.secondsUnit : '',
+                                  pulse: pulse == null ? null : (bpm: pulse.sets.elementAtOrNull(i), dir: pulse.dirs.elementAtOrNull(i) ?? 0)),
                           ]),
                         ),
                       ]);
@@ -939,7 +947,11 @@ class MiniSetTile extends StatelessWidget {
   final int target;
   final double weight;
   final String unit; // after the reps, "s" for seconds
-  const MiniSetTile(this.reps, this.target, this.weight, {super.key, this.unit = ''});
+
+  /// A third line with the set's peak pulse ("–" unmeasured), colored and with an arrow when clearly
+  /// above (dir 1) or below (-1) usual; null for no line.
+  final ({int? bpm, int dir})? pulse;
+  const MiniSetTile(this.reps, this.target, this.weight, {super.key, this.unit = '', this.pulse});
 
   static const double width = 40;
 
@@ -972,6 +984,29 @@ class MiniSetTile extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(weightNum(weight),
                   style: TextStyle(fontSize: 11, color: c.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()])),
+            ),
+          ],
+          if (pulse case (:final bpm, :final dir)?) ...[
+            const SizedBox(height: 1),
+            Container(
+              height: 16,
+              color: c.surfaceContainerHigh,
+              alignment: Alignment.center,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(
+                  bpm == null ? '–' : '$bpm',
+                  semanticsLabel: bpm == null ? null : tr.recapSetPulse(bpm),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: dir != 0 ? FontWeight.w700 : FontWeight.w400,
+                    color: dir > 0 ? c.tertiary : dir < 0 ? c.primary : c.onSurfaceVariant,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (dir != 0)
+                  Icon(dir > 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                      size: 10, color: dir > 0 ? c.tertiary : c.primary),
+              ]),
             ),
           ],
         ]),
