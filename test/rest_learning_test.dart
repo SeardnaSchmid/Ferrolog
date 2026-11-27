@@ -334,4 +334,31 @@ void main() {
     undoRestStep(f, adopted);
     expect(f.setRests[4], 120);
   });
+
+  test('deleting or editing the training takes its rest change back; edited, it is worked out again unless undone', () async {
+    SharedPreferences.setMockInitialValues({});
+    final st = Store(await SharedPreferences.getInstance());
+    final w = Workout(id: 'w', name: 'A', exercises: [bench()..up = false]); // the load stays, so the trainings compare
+    await st.saveWorkout(w);
+    final all = pattern(), last = all.first;
+    st.sessions.addAll(all.skip(1));
+    Exercise e() => w.exercises.first;
+    Future<RestStep?> finish() async {
+      await st.finishSession(last, at: last.date.add(const Duration(hours: 1)));
+      return autoRestStep(st.sessions, e(), last.date); // as the recap does
+    }
+
+    expect((await finish())?.seconds, 150);
+    await st.deleteSession(last);
+    expect((e().setRests.isEmpty, e().restDeclined), (true, null));
+
+    final step = (await finish())!;
+    await st.replaceSession(last.copy());
+    expect((e().setRests[4], e().restDeclined), (150, last.date), reason: 'worked out again from the edited training');
+    undoRestStep(e(), step);
+    await st.replaceSession(last.copy());
+    expect(e().setRests, isEmpty, reason: 'undone stays undone');
+    await st.deleteSession(last);
+    expect(e().restDeclined, isNull);
+  });
 }

@@ -882,7 +882,9 @@ String tagLabel(String tag) => switch (tag) {
 
 /// What progression changes on a planned exercise, as it was before a training.
 /// [auto] is the auto mode's part: reps, setReps and [AutoState], as JSON; null in the fixed mode.
-typedef PlanState = ({double weight, List<double>? setWeights, int fails, Map<String, dynamic>? auto});
+/// [rests]: the learned rests and when smart rests last changed one ('setRests', 'declined'); null in data from
+/// before it was kept, then the rests stay as they are.
+typedef PlanState = ({double weight, List<double>? setWeights, int fails, Map<String, dynamic>? auto, Map<String, dynamic>? rests});
 
 class Session {
   final String id;
@@ -996,7 +998,7 @@ class Session {
         if (planBefore case final p?)
           'planBefore': {
             for (final MapEntry(:key, :value) in p.entries)
-              key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails, 'auto': ?value.auto},
+              key: {'weight': value.weight, 'setWeights': ?value.setWeights, 'fails': value.fails, 'auto': ?value.auto, 'learned': ?value.rests},
           },
         if (pulse.isNotEmpty) 'pulse': [for (final (t, bpm) in pulse) [t, bpm]],
         'exercises': exercises.map((e) => e.toJson()).toList(),
@@ -1033,6 +1035,7 @@ class Session {
                   setWeights: value['setWeights'] == null ? null : [for (final w in value['setWeights']) (w as num).toDouble()],
                   fails: value['fails'] as int? ?? 0,
                   auto: value['auto'],
+                  rests: value['learned'],
                 ),
             },
           _ => null,
@@ -1285,6 +1288,10 @@ class Store extends ChangeNotifier {
               setWeights: e.setWeights == null ? null : List.of(e.setWeights!),
               fails: e.fails,
               auto: e.auto ? {'reps': e.reps, 'setReps': ?e.setReps, 'state': ?e.state?.toJson()} : null,
+              rests: {
+                'setRests': {for (final MapEntry(:key, :value) in e.setRests.entries) '$key': value},
+                'declined': ?e.restDeclined?.toIso8601String(),
+              },
             ),
       };
       _progress(w, s);
@@ -1374,10 +1381,16 @@ class Store extends ChangeNotifier {
       };
 
   /// Puts the plan back to before [s] (see [movesPlan]). An exercise whose per-set weights were changed
-  /// in the plan since (another count, or uniform now) stays as it is. Doesn't save.
-  void revertProgression(Session s) {
+  /// in the plan since (another count, or uniform now) stays as it is. With [rests], a rest smart rests
+  /// changed after [s] goes back too. Doesn't save.
+  void revertProgression(Session s, {bool rests = true}) {
     final w = _workoutOf(s);
     if (w == null || !movesPlan(s)) return;
+    if (rests) {
+      for (final e in w.exercises) {
+        if (_restsBefore(s, e) case final before?) _putRestsBack(e, before);
+      }
+    }
     for (final MapEntry(key: name, value: before) in s.planBefore!.entries) {
       final e = w.exercises.where((x) => x.name == name).firstOrNull;
       if (e == null || before.setWeights?.length != e.setWeights?.length) continue;
@@ -1396,12 +1409,37 @@ class Store extends ChangeNotifier {
   }
 
   /// The plan as if [s] had been finished as it is now: back to before it, then its progression again.
+  /// A rest smart rests changed after it is worked out again too, unless that change was undone.
   /// Doesn't save.
   void reapplyProgression(Session s) {
     if (!movesPlan(s)) return;
-    revertProgression(s);
-    _progress(_workoutOf(s)!, s);
+    revertProgression(s, rests: false);
+    final w = _workoutOf(s)!;
+    _progress(w, s);
+    for (final e in w.exercises) {
+      final before = _restsBefore(s, e);
+      if (before == null || mapEquals(before.setRests, e.setRests)) continue;
+      _putRestsBack(e, before);
+      autoRestStep(sessions, e, s.date);
+    }
   }
+
+  /// The rests of [e] before [s], if [s] is where smart rests last changed one (null otherwise, or unknown).
+  ({Map<int, int> setRests, DateTime? declined})? _restsBefore(Session s, Exercise e) {
+    final r = s.planBefore?[e.name]?.rests;
+    if (r == null) return null;
+    final declined = r['declined'] == null ? null : DateTime.parse(r['declined']);
+    if (e.restDeclined == declined) return null; // nothing changed after it
+    return (
+      setRests: {for (final MapEntry(:key, :value) in ((r['setRests'] as Map?) ?? const {}).entries) int.parse(key): value as int},
+      declined: declined,
+    );
+  }
+
+  void _putRestsBack(Exercise e, ({Map<int, int> setRests, DateTime? declined}) before) => e
+    ..setRests = Map.of(before.setRests)
+    ..restDeclined = before.declined
+    ..restTrial = null;
 
   /// Saves changes made in place to a stored session (body weight, note). With [replan] (the mood or
   /// tags changed) the auto mode looks at the training again: a bad day doesn't count a miss.

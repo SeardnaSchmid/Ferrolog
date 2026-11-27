@@ -36,7 +36,8 @@ void main() {
 
   test('finishing keeps the plan before on the newest training only', () async {
     final first = await train(2, [5, 5, 5]);
-    expect(first.planBefore?['Kniebeuge'], (weight: 100.0, setWeights: null, fails: 0, auto: null));
+    expect(first.planBefore?['Kniebeuge']?.weight, 100.0);
+    expect(first.planBefore?['Kniebeuge']?.fails, 0);
     expect(squat().weight, 102.5);
     final second = await train(4, [5, 5, 3]);
     expect(first.planBefore, isNull, reason: 'handed over to the newer one');
@@ -44,7 +45,7 @@ void main() {
     expect((squat().weight, squat().fails), (102.5, 1));
 
     final reopened = Store(await SharedPreferences.getInstance());
-    expect(reopened.sessions.first.planBefore, second.planBefore, reason: 'stored');
+    expect(jsonEncode(reopened.sessions.first.toJson()['planBefore']), jsonEncode(second.toJson()['planBefore']), reason: 'stored');
     expect(jsonDecode(store.exportJson())['sessions'].first.containsKey('planBefore'), isFalse, reason: 'not exported');
   });
 
