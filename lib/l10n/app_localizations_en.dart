@@ -3021,4 +3021,31 @@ class L10nEn extends L10n {
   String recapSetPulse(int bpm) {
     return 'peak pulse $bpm';
   }
+
+  @override
+  String decisionTarget(String sets, String weight) {
+    return '$sets at $weight';
+  }
+
+  @override
+  String decisionBefore(String target) {
+    return 'Before: $target';
+  }
+
+  @override
+  String decisionStep(String step, String source) {
+    return 'Step: $step · $source';
+  }
+
+  @override
+  String get loadSourceSet => 'set in this exercise';
+
+  @override
+  String get loadSourcePlates => 'from the plates';
+
+  @override
+  String get loadSourceLearned => 'learned from your weights';
+
+  @override
+  String get loadSourceGuess => 'default';
 }

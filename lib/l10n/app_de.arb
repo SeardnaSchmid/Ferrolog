@@ -2717,5 +2717,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "decisionTarget": "{sets} mit {weight}",
+  "@decisionTarget": {"placeholders": {"sets": {"type": "String"}, "weight": {"type": "String"}}},
+  "decisionBefore": "Vorher: {target}",
+  "@decisionBefore": {"placeholders": {"target": {"type": "String"}}},
+  "decisionStep": "Schritt: {step} · {source}",
+  "@decisionStep": {"placeholders": {"step": {"type": "String"}, "source": {"type": "String"}}},
+  "loadSourceSet": "in der Übung festgelegt",
+  "loadSourcePlates": "aus den Scheiben",
+  "loadSourceLearned": "aus den bisherigen Gewichten",
+  "loadSourceGuess": "Standard"
 }

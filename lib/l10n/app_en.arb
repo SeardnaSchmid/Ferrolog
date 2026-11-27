@@ -822,5 +822,12 @@
         "type": "int"
       }
     }
-  }
+  },
+  "decisionTarget": "{sets} at {weight}",
+  "decisionBefore": "Before: {target}",
+  "decisionStep": "Step: {step} · {source}",
+  "loadSourceSet": "set in this exercise",
+  "loadSourcePlates": "from the plates",
+  "loadSourceLearned": "learned from your weights",
+  "loadSourceGuess": "default"
 }

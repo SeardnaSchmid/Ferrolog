@@ -38,7 +38,10 @@ void main() {
     expect(find.textContaining('Nach 3 Trainings ohne Zielerreichung reduziert', findRichText: true), findsOneWidget);
     expect(find.text('2 Wdh. Reserve'), findsOneWidget);
 
-    s.planBefore = null;
+    s.planBefore = null; // a training from before the plan or its decision was recorded
+    for (final l in s.exercises) {
+      l.decision = null;
+    }
     await tester.pumpWidget(MaterialApp(key: UniqueKey(), home: RecapPage(s)));
     expect(find.byIcon(Icons.arrow_forward), findsNothing);
     expect(find.byIcon(Icons.arrow_downward), findsNothing);

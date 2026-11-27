@@ -233,6 +233,15 @@ class Exercise {
   /// (e.g. the last set dropped back), so neither an increase nor a miss towards a deload.
   /// In [auto] mode see [_auto]; it returns what it did (null in the fixed mode).
   Progression? applyResult(ExerciseLog log, {bool badDay = false, bool pain = false, double grid = 2.5}) {
+    final why = decide(log, badDay: badDay, pain: pain, grid: grid);
+    return auto ? why : null;
+  }
+
+  /// Like [applyResult], but says why in the fixed mode too (for [PlanDecision]): [Progression.up] when
+  /// it went up, [Progression.limit] when "up" is off, [Progression.stepTooLarge] when the increment doesn't
+  /// fit the load step, [Progression.range], [Progression.miss], [Progression.deload], [Progression.lighter]
+  /// and [Progression.fewer] as in the auto mode. Null for cardio.
+  Progression? decide(ExerciseLog log, {bool badDay = false, bool pain = false, double grid = 2.5}) {
     if (cardio) return null; // cardio stays as planned
     final planned = weights;
     final lighter = [
@@ -240,12 +249,12 @@ class Exercise {
         if (r != null && i < planned.length && log.weights[i] < planned[i]) i,
     ].isNotEmpty;
     // Skipped, removed or swapped sets hold the plan just like lighter sets do.
-    if (lighter) return auto ? Progression.lighter : null;
-    if (log.reps.take(sets).whereType<int>().length < sets) return auto ? Progression.fewer : null;
+    if (lighter) return Progression.lighter;
+    if (log.reps.take(sets).whereType<int>().length < sets) return Progression.fewer;
     final configuredStep = validLoadStep(loadStep) ?? validLoadStep(log.loadStep);
     final step = configuredStep ?? validLoadStep(grid) ?? 2.5;
     var delta = 0.0;
-    Progression? done;
+    Progression? done, why; // done: the auto mode's outcome, which also steers the weight below
     final plannedReps = repsPerSet;
     final completed = log.reps.indexed.where((entry) => entry.$2 != null);
     int goal(int i) => i < plannedReps.length ? plannedReps[i] : log.targets[i];
@@ -257,12 +266,17 @@ class Exercise {
       if (done == Progression.pain || (!reached && done != Progression.deload)) return done;
     } else if (reached) {
       if (up && (configuredStep == null || fitsLoadStep(increment, step))) delta = increment;
+      why = delta > 0 ? Progression.up : up && increment > 0 ? Progression.stepTooLarge : Progression.limit;
       fails = 0;
     } else if (succeeded) {
       fails = 0; // within the range: same weight, go for more reps
+      why = Progression.range;
     } else if (++fails >= failsToDeload && down) {
       if (configuredStep == null || fitsLoadStep(decrement, step)) delta = -decrement;
       fails = 0;
+      why = Progression.deload;
+    } else {
+      why = Progression.miss;
     }
     double nextWeight(double kg) {
       if (done == Progression.deload) {
@@ -284,7 +298,7 @@ class Exercise {
       final lifted = completed.map((entry) => log.weights[entry.$1]).reduce(max);
       weight = nextWeight(useLifted ? lifted : weight);
     }
-    return done;
+    return done ?? why;
   }
 
   /// Advance one available step, using the last set’s reported reserve.
@@ -522,13 +536,13 @@ enum Progression { up, up2, half, limit, bridge, range, miss, reset, badDay, pai
 
 /// For the recap, after next time's weight: "↑ 102,5 kg · viel Reserve". [e] is the plan after the training,
 /// for a bridge's reps.
-String progressionLabel(Progression p, [Exercise? e]) => switch (p) {
+String progressionLabel(Progression p, [Exercise? e, PlanTarget? after]) => switch (p) {
       Progression.up => tr.progUp,
       Progression.up2 => tr.progUp2,
       Progression.half => tr.progHalf,
       Progression.limit => tr.progLimit,
-      Progression.bridge => switch (e?.state?.bridgeFrom) {
-          final base? => tr.progBridgeTarget(e!.reps, base),
+      Progression.bridge => switch (after?.bridgeFrom ?? e?.state?.bridgeFrom) {
+          final base? => tr.progBridgeTarget(after?.reps ?? e!.reps, base),
           null => tr.progBridge,
         },
       Progression.reserveNeeded => tr.progReserveNeeded,
@@ -641,6 +655,10 @@ class ExerciseLog {
   /// What the auto mode did after this training; null for a plan without it.
   Progression? progression;
 
+  /// What the progression decided after this training, recorded when it ran; null for cardio, for an
+  /// exercise not in the plan or skipped entirely, and for trainings from before this was recorded.
+  PlanDecision? decision;
+
   /// A rest test ran in this training: [trialSeconds] before set [trialSet] (index), see [RestTrial].
   int? trialSet, trialSeconds;
 
@@ -668,6 +686,7 @@ class ExerciseLog {
     this.rir,
     this.backoff,
     this.progression,
+    this.decision,
     this.trialSet,
     this.trialSeconds,
   })  : weights = weights ?? List.filled(reps.length, weight),
@@ -762,6 +781,8 @@ class ExerciseLog {
         added: added,
         rir: reps.every((r) => r != null) ? rir : null, // asked after the last set
         backoff: backoff,
+        progression: progression,
+        decision: decision,
         trialSet: trialSet,
         trialSeconds: trialSeconds,
       );
@@ -800,6 +821,7 @@ class ExerciseLog {
         'backoff': ?backoff,
         'loadStep': ?validLoadStep(loadStep),
         'progression': ?progression?.name,
+        'decision': ?decision?.toJson(),
         if ((trialSet, trialSeconds) case (final set?, final seconds?)) 'restTrial': {'set': set, 'seconds': seconds},
         if (barbellSetups.isNotEmpty) 'barbellSetups': barbellSetupsToJson(barbellSetups),
         // A planned exercise has these in the plan; one from outside it keeps them for the running training.
@@ -835,6 +857,7 @@ class ExerciseLog {
         rir: j['rir'],
         backoff: j['backoff'],
         progression: Progression.values.asNameMap()[j['progression']],
+        decision: PlanDecision.fromJson(j['decision']),
         trialSet: (j['restTrial'] as Map?)?['set'],
         trialSeconds: (j['restTrial'] as Map?)?['seconds'],
       );
@@ -885,6 +908,84 @@ String tagLabel(String tag) => switch (tag) {
 /// [rests]: the learned rests and when smart rests last changed one ('setRests', 'declined'); null in data from
 /// before it was kept, then the rests stay as they are.
 typedef PlanState = ({double weight, List<double>? setWeights, int fails, Map<String, dynamic>? auto, Map<String, dynamic>? rests});
+
+/// What the plan asks of an exercise: sets, weight and reps, per set when they differ ([setWeights],
+/// [setReps]), the top of a rep range, the misses in a row and, in the auto mode, the reps a bridge started
+/// from. Taken from the plan before and right after a training's progression, see [PlanDecision].
+typedef PlanTarget = ({
+  int sets,
+  double weight,
+  List<double>? setWeights,
+  int reps,
+  List<int>? setReps,
+  int? maxReps,
+  int fails,
+  int? bridgeFrom,
+});
+
+PlanTarget planTargetOf(Exercise e) => (
+      sets: e.sets,
+      weight: e.weight,
+      setWeights: e.setWeights == null ? null : List.unmodifiable(e.setWeights!),
+      reps: e.reps,
+      setReps: e.setReps == null ? null : List.unmodifiable(e.setReps!),
+      maxReps: e.maxReps,
+      fails: e.fails,
+      bridgeFrom: e.auto ? e.state?.bridgeFrom : null,
+    );
+
+Map<String, dynamic> planTargetToJson(PlanTarget t) => {
+      'sets': t.sets,
+      'weight': t.weight,
+      'setWeights': ?t.setWeights,
+      'reps': t.reps,
+      'setReps': ?t.setReps,
+      'maxReps': ?t.maxReps,
+      'fails': t.fails,
+      'bridgeFrom': ?t.bridgeFrom,
+    };
+
+PlanTarget planTargetFromJson(Map j) => (
+      sets: j['sets'] as int,
+      weight: (j['weight'] as num).toDouble(),
+      setWeights: j['setWeights'] == null ? null : [for (final w in j['setWeights']) (w as num).toDouble()],
+      reps: j['reps'] as int,
+      setReps: j['setReps'] == null ? null : List<int>.from(j['setReps']),
+      maxReps: j['maxReps'] as int?,
+      fails: j['fails'] as int? ?? 0,
+      bridgeFrom: j['bridgeFrom'] as int?,
+    );
+
+/// What FerroLog decided for an exercise when a training was finished, recorded at that moment (and again
+/// when the newest training is edited and its progression redone), so it stays readable after the plan has
+/// been changed by hand: the plan before, the load step used and where it came from, the outcome and why
+/// ([Exercise.decide], also in the fixed mode) and the plan right after. Kept on the [ExerciseLog] and exported.
+class PlanDecision {
+  final PlanTarget before, after;
+  final double step;
+  final LoadSource stepSource;
+  final Progression? outcome;
+
+  const PlanDecision({required this.before, required this.after, required this.step, required this.stepSource, this.outcome});
+
+  Map<String, dynamic> toJson() => {
+        'before': planTargetToJson(before),
+        'loadStep': step,
+        'loadStepSource': stepSource.name,
+        'outcome': ?outcome?.name,
+        'after': planTargetToJson(after),
+      };
+
+  static PlanDecision? fromJson(Object? j) => j is Map
+      ? PlanDecision(
+          before: planTargetFromJson(j['before']),
+          after: planTargetFromJson(j['after']),
+          step: (j['loadStep'] as num).toDouble(),
+          stepSource: LoadSource.values.asNameMap()[j['loadStepSource']] ?? LoadSource.guess,
+          outcome: Progression.values.asNameMap()[j['outcome']],
+        )
+      : null;
+}
 
 class Session {
   final String id;
@@ -1182,6 +1283,15 @@ class Store extends ChangeNotifier {
             '${badDayTags.map((t) => '"$t"').join(', ')} excuse a miss (2 in a row at most), "$painTag" holds everything. '
             'After 14 days without the exercise a training starts 5 % lighter, 28 days 10 %, 56 days 20 % '
             '(exercises[].backoff), without reducing the plan or changing the rep targets; exercises[].progression describes the outcome. '
+            'exercises[].decision = what FerroLog decided for the next training when this one was finished (recorded '
+            'then, not taken from today\'s plan, which may have been edited since): "before" and "after" = the plan '
+            'right before and right after (sets, weight, setWeights/setReps per set if they differ, reps, maxReps, '
+            'fails = misses in a row, bridgeFrom = auto mode rep bridge), "loadStep" = the step in kg it went by and '
+            '"loadStepSource" where that came from (set = set for the exercise or training, plates = smallest plates of '
+            'the barbell setup, learned = from the weights used so far, guess = default), "outcome" = the reason, '
+            'the same values as progression but also in the fixed mode (up, limit = increase switched off, '
+            'stepTooLarge, range, miss, deload, lighter, fewer, reserveNeeded, bridge, …); absent for cardio, '
+            'exercises skipped entirely or outside the plan, and older trainings. '
             'sessions = completed trainings, '
             'newest first; exercises[].reps holds reps done per set, null = set skipped (targets = target per set when '
             'they differ); "failRestSeconds" = rest after a missed set; exercises[].replaces = the planned exercise this '
@@ -1307,9 +1417,22 @@ class Store extends ChangeNotifier {
     for (final log in s.exercises) {
       final e = planEntryOf(w, s.exercises, log);
       log.progression = null;
+      log.decision = null;
       // Skipped entirely (no time, no bar): not a miss, the plan stays.
       if (e == null || log.setsDone == 0) continue;
-      log.progression = e.applyResult(log, badDay: bad, pain: pain, grid: loadStepOf(e).$1);
+      final (step, source) = loadStepOf(e);
+      final before = planTargetOf(e);
+      final why = e.decide(log, badDay: bad, pain: pain, grid: step);
+      log.progression = e.auto ? why : null;
+      if (e.cardio) continue;
+      log.decision = PlanDecision(
+        before: before,
+        after: planTargetOf(e),
+        // The step the result went by: one set for the exercise or the training counts first, see [Exercise.decide].
+        step: validLoadStep(e.loadStep) ?? validLoadStep(log.loadStep) ?? validLoadStep(step) ?? 2.5,
+        stepSource: validLoadStep(e.loadStep) != null || validLoadStep(log.loadStep) != null ? LoadSource.set : source,
+        outcome: why,
+      );
     }
   }
 

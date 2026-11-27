@@ -291,6 +291,37 @@ def demo_data():
                                        s['exercises'], random.Random(7000 + int(s['id'][4:])))
 
 
+    # What FerroLog decided after each training of the last eight weeks (exercises[].decision, recorded by the
+    # app when a training is finished): the plan before, the step it went by, the outcome, the plan after (the
+    # next training's plan before, or today's plan). Close enough for a demo: the fixed steps of the generator
+    # above, the bench press stall counts as held.
+    for i, s in enumerate(sessions):
+        if (end - dt.datetime.fromisoformat(s['date'])).days > 56:
+            continue
+        for e in s['exercises']:
+            name = e['name']
+            if e.get('type') == 'cardio' or e.get('added') or e.get('replaces') or name not in s['planBefore'] \
+                    or e['weight'] <= 0 or all(r is None for r in e['reps']):
+                continue
+            pb = s['planBefore'][name]
+            later = next((x['planBefore'][name] for x in sessions[i + 1:] if name in x['planBefore']), None)
+            after_kg = later['weight'] if later else carry_kg if name == 'Farmers Walk' else weight[name]
+            after_fails = later.get('fails', 0) if later else fails.get(name, 0)
+            target = {'sets': len(e['reps']), 'reps': e['targetReps'], **({'maxReps': e['maxReps']} if 'maxReps' in e else {})}
+            top = e.get('maxReps', e['targetReps'])
+            outcome = 'lighter' if any(x < pb['weight'] for x in e['weights']) else \
+                'fewer' if None in e['reps'] else \
+                'up' if after_kg > pb['weight'] else 'deload' if after_kg < pb['weight'] else \
+                'limit' if all(r >= top for r in e['reps']) else \
+                'range' if all(r >= e['targetReps'] for r in e['reps']) else 'miss'
+            step = 2.5 if name == 'Farmers Walk' else lifts[name][3]
+            e['decision'] = {
+                'before': {**target, 'weight': pb['weight'], 'fails': pb.get('fails', 0)},
+                'loadStep': step, 'loadStepSource': 'guess' if name == 'Farmers Walk' else 'learned',
+                'outcome': outcome,
+                'after': {**target, 'weight': after_kg, 'fails': after_fails},
+            }
+
     def plan(name, sets, reps, w, step=2.5, cardio=False, timed=False, top=None):
         e = {'name': name, 'weight': w, 'sets': sets, 'reps': reps, 'increment': step, 'up': True, 'decrement': 10.0,
              'down': True, 'failsToDeload': 3, 'fails': fails.get(name, 0), 'restSeconds': 180 if sets == 5 else 90}

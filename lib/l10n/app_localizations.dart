@@ -4842,6 +4842,48 @@ abstract class L10n {
   /// In de, this message translates to:
   /// **'Spitzenpuls {bpm}'**
   String recapSetPulse(int bpm);
+
+  /// No description provided for @decisionTarget.
+  ///
+  /// In de, this message translates to:
+  /// **'{sets} mit {weight}'**
+  String decisionTarget(String sets, String weight);
+
+  /// No description provided for @decisionBefore.
+  ///
+  /// In de, this message translates to:
+  /// **'Vorher: {target}'**
+  String decisionBefore(String target);
+
+  /// No description provided for @decisionStep.
+  ///
+  /// In de, this message translates to:
+  /// **'Schritt: {step} · {source}'**
+  String decisionStep(String step, String source);
+
+  /// No description provided for @loadSourceSet.
+  ///
+  /// In de, this message translates to:
+  /// **'in der Übung festgelegt'**
+  String get loadSourceSet;
+
+  /// No description provided for @loadSourcePlates.
+  ///
+  /// In de, this message translates to:
+  /// **'aus den Scheiben'**
+  String get loadSourcePlates;
+
+  /// No description provided for @loadSourceLearned.
+  ///
+  /// In de, this message translates to:
+  /// **'aus den bisherigen Gewichten'**
+  String get loadSourceLearned;
+
+  /// No description provided for @loadSourceGuess.
+  ///
+  /// In de, this message translates to:
+  /// **'Standard'**
+  String get loadSourceGuess;
 }
 
 class _L10nDelegate extends LocalizationsDelegate<L10n> {

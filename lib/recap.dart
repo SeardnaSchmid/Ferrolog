@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import 'edit.dart';
@@ -33,6 +35,9 @@ class _RecapPageState extends State<RecapPage> {
   /// The rests smart rests changed on their own after this training, by exercise (only while it's the
   /// latest of its workout); shown with an undo.
   final restSteps = <String, RestStep>{};
+
+  /// Exercises whose "next time" line is open: the plan before and the load step.
+  final expanded = <String>{};
 
   @override
   void initState() {
@@ -289,51 +294,97 @@ class _RecapPageState extends State<RecapPage> {
         if (log?.rir case final r?) rirLabel(r, timed: log!.timed),
       ].join(' · ');
       final compare = compareLine(name);
-      if (!record && next == null && time.isEmpty && compare == null) return null;
+      if (!record && next == null && log?.decision == null && time.isEmpty && compare == null) return null;
       final parts = <InlineSpan>[if (record) const TextSpan(text: '🏆 ')];
-      if (next case (final l, final e)) {
-        final kg = e.weight;
-        final before = s.planBefore?[name]?.weight;
-        final (icon, color) = before == null
-            ? (null, c.onSurfaceVariant)
-            : kg > before
-                ? (Icons.arrow_upward, c.primary)
-                : kg < before
-                    ? (Icons.arrow_downward, c.tertiary)
-                    : (Icons.arrow_forward, c.onSurfaceVariant);
-        final planned = s.planBefore?[name];
-        final lowered = planned == null ? <int>[] : [
+      final d = log?.decision;
+      // What the progression decided, as recorded when it ran; for older trainings the plan now (latest only).
+      final (String? after, List<double>? plannedWeights, Exercise? planNow) = switch ((d, next)) {
+        (final d?, _) when !_noWeight(d.before) || !_noWeight(d.after) =>
+          (_targetLabel(d.after, timed: log!.timed), d.before.setWeights ?? List.filled(d.before.sets, d.before.weight), null),
+        (null, (final l, final e)) => (
+            weightLabel(e.weight),
+            switch (s.planBefore?[name]) {
+              final p? => p.setWeights ?? List.filled(l.weights.length, p.weight),
+              null => null,
+            },
+            e,
+          ),
+        _ => (null, null, null),
+      };
+      if (after != null && log != null) {
+        final l = log;
+        final kgAfter = d != null ? (d.after.setWeights ?? [d.after.weight]).reduce(max) : planNow!.weight;
+        final kgBefore = d != null ? (d.before.setWeights ?? [d.before.weight]).reduce(max) : s.planBefore?[name]?.weight;
+        int total(PlanTarget t) => (t.setReps ?? List.filled(t.sets, t.reps)).fold(0, (a, b) => a + b);
+        final cmp = kgBefore == null
+            ? null
+            : kgAfter != kgBefore
+                ? kgAfter.compareTo(kgBefore)
+                : d == null
+                    ? 0
+                    : total(d.after).compareTo(total(d.before));
+        final (icon, color) = switch (cmp) {
+          null => (null, c.onSurfaceVariant),
+          > 0 => (Icons.arrow_upward, c.primary),
+          < 0 => (Icons.arrow_downward, c.tertiary),
+          _ => (Icons.arrow_forward, c.onSurfaceVariant),
+        };
+        final lowered = plannedWeights == null ? <int>[] : [
           for (final (i, reps) in l.reps.indexed)
-            if (reps != null && i < (planned.setWeights?.length ?? l.weights.length) &&
-                l.weights[i] < (planned.setWeights?[i] ?? planned.weight)) i,
+            if (reps != null && i < plannedWeights.length && l.weights[i] < plannedWeights[i]) i,
         ];
         final lighterLabel = lowered.isNotEmpty && l.weights[lowered.first] < 0
             ? tr.progMoreAssistance
             : lowered.length == 1 && l.setsDone > 1
                 ? tr.progSetLighter
                 : tr.progLighter;
-        parts.addAll([
-          TextSpan(text: '${tr.recapNextInline} '),
-          // Arrow and weight as one piece, so a line break never splits them.
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (icon != null) Icon(icon, size: 14, color: color),
-              Text(' ${weightLabel(kg)}', style: small.copyWith(color: color, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-          // The auto mode says why.
-          if ([
-            if (l.backoff case final pct?) tr.recapBackoff(pct),
-            if (l.progression case final p?)
-              p == Progression.lighter
-                  ? lighterLabel
-                  : p == Progression.deload && (before == null || kg >= before)
-                      ? tr.progDeloadNoChange(autoFails)
-                      : progressionLabel(p, e),
-          ].join(', ')
-              case final why when why.isNotEmpty)
-            TextSpan(text: ' · $why'),
+        final outcome = d != null ? d.outcome : l.progression;
+        final why = [
+          if (l.backoff case final pct?) tr.recapBackoff(pct),
+          if (outcome case final p?)
+            p == Progression.lighter
+                ? lighterLabel
+                : p == Progression.deload && (kgBefore == null || kgAfter >= kgBefore)
+                    ? tr.progDeloadNoChange(autoFails)
+                    : progressionLabel(p, planNow, d?.after),
+        ].join(', ');
+        final open = expanded.contains(name);
+        final line = Text.rich(
+          TextSpan(children: [
+            if (record) const TextSpan(text: '🏆 '),
+            TextSpan(text: '${tr.recapNextInline} '),
+            if (icon != null) WidgetSpan(alignment: PlaceholderAlignment.middle, child: Icon(icon, size: 14, color: color)),
+            // The target in one piece where it fits (no-break spaces), yet free to wrap on a narrow screen.
+            TextSpan(
+              text: '\u00a0${after.replaceAll(' ', '\u00a0')}',
+              style: small.copyWith(color: color, fontWeight: FontWeight.w600),
+            ),
+            if (why.isNotEmpty) TextSpan(text: ' · $why'),
+            if (d != null)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Icon(open ? Icons.expand_less : Icons.expand_more, size: 14, color: c.onSurfaceVariant),
+              ),
+          ]),
+          style: small,
+        );
+        final decisionLine = d == null
+            ? line
+            : InkWell(
+                onTap: () => setState(() => open ? expanded.remove(name) : expanded.add(name)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  line,
+                  // The plan before and the step it went by, only when asked for.
+                  if (open) ...[
+                    Text(tr.decisionBefore(_targetLabel(d.before, timed: l.timed)), style: small),
+                    Text(tr.decisionStep(weightLabel(d.step), _sourceLabel(d.stepSource)), style: small),
+                  ],
+                ]),
+              );
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          decisionLine,
+          if (time.isNotEmpty) Text(time, style: small),
+          ?compare,
         ]);
       }
       // The time on a line of its own, so it never breaks in the middle.
@@ -534,3 +585,20 @@ class _RecapPageState extends State<RecapPage> {
     );
   }
 }
+
+bool _noWeight(PlanTarget t) => (t.setWeights ?? [t.weight]).every((w) => w == 0);
+
+/// A plan target: "3×5 mit 80 kg", per set "5/5/3 mit 80/80/70 kg", without weight "3×8".
+String _targetLabel(PlanTarget t, {required bool timed}) {
+  final sets = setsLabel(t.setReps ?? List.filled(t.sets, t.reps), t.maxReps, seconds: timed);
+  final kg = t.setWeights ?? [t.weight];
+  if (kg.every((w) => w == 0)) return sets;
+  return tr.decisionTarget(sets, kg.toSet().length == 1 ? weightLabel(kg.first) : '${kg.map(weightNum).join('/')} $unitLabel');
+}
+
+String _sourceLabel(LoadSource source) => switch (source) {
+      LoadSource.set => tr.loadSourceSet,
+      LoadSource.plates => tr.loadSourcePlates,
+      LoadSource.learned => tr.loadSourceLearned,
+      LoadSource.guess => tr.loadSourceGuess,
+    };
